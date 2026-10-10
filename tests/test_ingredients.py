@@ -176,3 +176,8 @@ def test_superscript_fractions_are_read_as_fractions():
     assert (potatoes["quantity"], potatoes["unit"], potatoes["grams"], potatoes["food"]) == (1.5, "kg", 1500.0, "kartofler")
     tea = parse("³/₄ teske salt")
     assert (tea["quantity"], tea["unit"]) == (0.75, "tsp")
+
+
+def test_a_danish_drys_is_a_dash():
+    muskat = parse("1 drys muskatnød")
+    assert (muskat["unit"], muskat["food"]) == ("dash", "muskatnød")

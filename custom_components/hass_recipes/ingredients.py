@@ -102,7 +102,7 @@ _alias("dsp", "dsk", "dessertske", "dessertskefuld", "dessertsked", "dessertskje
 _alias("krm", "krm", "kryddmått")
 _alias("cup", "kop", "kopper", "kopp", "koppar", "kopje", "kopjes", "tasse", "tassen", "taza", "tazas", "tazza", "tazze")
 _alias("pinch", "knsp", "knivspids", "knivsspids", "prise", "prisen", "messerspitze", "messerspitzen", "klype", "pizca", "pizcas", "pizzico", "pizzichi", "snufje", "snufjes", "mespunt", "pincée", "pincee", "pincées", "ripaus")
-_alias("dash", "stænk", "spritzer", "trait", "chorrito", "chorro", "goccio", "scheut")
+_alias("dash", "drys", "stænk", "spritzer", "trait", "chorrito", "chorro", "goccio", "scheut")
 _alias("clove", "fed", "fedd", "klyfta", "klyftor", "zehe", "zehen", "gousse", "gousses", "diente", "dientes", "spicchio", "spicchi", "teen", "tenen", "teentje", "teentjes")
 _alias("piece", "stk", "st", "stykke", "stykker", "stück", "stueck", "stücke", "stuk", "stuks", "pièce", "pièces", "piece", "pieza", "piezas", "unidad", "unidades", "pezzo", "pezzi", "kpl")
 _alias("bunch", "bundt", "bundter", "knippe", "knippen", "bund", "bündel", "bouquet", "botte", "bottes", "manojo", "manojos", "ramillete", "mazzo", "mazzetto", "mazzi", "bos", "bosje", "bossen", "nippa")
