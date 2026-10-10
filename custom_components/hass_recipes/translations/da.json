@@ -1,0 +1,105 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Opskrifter",
+        "description": "Tilføj en opskriftsmanager til sidebjælken i Home Assistant."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Opskrifter er allerede sat op."
+    }
+  },
+  "services": {
+    "import_recipe": {
+      "name": "Importér opskrift",
+      "description": "Importerer en opskrift fra en webside og gemmer den.",
+      "fields": {
+        "url": {
+          "name": "URL",
+          "description": "Adressen på opskriftssiden."
+        }
+      }
+    },
+    "add_to_shopping_list": {
+      "name": "Tilføj til indkøbslisten",
+      "description": "Tilføjer en opskrifts ingredienser til en opgaveliste og springer varer over, der allerede står på den.",
+      "fields": {
+        "recipe": {
+          "name": "Opskrift",
+          "description": "Opskriftens navn eller id."
+        },
+        "entity_id": {
+          "name": "Opgaveliste",
+          "description": "Standard er todo.shopping_list."
+        },
+        "scale": {
+          "name": "Skala",
+          "description": "Multiplikator for mængderne (2 = dobbelt)."
+        },
+        "servings": {
+          "name": "Portioner",
+          "description": "Skalér til dette antal portioner i stedet for en multiplikator."
+        },
+        "units": {
+          "name": "Enheder",
+          "description": "grams (vægt og volumen omregnes hvor det er muligt) eller original."
+        },
+        "ingredients": {
+          "name": "Ingredienser",
+          "description": "Kun disse ingrediensplaceringer (0-baseret); standard er alle."
+        },
+        "makes": {
+          "name": "Giver",
+          "description": "Skalér til dette antal af opskriftens udbytte (for eksempel 16 pandekager). Uden scale, servings eller makes bruges opskriftens standardmultiplikator."
+        }
+      }
+    },
+    "test_timer_sound": {
+      "name": "Test timerlyd",
+      "description": "Afspiller timeralarmen på de højttalere, der er valgt i integrationens indstillinger."
+    },
+    "stop_timer_alarm": {
+      "name": "Stop timeralarm",
+      "description": "Afviser alle færdige timere og gør deres gentagne alarmer tavse."
+    },
+    "snooze_timer": {
+      "name": "Udsæt timer",
+      "description": "Giver færdige timere mere tid og gør deres alarmer tavse.",
+      "fields": {
+        "seconds": {
+          "name": "Sekunder",
+          "description": "Hvor meget tid der lægges til."
+        },
+        "timer_id": {
+          "name": "Timer",
+          "description": "Én enkelt timer at udsætte; lad stå tom for alle færdige timere."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Timeralarmer",
+        "description": "Vælg hvordan du vil have besked, når en køkkentimer er færdig. Timere udløser også hændelsen `hass_recipes_timer_finished` til automatiseringer. Højttalere skal kunne nå en intern URL (Indstillinger > System > Netværk) for at afspille klokken.",
+        "data": {
+          "notify_service": "Notifikationstjeneste",
+          "speakers": "Højttalere",
+          "speaker_sound": "Lyd på højttalere",
+          "tts_entity": "Tekst-til-tale-motor",
+          "alarm_repeat": "Gentag indtil den stoppes",
+          "alarm_minutes": "Stop automatisk efter"
+        },
+        "data_description": {
+          "notify_service": "Valgfri. En notifikationstjeneste, for eksempel din telefon, der kaldes når en timer er færdig.",
+          "speakers": "Valgfri. Medieafspillere der afspiller alarmen.",
+          "speaker_sound": "En kort klokke, timerens navn læst op, eller begge dele.",
+          "tts_entity": "Bruges til talte beskeder. Lad stå tom for at bruge den første tilgængelige motor.",
+          "alarm_repeat": "Bliv ved med at afspille alarmen, indtil du afviser timeren i panelet (eller kalder tjenesten stop_timer_alarm).",
+          "alarm_minutes": "En sikkerhedsgrænse, så alarmen ikke kan ringe for evigt, når ingen er hjemme."
+        }
+      }
+    }
+  }
+}
