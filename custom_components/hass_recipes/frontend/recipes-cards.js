@@ -879,7 +879,8 @@ class HassRecipesCookCard extends RecipesBase {
         .irow.on .itext { opacity: .55; text-decoration: line-through; }
         .irow .q { font-variant-numeric: tabular-nums; }
         .irow .sub { font-size: 12px; }
-        .timer-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+        .actions { margin-top: auto; padding-top: 10px; flex: none; }
+        .timer-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
         .irow .alt { display: block; font-size: 12px; }
         .nav { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
         .nav .next { margin-left: auto; }
@@ -894,12 +895,14 @@ class HassRecipesCookCard extends RecipesBase {
           ${body}
           ${ings ? `<div class="ings">${ings}</div>` : ""}
         </div>
-        ${timerButtons ? `<div class="timer-btns">${timerButtons}</div>` : ""}
-        <div class="nav">
-          <button class="btn" id="prev" ${n === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-left"></ha-icon>${esc(this._t("back"))}</button>
-          <button class="btn p next" id="next">${esc(this._t(last ? "start_over" : "next"))}<ha-icon icon="mdi:${last ? "restart" : "arrow-right"}"></ha-icon></button>
-        </div>
         ${this._timersHtml()}
+        <div class="actions">
+          ${timerButtons ? `<div class="timer-btns">${timerButtons}</div>` : ""}
+          <div class="nav">
+            <button class="btn" id="prev" ${n === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-left"></ha-icon>${esc(this._t("back"))}</button>
+            <button class="btn p next" id="next">${esc(this._t(last ? "start_over" : "next"))}<ha-icon icon="mdi:${last ? "restart" : "arrow-right"}"></ha-icon></button>
+          </div>
+        </div>
       </div>`;
     const wire = () => {
       const root = this.shadowRoot;
@@ -994,8 +997,12 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
     if (this._layout() !== "horizontal") {
       return `<style>
           .vpart { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-          .vpart.cp { flex: 3 1 auto; }
-          .vpart.lp { flex: 2 1 auto; }
+          ${
+            // a card with a set height splits it 3:2 between recipe and list; otherwise each takes what it needs
+            this._fixedHeight()
+              ? ".vpart.cp { flex: 3 1 0; } .vpart.lp { flex: 2 1 0; }"
+              : ".vpart.cp, .vpart.lp { flex: 0 0 auto; }"
+          }
         </style><div class="vpart cp">${top}${body}</div><div class="vpart lp">${after}</div>`;
     }
     return `<style>
