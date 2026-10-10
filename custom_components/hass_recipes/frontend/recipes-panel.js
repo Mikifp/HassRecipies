@@ -245,6 +245,13 @@ const STYLE = `
   .scale .hint { flex-basis: 100%; font-size: 12px; color: var(--secondary-text-color); }
   .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   form .field { margin-bottom: 14px; }
+  .multi-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .multi-chips:empty { display: none; }
+  .multi-chip { display: inline-flex; align-items: center; gap: 4px; cursor: default; }
+  .multi-x { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 2px; font-size: 11px; opacity: .8; }
+  .multi-add select, .multi-new input { width: 100%; }
+  .multi-new { display: flex; gap: 6px; }
+  .multi-new[hidden], .multi-add select[hidden] { display: none; }
   form label.lbl { display: block; font-size: 13px; color: var(--secondary-text-color); margin-bottom: 4px; }
   form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
   .img-field { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
@@ -942,7 +949,8 @@ class HassRecipesPanel extends HTMLElement {
               .map(([v, l]) => `<option value="${v}" ${this._bulkField === v ? "selected" : ""}>${l}</option>`)
               .join("")}
           </select>
-          <input id="bulk-value" placeholder="value" value="${esc(this._bulkValue)}">
+          <input id="bulk-value" list="bulk-values" placeholder="value" value="${esc(this._bulkValue)}" autocomplete="off">
+          <datalist id="bulk-values">${this._usedValues(this._bulkField).map((v) => `<option value="${esc(v)}"></option>`).join("")}</datalist>
           <button class="btn" data-bulk="add">Add</button>
           <button class="btn secondary" data-bulk="remove">Remove</button>
           <button class="btn danger" data-bulk="delete">Delete</button>
@@ -976,6 +984,94 @@ class HassRecipesPanel extends HTMLElement {
           ${shown.length ? `<div class="recipes">${items}</div>` : `<div class="empty">${this._recipes.length ? "No recipes match." : "No recipes yet. Create one or import from a URL."}</div>`}
         </div>
       </div>`;
+  }
+
+  // ---- categories / tools / tags: pick from what is in use, or create a new one ----
+  _usedValues(kind) {
+    const seen = new Map();
+    for (const r of this._recipes) for (const v of r[kind] || []) if (!seen.has(v.toLowerCase())) seen.set(v.toLowerCase(), v);
+    return [...seen.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }
+  _multiValues(text) {
+    return String(text || "").split(",").map((t) => t.trim()).filter(Boolean);
+  }
+  _multiInner(kind, singular, chosen) {
+    const have = new Set(chosen.map((v) => v.toLowerCase()));
+    const options = this._usedValues(kind).filter((v) => !have.has(v.toLowerCase()));
+    const chips = chosen
+      .map((v) => `<span class="chip active multi-chip">${esc(v)}<button type="button" class="multi-x" data-multi-remove="${esc(v)}" aria-label="Remove ${esc(v)}">✕</button></span>`)
+      .join("");
+    return `<div class="multi-chips">${chips}</div>
+      <div class="multi-add">
+        <select data-multi-pick aria-label="Add ${esc(singular)}">
+          <option value="">Add ${esc(singular)}…</option>
+          ${options.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("")}
+          <option value="__new__">＋ New ${esc(singular)}…</option>
+        </select>
+        <span class="multi-new" hidden>
+          <input type="text" data-multi-new placeholder="New ${esc(singular)}" maxlength="60">
+          <button type="button" class="btn" data-multi-create>Add</button>
+        </span>
+      </div>`;
+  }
+  _multiHtml(kind, label, singular, value) {
+    return `<div class="multi" data-multi="${kind}" data-singular="${esc(singular)}">
+      <label class="lbl">${label}</label>
+      <input type="hidden" name="${kind}" value="${esc(value)}">
+      <div class="multi-body">${this._multiInner(kind, singular, this._multiValues(value))}</div>
+    </div>`;
+  }
+  _bindMulti(root) {
+    root.querySelectorAll(".multi").forEach((box) => {
+      const kind = box.dataset.multi;
+      const singular = box.dataset.singular;
+      const hidden = box.querySelector("input[type=hidden]");
+      const set = (values) => {
+        hidden.value = values.join(", ");
+        this._formDirty = true;
+        box.querySelector(".multi-body").innerHTML = this._multiInner(kind, singular, values);
+        wire();
+      };
+      const add = (raw) => {
+        const name = String(raw || "").replace(/,/g, " ").trim();
+        if (!name) return;
+        const values = this._multiValues(hidden.value);
+        if (values.some((v) => v.toLowerCase() === name.toLowerCase())) return set(values);
+        // reuse the spelling already in use elsewhere, so "dessert" does not become a second category
+        const existing = this._usedValues(kind).find((v) => v.toLowerCase() === name.toLowerCase());
+        set([...values, existing || name]);
+      };
+      const wire = () => {
+        const pick = box.querySelector("[data-multi-pick]");
+        const fresh = box.querySelector(".multi-new");
+        const input = box.querySelector("[data-multi-new]");
+        pick.addEventListener("change", () => {
+          if (pick.value === "__new__") {
+            fresh.hidden = false;
+            pick.hidden = true;
+            input.focus();
+          } else if (pick.value) {
+            add(pick.value);
+          }
+        });
+        box.querySelector("[data-multi-create]").addEventListener("click", () => add(input.value));
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            add(input.value);
+          } else if (e.key === "Escape") {
+            fresh.hidden = true;
+            pick.hidden = false;
+            pick.value = "";
+          }
+        });
+        box.querySelectorAll("[data-multi-remove]").forEach((b) =>
+          b.addEventListener("click", () => set(this._multiValues(hidden.value).filter((v) => v !== b.dataset.multiRemove)))
+        );
+      };
+      wire();
+    });
   }
 
   // ---- meal plan ----
@@ -1894,9 +1990,9 @@ class HassRecipesPanel extends HTMLElement {
             <div><label class="lbl">Total (min)</label><input name="total_time" type="number" min="0" value="${f("total_time")}"></div>
           </div>
           <div class="row field">
-            <div><label class="lbl">Categories (comma separated)</label><input name="categories" value="${f("categories")}" placeholder="Dessert, Dinner"></div>
-            <div><label class="lbl">Tools (comma separated)</label><input name="tools" value="${f("tools")}" placeholder="Air fryer, Blender"></div>
-            <div><label class="lbl">Tags (comma separated)</label><input name="tags" value="${f("tags")}"></div>
+            ${this._multiHtml("categories", "Categories", "category", d.categories)}
+            ${this._multiHtml("tools", "Tools", "tool", d.tools)}
+            ${this._multiHtml("tags", "Tags", "tag", d.tags)}
           </div>
           <div class="field"><label class="lbl">Ingredients</label>
             <div id="rows">${d.rows.map((row) => this._rowHtml(row)).join("")}</div>
@@ -2051,7 +2147,12 @@ class HassRecipesPanel extends HTMLElement {
     });
     on("[data-bulk]", "click", (e) => this._bulkAction(e.currentTarget.dataset.bulk));
     const bulkField = root.getElementById("bulk-field");
-    if (bulkField) bulkField.addEventListener("change", () => (this._bulkField = bulkField.value));
+    if (bulkField)
+      bulkField.addEventListener("change", () => {
+        this._bulkField = bulkField.value;
+        const list = root.getElementById("bulk-values");
+        if (list) list.innerHTML = this._usedValues(this._bulkField).map((v) => `<option value="${esc(v)}"></option>`).join("");
+      });
     const bulkValue = root.getElementById("bulk-value");
     if (bulkValue) bulkValue.addEventListener("input", () => (this._bulkValue = bulkValue.value));
     on("input[data-shop]", "change", (e) => {
@@ -2146,6 +2247,7 @@ class HassRecipesPanel extends HTMLElement {
 
     const form = root.getElementById("form");
     if (form) {
+      this._bindMulti(root);
       form.addEventListener("submit", (e) => this._save(e, form));
       form.addEventListener("input", (e) => {
         this._formDirty = true;

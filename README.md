@@ -50,6 +50,7 @@ Open **⇅ Backup & migrate** on the recipe list.
 
 - **Export** downloads one JSON file with every recipe and cookbook.
 - **Import a file** accepts a Recipes export, a **Mealie** recipe JSON or export zip, a **Paprika** `.paprikarecipes` archive, or schema.org recipe JSON. Existing recipes (same name and source URL) are skipped, so re-importing is safe.
+- **Categories, tools and tags** are picked from a dropdown of the values already in use, with **New…** to create one (the bulk-edit bar suggests the same values). Typing an existing value in another case reuses its spelling.
 - **Migrate from a running Mealie** reads every recipe through Mealie's API using an API token (Mealie → profile → API tokens). Needs a Home Assistant administrator. The token is not stored. Step-to-ingredient links are preserved, and photos are downloaded and stored locally, so Mealie can be shut down afterwards. File imports (Mealie zips, Paprika) bring their photos too, and exports embed uploaded photos.
 
 ## Home Assistant integration
