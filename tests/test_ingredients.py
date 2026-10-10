@@ -96,3 +96,23 @@ def test_section_headings_and_substitutes():
     assert alt["grams"] is not None and alt["approximate"]
     assert r["text"] == "200 g butter"
     assert parse("1 egg")["substitute"] is None
+
+
+def test_words_with_non_ascii_letters_are_not_cut_into_units():
+    # "l" of "løg" is not litres, "g" of "gærn" is not grams, "c" of "cæsar" is not a cup
+    onion = parse("2 løg")
+    assert (onion["quantity"], onion["unit"], onion["food"]) == (2.0, None, "løg")
+    assert onion["ml"] is None
+    assert parse("1 løg, hakket")["food"] == "løg"
+    assert parse("3 gærn")["unit"] is None
+    assert parse("2 cæsarsalater")["unit"] is None
+    assert parse("2 æg")["food"] == "æg"
+
+
+def test_real_units_next_to_non_ascii_foods_still_work():
+    litres = parse("2 l væske")
+    assert (litres["unit"], litres["ml"], litres["food"]) == ("l", 2000.0, "væske")
+    grams = parse("250 g løg")
+    assert (grams["unit"], grams["grams"], grams["food"]) == ("g", 250.0, "løg")
+    deci = parse("3 dl fløde")
+    assert (deci["unit"], deci["ml"]) == ("dl", 300.0)

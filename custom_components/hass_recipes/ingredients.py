@@ -20,7 +20,9 @@ _NUM = r"(?:\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?)"
 _QTY = re.compile(rf"^\s*(?P<a>{_NUM})(?:\s*(?:-|–|—|to\s)\s*(?P<b>{_NUM}))?(?![\d/])")
 _PAREN = re.compile(r"\(([^)]*)\)")
 _FL_OZ = re.compile(r"^\s*(fl(?:uid)?\.?\s*(?:oz|ounces?)\.?)\s*", re.IGNORECASE)
-_WORD = re.compile(r"^\s*([A-Za-z]+)\.?\s*")
+# A unit is a whole word. Any letter counts (not just a-z), otherwise "2 løg" would read
+# the "l" of "løg" as litres and leave "øg" as the food.
+_WORD = re.compile(r"^\s*([^\W\d_]+)\.?\s*")
 _METRIC = re.compile(r"(\d+(?:[.,]\d+)?)\s*(kg|g|grams?|ml|l|litres?|liters?|oz|lbs?)\b", re.IGNORECASE)
 
 # canonical unit -> (kind, factor to grams / millilitres)
@@ -183,7 +185,7 @@ def _singular(word: str) -> str:
 
 def _words(text: str) -> str:
     """Normalise to ' singular words ' so phrases can be matched on boundaries."""
-    return " " + " ".join(_singular(w) for w in re.findall(r"[a-z]+", text.lower())) + " "
+    return " " + " ".join(_singular(w) for w in re.findall(r"[^\W\d_]+", text.lower())) + " "
 
 
 _DENSITY_KEYS = sorted(((_words(k), v) for k, v in DENSITY.items()), key=lambda kv: -len(kv[0]))
