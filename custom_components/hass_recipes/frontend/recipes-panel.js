@@ -245,13 +245,20 @@ const STYLE = `
   .scale .hint { flex-basis: 100%; font-size: 12px; color: var(--secondary-text-color); }
   .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   form .field { margin-bottom: 14px; }
-  .multi-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-  .multi-chips:empty { display: none; }
+  .multi { position: relative; }
+  .multi-field { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 40px; padding: 4px 8px; border: 1px solid var(--divider-color); border-radius: 6px; background: var(--card-background-color); }
+  .multi-field:focus-within { border-color: var(--primary-color); }
   .multi-chip { display: inline-flex; align-items: center; gap: 4px; cursor: default; }
   .multi-x { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 2px; font-size: 11px; opacity: .8; }
-  .multi-add select, .multi-new input { width: 100%; }
-  .multi-new { display: flex; gap: 6px; }
-  .multi-new[hidden], .multi-add select[hidden] { display: none; }
+  .multi-field input.multi-filter { flex: 1 1 90px; width: auto; min-width: 80px; border: 0; background: none; padding: 4px; outline: none; }
+  .multi-menu { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; margin-top: 2px; max-height: 260px; overflow: auto; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; box-shadow: var(--ha-card-box-shadow, 0 4px 12px rgba(0,0,0,.25)); padding: 4px 0; }
+  .multi-menu[hidden] { display: none; }
+  .multi-opt { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; font-size: 14px; }
+  .multi-opt:hover { background: var(--secondary-background-color); }
+  .multi-opt input { width: 18px; height: 18px; flex: none; accent-color: var(--primary-color); }
+  .multi-create { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-top: 1px solid var(--divider-color); background: none; color: var(--primary-color); font: inherit; cursor: pointer; }
+  .multi-create:hover { background: var(--secondary-background-color); }
+  .multi-empty { padding: 10px 12px; }
   form label.lbl { display: block; font-size: 13px; color: var(--secondary-text-color); margin-bottom: 4px; }
   form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
   .img-field { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
@@ -986,7 +993,7 @@ class HassRecipesPanel extends HTMLElement {
       </div>`;
   }
 
-  // ---- categories / tools / tags: pick from what is in use, or create a new one ----
+  // ---- categories / tools / tags: a checklist of what is in use, with "create" (like Mealie) ----
   _usedValues(kind) {
     const seen = new Map();
     for (const r of this._recipes) for (const v of r[kind] || []) if (!seen.has(v.toLowerCase())) seen.set(v.toLowerCase(), v);
@@ -995,30 +1002,11 @@ class HassRecipesPanel extends HTMLElement {
   _multiValues(text) {
     return String(text || "").split(",").map((t) => t.trim()).filter(Boolean);
   }
-  _multiInner(kind, singular, chosen) {
-    const have = new Set(chosen.map((v) => v.toLowerCase()));
-    const options = this._usedValues(kind).filter((v) => !have.has(v.toLowerCase()));
-    const chips = chosen
-      .map((v) => `<span class="chip active multi-chip">${esc(v)}<button type="button" class="multi-x" data-multi-remove="${esc(v)}" aria-label="Remove ${esc(v)}">✕</button></span>`)
-      .join("");
-    return `<div class="multi-chips">${chips}</div>
-      <div class="multi-add">
-        <select data-multi-pick aria-label="Add ${esc(singular)}">
-          <option value="">Add ${esc(singular)}…</option>
-          ${options.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("")}
-          <option value="__new__">＋ New ${esc(singular)}…</option>
-        </select>
-        <span class="multi-new" hidden>
-          <input type="text" data-multi-new placeholder="New ${esc(singular)}" maxlength="60">
-          <button type="button" class="btn" data-multi-create>Add</button>
-        </span>
-      </div>`;
-  }
   _multiHtml(kind, label, singular, value) {
     return `<div class="multi" data-multi="${kind}" data-singular="${esc(singular)}">
       <label class="lbl">${label}</label>
       <input type="hidden" name="${kind}" value="${esc(value)}">
-      <div class="multi-body">${this._multiInner(kind, singular, this._multiValues(value))}</div>
+      <div class="multi-body"></div>
     </div>`;
   }
   _bindMulti(root) {
@@ -1026,51 +1014,133 @@ class HassRecipesPanel extends HTMLElement {
       const kind = box.dataset.multi;
       const singular = box.dataset.singular;
       const hidden = box.querySelector("input[type=hidden]");
-      const set = (values) => {
+      const body = box.querySelector(".multi-body");
+      let filter = "";
+      let open = false;
+      const chosen = () => this._multiValues(hidden.value);
+      const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+      const commit = (values) => {
         hidden.value = values.join(", ");
         this._formDirty = true;
-        box.querySelector(".multi-body").innerHTML = this._multiInner(kind, singular, values);
-        wire();
+        draw(true);
       };
-      const add = (raw) => {
+      const toggle = (name) => {
+        const values = chosen();
+        const at = values.findIndex((v) => same(v, name));
+        if (at >= 0) values.splice(at, 1);
+        else values.push(name);
+        commit(values);
+      };
+      const create = (raw) => {
         const name = String(raw || "").replace(/,/g, " ").trim();
         if (!name) return;
-        const values = this._multiValues(hidden.value);
-        if (values.some((v) => v.toLowerCase() === name.toLowerCase())) return set(values);
-        // reuse the spelling already in use elsewhere, so "dessert" does not become a second category
-        const existing = this._usedValues(kind).find((v) => v.toLowerCase() === name.toLowerCase());
-        set([...values, existing || name]);
+        const values = chosen();
+        if (!values.some((v) => same(v, name))) {
+          // reuse the spelling already in use, so "dessert" does not become a second category
+          values.push(this._usedValues(kind).find((v) => same(v, name)) || name);
+        }
+        filter = "";
+        commit(values);
       };
-      const wire = () => {
-        const pick = box.querySelector("[data-multi-pick]");
-        const fresh = box.querySelector(".multi-new");
-        const input = box.querySelector("[data-multi-new]");
-        pick.addEventListener("change", () => {
-          if (pick.value === "__new__") {
-            fresh.hidden = false;
-            pick.hidden = true;
-            input.focus();
-          } else if (pick.value) {
-            add(pick.value);
+      const draw = (refocus) => {
+        const values = chosen();
+        const all = [...new Map([...this._usedValues(kind), ...values].map((v) => [v.toLowerCase(), v])).values()].sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" })
+        );
+        const needle = filter.trim().toLowerCase();
+        const shown = needle ? all.filter((v) => v.toLowerCase().includes(needle)) : all;
+        const exact = all.some((v) => v.toLowerCase() === needle);
+        const chips = values
+          .map((v) => `<span class="chip active multi-chip">${esc(v)}<button type="button" class="multi-x" data-multi-remove="${esc(v)}" aria-label="Remove ${esc(v)}">✕</button></span>`)
+          .join("");
+        const rows = shown
+          .map((v) => {
+            const on = values.some((c) => same(c, v));
+            return `<label class="multi-opt"><input type="checkbox" data-multi-opt="${esc(v)}" ${on ? "checked" : ""}><span>${esc(v)}</span></label>`;
+          })
+          .join("");
+        body.innerHTML = `<div class="multi-field">${chips}<input type="text" class="multi-filter" data-multi-filter
+            placeholder="${values.length ? "" : `Select or create a ${esc(singular)}…`}" value="${esc(filter)}" maxlength="60" autocomplete="off"></div>
+          <div class="multi-menu" ${open ? "" : "hidden"}>
+            ${rows || (needle ? "" : `<div class="muted multi-empty">No ${esc(kind)} yet. Type a name to create one.</div>`)}
+            ${needle && !exact ? `<button type="button" class="multi-create" data-multi-create>＋ Create “${esc(filter.trim())}”</button>` : ""}
+          </div>`;
+        const input = body.querySelector("[data-multi-filter]");
+        if (refocus) {
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+        const openMenu = () => {
+          if (!open) {
+            open = true;
+            body.querySelector(".multi-menu").hidden = false;
           }
+        };
+        input.addEventListener("focus", openMenu);
+        // anywhere in the field (not on a chip's x) opens the list and focuses the box
+        body.querySelector(".multi-field").addEventListener("click", (e) => {
+          if (e.target.closest("[data-multi-remove]")) return;
+          openMenu();
+          input.focus();
         });
-        box.querySelector("[data-multi-create]").addEventListener("click", () => add(input.value));
+        input.addEventListener("input", () => {
+          filter = input.value;
+          open = true;
+          draw(true);
+        });
         input.addEventListener("keydown", (e) => {
           if (e.key === "Enter") {
             e.preventDefault();
             e.stopPropagation();
-            add(input.value);
+            const text = filter.trim();
+            if (!text) return;
+            const matches = shown;
+            // one match: tick it; otherwise create what was typed
+            if (matches.length === 1 && matches[0].toLowerCase() === text.toLowerCase()) {
+              const values = chosen();
+              if (!values.some((v) => same(v, matches[0]))) {
+                filter = "";
+                commit([...values, matches[0]]);
+              }
+            } else create(text);
           } else if (e.key === "Escape") {
-            fresh.hidden = true;
-            pick.hidden = false;
-            pick.value = "";
+            open = false;
+            draw(false);
+            input.blur();
+          } else if (e.key === "Backspace" && !input.value) {
+            const values = chosen();
+            if (values.length) {
+              values.pop();
+              commit(values);
+            }
           }
         });
-        box.querySelectorAll("[data-multi-remove]").forEach((b) =>
-          b.addEventListener("click", () => set(this._multiValues(hidden.value).filter((v) => v !== b.dataset.multiRemove)))
+        body.querySelectorAll("[data-multi-opt]").forEach((cb) =>
+          cb.addEventListener("change", () => {
+            open = true;
+            toggle(cb.dataset.multiOpt);
+          })
         );
+        body.querySelectorAll("[data-multi-remove]").forEach((b) =>
+          b.addEventListener("click", () => {
+            open = false;
+            commit(chosen().filter((v) => v !== b.dataset.multiRemove));
+          })
+        );
+        const make = body.querySelector("[data-multi-create]");
+        if (make) make.addEventListener("click", () => create(filter));
       };
-      wire();
+      draw(false);
+      // clicking anywhere else closes the list
+      const away = (e) => {
+        if (!box.isConnected) return document.removeEventListener("pointerdown", away, true);
+        if (open && !e.composedPath().includes(box)) {
+          open = false;
+          filter = "";
+          draw(false);
+        }
+      };
+      document.addEventListener("pointerdown", away, true);
     });
   }
 
