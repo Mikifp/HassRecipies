@@ -19,15 +19,16 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Browser-style navigation: every screen has its own address (`/recipes#/recipe/<id>`), so the mouse back button / Alt+← steps back through the app, reloading keeps your place, and recipes can be bookmarked
 - Search by name, tag or ingredient; filter by tag
 - Sections in both ingredients and instructions (`## Dough` in stored ingredients; imported from websites and Mealie where the source has them)
-- Substitutes: any ingredient can carry an alternative with its own amount (stored as `200 g butter || 180 g coconut oil`), converted to grams like the main ingredient
+- Substitutes: any ingredient can carry any number of alternatives, each with its own amount (stored as `200 g butter || 180 g coconut oil || 2 dl cream`), converted to grams like the main ingredient
 - Cook mode shows the whole recipe at once (ingredients beside step cards, current step highlighted, screen kept awake); "One step at a time" switches to a focused view
 - Check off steps (and ingredients) while cooking; checks are remembered per recipe for two days, a finished timer completes its step, and finishing every step resets the checks
 - Unsaved-changes prompt when you leave the editor
 - Yield: say what the ingredients make ("8 pancakes") and the multiplier the recipe opens at (2× = 16 pancakes); type the number you want and everything scales. `makes:` works in the shopping-list service too
 - Scale a recipe (½×–4× or any multiplier); linked ingredients scale too
-- Steps can link to ingredients and carry a countdown timer (alarm sounds when done; timers survive page reloads)
+- Steps can link to ingredients and carry any number of countdown timers, each set in hours, minutes and seconds with an optional label ("roast", "rest"); the alarm sounds when each is done and timers survive page reloads. The step counts as done when its last timer finishes
 - Import from a URL using `recipe-scrapers` (hundreds of sites) with a built-in JSON-LD/HTML fallback; one URL gets a review step, several URLs (up to 25) import in bulk
 - Ingredients are parsed into quantity/unit/food; a Grams view converts weights exactly and volumes by density (≈ = estimate)
+- Units are understood in Danish, Swedish, Norwegian, German, Dutch, French, Spanish and Italian as well as English (for example `2 tsk`, `1 spsk`, `2 fed hvidløg`, `2 stk løg`, `3 dl`, `1 EL`, `1 Prise`, `2 cucharadas de azúcar`), including a link word such as *de* or *di*. Weights and volumes convert to grams for English and Danish food names; in other languages the amount is still scaled and converted to ml
 - Categories, tools and tags, with multi-select filters on the list page
 - Cookbooks: save any combination of category/tool/tag filters + search as a named view
 - Bulk actions: select many recipes to add/remove a category, tag or tool, or delete
@@ -50,6 +51,7 @@ Open **⇅ Backup & migrate** on the recipe list.
 
 - **Export** downloads one JSON file with every recipe and cookbook.
 - **Import a file** accepts a Recipes export, a **Mealie** recipe JSON or export zip, a **Paprika** `.paprikarecipes` archive, or schema.org recipe JSON. Existing recipes (same name and source URL) are skipped, so re-importing is safe.
+- **Categories, tools and tags** open a checklist of the values already in use, as in Mealie: tick the ones that apply, type to filter, and press Enter or **＋ Create** to add a new one. Typing an existing value in another case reuses its spelling. The bulk-edit bar suggests the same values.
 - **Migrate from a running Mealie** reads every recipe through Mealie's API using an API token (Mealie → profile → API tokens). Needs a Home Assistant administrator. The token is not stored. Step-to-ingredient links are preserved, and photos are downloaded and stored locally, so Mealie can be shut down afterwards. File imports (Mealie zips, Paprika) bring their photos too, and exports embed uploaded photos.
 
 ## Home Assistant integration
@@ -121,6 +123,15 @@ Without `recipe`, the cook card shows the recipe you chose in the Recipes panel 
 - `hass_recipes.snooze_timer` (and a **+2 min** button on finished timers in the cards) gives a finished timer more time
 
 **Assist.** The integration installs sentences for English and Danish into `custom_sentences/` (and reloads Assist). Say things like "next step", "previous step", "repeat the step", "read the ingredients", "how much time is left" or "start the step timer" (Danish: "næste trin", "gentag trinnet", "læs ingredienserne op", "hvor lang tid er der tilbage"). Ingredients are read at the current scale.
+
+**Meal plan.** Open **Meal plan** in the Recipes panel for a week view: press **+** on a day and meal (breakfast, lunch, dinner, snack) to pick a recipe or type a plain meal such as "Leftovers", set a scale per meal, press the pan to start cooking it, and use **Add week to shopping list** to send that week's ingredients to your to-do list (items already on the list are skipped; amounts are not summed across meals). On a recipe page, **Add to meal plan** lets you pick the day. The plan is also available as:
+
+- `calendar.recipe_timers_meal_plan`: meals show in the calendar dashboard at 07:30 (breakfast), 12:00 (lunch), 15:00 (snack) and 18:00 (dinner), and work with calendar triggers in automations
+- `hass_recipes.plan_meal` (`recipe`, `date`, `slot`, `scale` or `servings`, `note`), `hass_recipes.clear_meal_plan` and `hass_recipes.add_plan_to_shopping_list` (`start`, `days`, `entity_id`)
+- the `custom:hass-recipes-plan-card` dashboard card (`days`, `slots`, `show_empty`, `tap: cook | open`, `list_height`), which starts cooking a planned recipe when you tap it, so the cook and kitchen cards follow
+- Assist: "what's for dinner [tomorrow]", "cook dinner" (English) and "hvad skal vi have til aftensmad [i morgen]", "lav aftensmad" (Danish)
+
+When a recipe is deleted its planned meals stay on the plan as plain text.
 
 **Events** for automations: `hass_recipes_recipe_added`, `hass_recipes_recipe_updated`, `hass_recipes_recipe_deleted` (data: `recipe_id`, `name`, `categories`, `tags`).
 

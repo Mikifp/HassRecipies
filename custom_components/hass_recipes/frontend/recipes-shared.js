@@ -66,10 +66,39 @@ export const baseServings = (servings) => {
 };
 
 // ---- steps & timers -----------------------------------------------------
-export const normStep = (s) =>
-  typeof s === "string"
-    ? { text: s, ingredients: [], timer: null, section: false }
-    : { text: s.text || "", ingredients: s.ingredients || [], timer: s.timer || null, section: !!s.section };
+/** A step's timers as [{seconds, label}]: the `timers` list, or the older single `timer`. */
+export const stepTimers = (s) => {
+  const list = Array.isArray(s.timers) ? s.timers : [];
+  const out = list
+    .map((t) => (typeof t === "number" ? { seconds: t, label: "" } : { seconds: Number(t.seconds) || 0, label: String(t.label || "") }))
+    .filter((t) => t.seconds > 0);
+  if (!out.length && s.timer > 0) out.push({ seconds: s.timer, label: "" });
+  return out;
+};
+
+export const normStep = (s) => {
+  if (typeof s === "string") return { text: s, ingredients: [], timer: null, timers: [], section: false };
+  const timers = stepTimers(s);
+  return {
+    text: s.text || "",
+    ingredients: s.ingredients || [],
+    timer: timers.length ? timers[0].seconds : null,
+    timers,
+    section: !!s.section,
+  };
+};
+
+/**
+ * Key, label and length for each timer of a step. The first timer keeps the key
+ * `<recipe>:<step>` that single timers always had; later ones add `:<n>`.
+ */
+export const timerSpecs = (recipe, stepIndex, stepNumber, timers) =>
+  timers.map((t, n) => ({
+    key: `${recipe.id}:${stepIndex}${n ? `:${n}` : ""}`,
+    label: `${recipe.name} · step ${stepNumber}${t.label ? ` · ${t.label}` : timers.length > 1 ? ` · timer ${n + 1}` : ""}`,
+    seconds: t.seconds,
+    name: t.label,
+  }));
 
 // Stored as plain strings: "## Dough" is a section heading, "200 g butter || 180 g oil"
 // carries a substitute with its own amount.
@@ -84,6 +113,14 @@ export const splitSub = (t) => {
 };
 
 export const joinSub = (text, sub) => (sub.trim() ? `${text.trim()} || ${sub.trim()}` : text.trim());
+
+/** "200 g butter || 180 g oil || 3 dl cream" -> { main, alts: [...] } (any number of alternatives). */
+export const splitSubs = (t) => {
+  const parts = String(t).split(" || ").map((x) => x.trim());
+  return { main: parts[0], alts: parts.slice(1).filter(Boolean) };
+};
+
+export const joinSubs = (text, alts) => [text.trim(), ...alts.map((a) => a.trim()).filter(Boolean)].join(" || ");
 
 export const clock = (sec) => {
   sec = Math.max(0, Math.ceil(sec));
@@ -164,5 +201,11 @@ export const scaleBasis = (r) => {
 export const roundAmount = (n) => String(Math.round(n * 100) / 100);
 
 /** "5 min", "1 h 20 min", "45 sec" for a number of seconds. */
-export const lengthText = (sec) => (sec < 60 ? `${sec} sec` : minutes(Math.round(sec / 60)));
+export const lengthText = (sec) => {
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return [h ? `${h} h` : "", m ? `${m} min` : "", s ? `${s} sec` : ""].filter(Boolean).join(" ") || "0 sec";
+};
 

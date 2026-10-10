@@ -20,7 +20,9 @@ _NUM = r"(?:\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?)"
 _QTY = re.compile(rf"^\s*(?P<a>{_NUM})(?:\s*(?:-|–|—|to\s)\s*(?P<b>{_NUM}))?(?![\d/])")
 _PAREN = re.compile(r"\(([^)]*)\)")
 _FL_OZ = re.compile(r"^\s*(fl(?:uid)?\.?\s*(?:oz|ounces?)\.?)\s*", re.IGNORECASE)
-_WORD = re.compile(r"^\s*([A-Za-z]+)\.?\s*")
+# A unit is a whole word. Any letter counts (not just a-z), otherwise "2 løg" would read
+# the "l" of "løg" as litres and leave "øg" as the food.
+_WORD = re.compile(r"^\s*([^\W\d_]+)\.?\s*")
 _METRIC = re.compile(r"(\d+(?:[.,]\d+)?)\s*(kg|g|grams?|ml|l|litres?|liters?|oz|lbs?)\b", re.IGNORECASE)
 
 # canonical unit -> (kind, factor to grams / millilitres)
@@ -34,6 +36,8 @@ UNITS: dict[str, tuple[str, float]] = {
     "cl": ("volume", 10.0),
     "dl": ("volume", 100.0),
     "l": ("volume", 1000.0),
+    "krm": ("volume", 1.0),  # Swedish kryddmått
+    "dsp": ("volume", 10.0),  # dessert spoon
     "tsp": ("volume", 4.92892),
     "tbsp": ("volume", 14.7868),
     "fl_oz": ("volume", 29.5735),
@@ -71,6 +75,50 @@ _alias("quart", "quart", "quarts", "qt")
 _alias("gallon", "gallon", "gallons", "gal")
 for _u in _COUNT_UNITS:
     _alias(_u, _u, _u + "s", _u + "es")
+
+# ---- units in other languages ------------------------------------------------------
+# Abbreviations are matched with or without a trailing dot, case-insensitively, and
+# only as a whole word ("2 el Zucker", not the "el" inside "eller"). Spoon sizes follow
+# the usual metric kitchen values (1 tsk/TL = 5 ml, 1 spsk/EL = 15 ml).
+_alias("g", "gramm", "gramo", "gramos", "grammo", "grammi", "gramme", "grämm")
+_alias("kg", "kilogramm", "kilogramo", "kilogramos", "kilogramme", "kilogrammes", "chilo", "chili", "chilogrammo", "chilogrammi")
+_alias("ml", "mililitro", "mililitros", "millilitro", "millilitri", "millilitre")
+_alias("cl", "centilitro", "centilitros", "centilitri")
+_alias("dl", "deziliter", "decilitro", "decilitros", "decilitri", "décilitre", "décilitres")
+_alias("l", "litro", "litros", "litri")
+_alias(
+    "tsp",
+    # da / no / sv / fi / nl / de / es / it / fr
+    "tsk", "teske", "teskefuld", "teskefulde", "tesked", "teskedar", "ts", "teskje", "tl", "theelepel", "theelepels",
+    "teelöffel", "teeloeffel", "cucharadita", "cucharaditas", "cdta", "cucchiaino", "cucchiaini", "càc", "cac",
+)
+_alias(
+    "tbsp",
+    "spsk", "spiseske", "spiseskefuld", "spiseskefulde", "msk", "matsked", "matskedar", "ss", "spiseskje", "rkl", "el",
+    "eetlepel", "eetlepels", "esslöffel", "essloeffel", "cucharada", "cucharadas", "cda", "cucchiaio", "cucchiai",
+    "cs", "càs", "cas",
+)
+_alias("dsp", "dsk", "dessertske", "dessertskefuld", "dessertsked", "dessertskje", "dessertspoon", "dessertspoons")
+_alias("krm", "krm", "kryddmått")
+_alias("cup", "kop", "kopper", "kopp", "koppar", "kopje", "kopjes", "tasse", "tassen", "taza", "tazas", "tazza", "tazze")
+_alias("pinch", "knsp", "knivspids", "knivsspids", "prise", "prisen", "messerspitze", "messerspitzen", "klype", "pizca", "pizcas", "pizzico", "pizzichi", "snufje", "snufjes", "mespunt", "pincée", "pincee", "pincées", "ripaus")
+_alias("dash", "drys", "stænk", "spritzer", "trait", "chorrito", "chorro", "goccio", "scheut")
+_alias("clove", "fed", "fedd", "klyfta", "klyftor", "zehe", "zehen", "gousse", "gousses", "diente", "dientes", "spicchio", "spicchi", "teen", "tenen", "teentje", "teentjes")
+_alias("piece", "stk", "st", "stykke", "stykker", "stück", "stueck", "stücke", "stuk", "stuks", "pièce", "pièces", "piece", "pieza", "piezas", "unidad", "unidades", "pezzo", "pezzi", "kpl")
+_alias("bunch", "bundt", "bundter", "knippe", "knippen", "bund", "bündel", "bouquet", "botte", "bottes", "manojo", "manojos", "ramillete", "mazzo", "mazzetto", "mazzi", "bos", "bosje", "bossen", "nippa")
+_alias("can", "dåse", "dåser", "daase", "boks", "bokser", "burk", "burkar", "dose", "dosen", "boîte", "boite", "boîtes", "lata", "latas", "scatola", "scatole", "lattina", "blik", "blikje", "blikken", "tölkki", "purkki")
+_alias("jar", "glas", "bocal", "frasco", "frascos", "vasetto", "barattolo", "pot", "potje")
+_alias("package", "pk", "pakke", "pakker", "paket", "förp", "packung", "packungen", "päckchen", "paeckchen", "pck", "paquet", "paquets", "sachet", "paquete", "paquetes", "sobre", "pacchetto", "confezione", "confezioni", "bustina", "pak", "pakje")
+_alias("bag", "pose", "poser", "påse", "påsar", "tüte", "tüten", "sac", "sachets", "bolsa", "bolsas", "sacchetto", "sacchetti", "zak", "zakje", "zakjes")
+_alias("handful", "håndfuld", "haandfuld", "håndfulde", "näve", "nävar", "handvoll", "poignée", "poignee", "poignées", "puñado", "punado", "puñados", "manciata", "manciate", "handvol")
+_alias("slice", "skive", "skiver", "skiva", "skivor", "scheibe", "scheiben", "tranche", "tranches", "rebanada", "rebanadas", "lonja", "loncha", "fetta", "fette", "plak", "plakje", "plakken", "viipale")
+_alias("sprig", "kvist", "kviste", "zweig", "zweige", "brin", "brins", "ramita", "ramitas", "rama", "rametto", "ramoscello", "takje", "takjes", "oksa")
+_alias("head", "hoved", "hoveder", "kopf", "köpfe", "tête", "tete", "têtes", "cabeza", "cabezas", "testa", "teste", "krop", "kroppen")
+_alias("bottle", "flaske", "flasker", "flaska", "flaskor", "flasche", "flaschen", "bouteille", "bouteilles", "botella", "botellas", "bottiglia", "bottiglie", "fles", "flessen")
+_alias("sheet", "ark", "blatt", "blätter", "feuille", "feuilles", "hoja", "hojas", "foglio", "fogli", "vel", "vellen")
+
+# A word that may sit between a unit and the food ("2 cucharadas de azúcar").
+_LINK_WORDS = re.compile(r"^\s*(?:de|del|di|d'|van|af|av|von|vom|des|du)\s+", re.IGNORECASE)
 
 # Grams per millilitre, matched as whole words (plural-insensitive), longest
 # phrase first. Values are typical figures for the form usually used in recipes
@@ -146,6 +194,20 @@ DENSITY: dict[str, float] = {
     "corn": 0.65, "pea": 0.65, "pumpkin puree": 1.03, "applesauce": 1.08,
     "tomato sauce": 1.03, "tomato puree": 1.05, "tomato paste": 1.1, "passata": 1.03,
     "salsa": 1.05, "ketchup": 1.15, "mayonnaise": 0.95, "mayo": 0.95,
+    # Danish staples (water and salt are spelled the same or covered above)
+    "vand": 1.0, "mel": 0.53, "hvedemel": 0.53, "fuldkornshvedemel": 0.51, "rugmel": 0.43,
+    "havregryn": 0.34, "sukker": 0.845, "flormelis": 0.51, "farin": 0.9, "brun farin": 0.9,
+    "rørsukker": 0.845, "smør": 0.96, "mælk": 1.03, "sødmælk": 1.03, "letmælk": 1.03,
+    "minimælk": 1.03, "kærnemælk": 1.03, "fløde": 0.99, "piskefløde": 0.99,
+    "madlavningsfløde": 0.99, "cremefraiche": 0.99, "skyr": 1.05, "rømme": 0.97,
+    "olie": 0.92, "olivenolie": 0.91, "rapsolie": 0.92, "solsikkeolie": 0.92,
+    "honning": 1.42, "sirup": 1.3, "ahornsirup": 1.32, "peber": 0.5, "kanel": 0.53,
+    "kakao": 0.36, "bagepulver": 0.93, "natron": 0.93, "gær": 0.62, "tørgær": 0.62,
+    "vaniljesukker": 0.9, "ris": 0.78, "linse": 0.81, "linser": 0.81, "mandel": 0.6,
+    "mandler": 0.6, "valnød": 0.5, "valnødder": 0.5, "rosin": 0.61, "rosiner": 0.61,
+    "tomatpuré": 1.1, "sennep": 1.05, "eddike": 1.01, "citronsaft": 1.03, "rødvin": 0.99,
+    "hvidvin": 0.99, "øl": 1.01, "kaffe": 1.0, "løg": 0.68, "gulerod": 0.54, "gulerødder": 0.54,
+    "kartoffel": 0.63, "kartofler": 0.63, "svampe": 0.3, "champignon": 0.3,
 }
 
 # Grams for one piece when there is no unit ("2 eggs", "1 onion").
@@ -155,6 +217,13 @@ PIECE_GRAMS: dict[str, float] = {
     "bell pepper": 150.0, "banana": 120.0, "apple": 180.0, "avocado": 150.0,
     "lemon": 85.0, "lime": 65.0, "orange": 150.0, "zucchini": 200.0, "courgette": 200.0,
     "cucumber": 300.0, "ladyfinger": 10.0, "tortilla": 45.0,
+    # Danish
+    "æg": 50.0, "æggeblomme": 18.0, "æggeblommer": 18.0, "æggehvide": 33.0, "æggehvider": 33.0,
+    "løg": 150.0, "rødløg": 150.0, "skalotteløg": 40.0, "kartoffel": 170.0, "kartofler": 170.0,
+    "tomat": 120.0, "tomater": 120.0, "gulerod": 60.0, "gulerødder": 60.0, "peberfrugt": 150.0,
+    "peberfrugter": 150.0, "banan": 120.0, "bananer": 120.0, "æble": 180.0, "æbler": 180.0,
+    "citron": 85.0, "citroner": 85.0, "appelsin": 150.0, "appelsiner": 150.0, "squash": 200.0,
+    "agurk": 300.0, "agurker": 300.0, "avokado": 150.0,
 }
 
 # (unit, food keyword) -> grams per unit
@@ -168,6 +237,13 @@ UNIT_FOOD_GRAMS: dict[tuple[str, str], float] = {
     ("bunch", "parsley"): 60.0,
     ("sprig", "thyme"): 1.0,
     ("sprig", "rosemary"): 2.0,
+    ("clove", "hvidløg"): 3.0,
+    ("head", "hvidløg"): 50.0,
+    ("slice", "brød"): 30.0,
+    ("slice", "ost"): 20.0,
+    ("bunch", "persille"): 60.0,
+    ("sprig", "timian"): 1.0,
+    ("sprig", "rosmarin"): 2.0,
 }
 
 
@@ -183,7 +259,7 @@ def _singular(word: str) -> str:
 
 def _words(text: str) -> str:
     """Normalise to ' singular words ' so phrases can be matched on boundaries."""
-    return " " + " ".join(_singular(w) for w in re.findall(r"[a-z]+", text.lower())) + " "
+    return " " + " ".join(_singular(w) for w in re.findall(r"[^\W\d_]+", text.lower())) + " "
 
 
 _DENSITY_KEYS = sorted(((_words(k), v) for k, v in DENSITY.items()), key=lambda kv: -len(kv[0]))
@@ -191,7 +267,12 @@ _PIECE_KEYS = sorted(((_words(k), v) for k, v in PIECE_GRAMS.items()), key=lambd
 _UNIT_FOOD_KEYS = [(u, _words(k), v) for (u, k), v in UNIT_FOOD_GRAMS.items()]
 
 
+# "¹/₂" (superscript over subscript, as many sites write fractions) is just 1/2
+_SUPER_SUB = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉⁄", "01234567890123456789/")
+
+
 def _expand_fractions(text: str) -> str:
+    text = text.translate(_SUPER_SUB)
     return _FRACTION_RE.sub(
         lambda m: (f"{m.group(1)} " if m.group(1) else "") + _FRACTIONS[m.group(2)], text
     )
@@ -251,15 +332,17 @@ def parse_ingredient(line: str) -> dict[str, Any]:
 
     Two inline conventions keep the stored data a plain list of strings:
     ``## Dough`` is a section heading, and ``200 g butter || 180 g coconut oil``
-    carries a substitute with its own amount (parsed into ``substitute``).
+    carries a substitute with its own amount; ``200 g butter || 180 g oil || 3 dl cream``
+    carries several. They are parsed into ``substitutes`` (``substitute`` is the first).
     """
     if is_header(line):
         title = _HEADER.sub("", line.strip()).strip()
         return {**_empty(title), "header": True}
     if SUBSTITUTE_SEP in line:
-        main, _, alt = line.partition(SUBSTITUTE_SEP)
-        result = _parse_line(main.strip())
-        result["substitute"] = _parse_line(alt.strip()) if alt.strip() else None
+        main, *alternatives = (part.strip() for part in line.split(SUBSTITUTE_SEP))
+        result = _parse_line(main)
+        result["substitutes"] = [_parse_line(alt) for alt in alternatives if alt]
+        result["substitute"] = result["substitutes"][0] if result["substitutes"] else None
         return result
     return _parse_line(line)
 
@@ -279,6 +362,7 @@ def _empty(line: str) -> dict[str, Any]:
         "approximate": False,
         "header": False,
         "substitute": None,
+        "substitutes": [],
     }
 
 
@@ -297,6 +381,7 @@ def _parse_line(line: str) -> dict[str, Any]:
         "approximate": False,
         "header": False,
         "substitute": None,
+        "substitutes": [],
     }
     text = _expand_fractions(line.strip())
     m = _QTY.match(text)
@@ -323,6 +408,8 @@ def _parse_line(line: str) -> dict[str, Any]:
             unit, unit_text, rest = canonical, wm.group(1), rest[wm.end():]
 
     rest = re.sub(r"^\s*of\s+", "", rest.strip(), flags=re.IGNORECASE)
+    if unit:
+        rest = _LINK_WORDS.sub("", rest)
     parens = _PAREN.findall(rest)
     cleaned = re.sub(r"\s+", " ", _PAREN.sub("", rest)).strip()
     food, _, note = cleaned.partition(",")
@@ -346,7 +433,7 @@ def _parse_line(line: str) -> dict[str, Any]:
                 grams = q * factor
             else:
                 ml = q * factor
-        elif unit is None:
+        elif unit is None or unit == "piece":
             padded = _words(food)
             for key, per in _PIECE_KEYS:
                 if key in padded:

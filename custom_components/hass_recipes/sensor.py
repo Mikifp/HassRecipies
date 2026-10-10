@@ -131,6 +131,7 @@ class CookingSensor(SensorEntity):
             "steps": len(steps),
             "step_text": page.get("text"),
             "step_timer_seconds": page.get("timer"),
+            "step_timers": [t["seconds"] for t in page.get("timers", [])],
             "scale": self._store.cooking_scale,
         }
 

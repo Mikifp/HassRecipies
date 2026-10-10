@@ -37,3 +37,33 @@ intents:
       - sentences:
           - "start the (step|recipe) timer"
           - "start the timer for this step"
+  HassRecipesPlannedMeal:
+    data:
+      - sentences:
+          - "what's for {meal_slot} [{plan_day}]"
+          - "what are we (having|eating) for {meal_slot} [{plan_day}]"
+          - "what's (planned|on the menu) for {meal_slot} [{plan_day}]"
+  HassRecipesCookPlanned:
+    data:
+      - sentences:
+          - "cook [the planned] {meal_slot} [{plan_day}]"
+          - "let's cook {meal_slot} [{plan_day}]"
+lists:
+  meal_slot:
+    values:
+      - in: "breakfast"
+        out: "breakfast"
+      - in: "lunch"
+        out: "lunch"
+      - in: "(dinner|supper|tea)"
+        out: "dinner"
+      - in: "(snack|snacks)"
+        out: "snack"
+  plan_day:
+    values:
+      - in: "today"
+        out: "today"
+      - in: "tonight"
+        out: "today"
+      - in: "tomorrow"
+        out: "tomorrow"

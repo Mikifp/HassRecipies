@@ -20,6 +20,7 @@ EVENT_RECIPE_UPDATED = f"{DOMAIN}_recipe_updated"
 EVENT_RECIPE_DELETED = f"{DOMAIN}_recipe_deleted"
 EVENT_TIMER_FINISHED = f"{DOMAIN}_timer_finished"
 EVENT_COOKING_RECIPE_CHANGED = f"{DOMAIN}_cooking_recipe_changed"
+EVENT_MEAL_PLAN_CHANGED = f"{DOMAIN}_meal_plan_changed"
 
 SIGNAL_TIMERS = f"{DOMAIN}_timers_updated"
 TIMERS_STORAGE_KEY = f"{DOMAIN}.timers"
@@ -37,7 +38,11 @@ CONF_ALARM_REPEAT = "alarm_repeat"
 CONF_ALARM_MINUTES = "alarm_minutes"
 SERVICE_STOP_TIMER_ALARM = "stop_timer_alarm"
 
-PLATFORMS = ["sensor", "binary_sensor", "button", "select"]
+PLATFORMS = ["sensor", "binary_sensor", "button", "select", "calendar"]
 TIMER_UNIQUE_PREFIX = "timer_"
 SERVICE_SNOOZE_TIMER = "snooze_timer"
 DEFAULT_SNOOZE_SECONDS = 120
+MEALPLAN_STORAGE_KEY = f"{DOMAIN}.mealplan"
+SERVICE_PLAN_MEAL = "plan_meal"
+SERVICE_CLEAR_MEAL_PLAN = "clear_meal_plan"
+SERVICE_PLAN_TO_SHOPPING_LIST = "add_plan_to_shopping_list"

@@ -38,3 +38,33 @@ intents:
       - sentences:
           - "start timeren for dette trin"
           - "start (trin|opskrift)timeren"
+  HassRecipesPlannedMeal:
+    data:
+      - sentences:
+          - "hvad skal vi have til {meal_slot} [{plan_day}]"
+          - "hvad er der til {meal_slot} [{plan_day}]"
+          - "hvad er planlagt til {meal_slot} [{plan_day}]"
+  HassRecipesCookPlanned:
+    data:
+      - sentences:
+          - "lav [den planlagte] {meal_slot} [{plan_day}]"
+          - "lad os lave {meal_slot} [{plan_day}]"
+lists:
+  meal_slot:
+    values:
+      - in: "morgenmad"
+        out: "breakfast"
+      - in: "frokost"
+        out: "lunch"
+      - in: "(aftensmad|middag)"
+        out: "dinner"
+      - in: "(snack|mellemmåltid)"
+        out: "snack"
+  plan_day:
+    values:
+      - in: "i dag"
+        out: "today"
+      - in: "i aften"
+        out: "today"
+      - in: "i morgen"
+        out: "tomorrow"

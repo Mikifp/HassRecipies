@@ -13,7 +13,10 @@ const {
   isHeader,
   headerText,
   splitSub,
+  splitSubs,
   joinSub,
+  joinSubs,
+  timerSpecs,
   clock,
   duration,
   fmtGrams,
@@ -26,6 +29,14 @@ const {
   roundAmount, lengthText
 } = await import(`./recipes-shared.js${__v ? `?v=${__v}` : ""}`);
 
+// ---- dates for the meal plan (local time, ISO yyyy-mm-dd) ----
+const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const addDays = (d, n) => {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, 12);
+  return x;
+};
+const mondayOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
+
 const lines = (text) => text.split("\n").map((l) => l.trim()).filter(Boolean);
 
 const toInt = (v) => (v === "" || v == null ? null : Math.max(0, parseInt(v, 10) || 0));
@@ -34,15 +45,16 @@ const TODO_KEY = "hass_recipes_todo";
 
 /** HTML for ingredient `i`: amount + bold food, faded original amount, optional substitute. */
 const ingredientHtml = (r, i, k, mode) => {
-  const [main, altText] = splitSub(r.ingredients[i] ?? "");
+  const { main, alts } = splitSubs(r.ingredients[i] ?? "");
   const p = (r.parsed_ingredients || [])[i];
+  const subs = (p && (p.substitutes || (p.substitute ? [p.substitute] : []))) || [];
   const a = ingParts(p, main, k, mode);
   let html = `<span class="ing-main">${a.qty ? `<span class="ing-qty">${esc(a.qty)}</span> ` : ""}<strong>${esc(a.food)}</strong>${a.note ? `<span class="ing-note">, ${esc(a.note)}</span>` : ""}</span>`;
   if (a.sub) html += `<small class="ing-sub">${esc(a.sub)}</small>`;
-  if (altText) {
-    const b = ingParts(p && p.substitute, altText, k, mode);
+  alts.forEach((altText, n) => {
+    const b = ingParts(subs[n], altText, k, mode);
     html += `<small class="ing-alt">or ${b.qty ? `${esc(b.qty)} ` : ""}<strong>${esc(b.food)}</strong>${b.note ? `, ${esc(b.note)}` : ""}${b.sub ? ` <span class="ing-sub">(${esc(b.sub)})</span>` : ""}</small>`;
-  }
+  });
   return html;
 };
 
@@ -55,12 +67,14 @@ const ingredientChipHtml = (r, i, k, mode) => {
 
 /** Plain-text line including the substitute (used for printing). */
 const ingredientPlain = (r, i, k, mode) => {
-  const [, altText] = splitSub(r.ingredients[i] ?? "");
+  const { alts } = splitSubs(r.ingredients[i] ?? "");
   let text = ingredientText(r, i, k, mode);
-  if (altText) {
-    const b = ingParts(((r.parsed_ingredients || [])[i] || {}).substitute, altText, k, mode);
+  const p = (r.parsed_ingredients || [])[i] || {};
+  const subs = p.substitutes || (p.substitute ? [p.substitute] : []);
+  alts.forEach((altText, n) => {
+    const b = ingParts(subs[n], altText, k, mode);
     text += ` — or ${b.qty ? `${b.qty} ` : ""}${b.food}`;
-  }
+  });
   return text;
 };
 
@@ -195,7 +209,12 @@ const STYLE = `
   .step-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
   .step-head .spacer { flex: 1; }
   .step-head button { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 2px 8px; font: inherit; }
-  .step .timer-field { width: 160px; margin: 8px 0; }
+  .step .timer-field { margin: 8px 0; }
+  .timer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .timer-row input[type=number] { width: 64px; flex: none; }
+  .timer-row .timer-label { flex: 1 1 140px; min-width: 120px; }
+  .sub-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+  .sub-row input { flex: 1; }
   .step .chips { margin-bottom: 0; }
   .facet-label { font-size: 12px; color: var(--secondary-text-color); align-self: center; text-transform: uppercase; letter-spacing: .04em; }
   .units { margin-left: auto; }
@@ -237,6 +256,20 @@ const STYLE = `
   .scale .hint { flex-basis: 100%; font-size: 12px; color: var(--secondary-text-color); }
   .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   form .field { margin-bottom: 14px; }
+  .multi { position: relative; }
+  .multi-field { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 40px; padding: 4px 8px; border: 1px solid var(--divider-color); border-radius: 6px; background: var(--card-background-color); }
+  .multi-field:focus-within { border-color: var(--primary-color); }
+  .multi-chip { display: inline-flex; align-items: center; gap: 4px; cursor: default; }
+  .multi-x { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 2px; font-size: 11px; opacity: .8; }
+  .multi-field input.multi-filter { flex: 1 1 90px; width: auto; min-width: 80px; border: 0; background: none; padding: 4px; outline: none; }
+  .multi-menu { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; margin-top: 2px; max-height: 260px; overflow: auto; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; box-shadow: var(--ha-card-box-shadow, 0 4px 12px rgba(0,0,0,.25)); padding: 4px 0; }
+  .multi-menu[hidden] { display: none; }
+  .multi-opt { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; font-size: 14px; }
+  .multi-opt:hover { background: var(--secondary-background-color); }
+  .multi-opt input { width: 18px; height: 18px; flex: none; accent-color: var(--primary-color); }
+  .multi-create { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-top: 1px solid var(--divider-color); background: none; color: var(--primary-color); font: inherit; cursor: pointer; }
+  .multi-create:hover { background: var(--secondary-background-color); }
+  .multi-empty { padding: 10px 12px; }
   form label.lbl { display: block; font-size: 13px; color: var(--secondary-text-color); margin-bottom: 4px; }
   form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
   .img-field { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
@@ -637,13 +670,19 @@ class HassRecipesPanel extends HTMLElement {
       handled = JSON.parse(localStorage.getItem(HANDLED_KEY) || "[]");
     } catch (_) { /* ignore */ }
     const seen = new Set(handled);
+    const waiting = new Set();
     for (const t of timers) {
       if (t.done && !seen.has(t.id) && t.recipe_id && Number.isInteger(t.step)) {
+        // a step with several timers is done when the last of them has finished
+        if (timers.some((o) => !o.done && o.recipe_id === t.recipe_id && o.step === t.step)) {
+          waiting.add(t.id);
+          continue;
+        }
         this._markStepDoneFor(t.recipe_id, t.step);
       }
     }
     // remember only timers that still exist, so the list cannot grow without bound
-    const keep = timers.filter((t) => t.done).map((t) => t.id);
+    const keep = timers.filter((t) => t.done && !waiting.has(t.id)).map((t) => t.id);
     try {
       localStorage.setItem(HANDLED_KEY, JSON.stringify(keep));
     } catch (_) { /* ignore */ }
@@ -684,6 +723,8 @@ class HassRecipesPanel extends HTMLElement {
         return "#/import";
       case "data":
         return "#/data";
+      case "plan":
+        return view.week ? `#/plan/${view.week}` : "#/plan";
       default:
         return "";
     }
@@ -703,6 +744,7 @@ class HassRecipesPanel extends HTMLElement {
     if (parts[0] === "new") return { name: "edit" };
     if (parts[0] === "import") return { name: "import" };
     if (parts[0] === "data") return { name: "data" };
+    if (parts[0] === "plan") return { name: "plan", week: /^\d{4}-\d{2}-\d{2}$/.test(parts[1] || "") ? parts[1] : "" };
     return { name: "list" };
   }
 
@@ -797,6 +839,10 @@ class HassRecipesPanel extends HTMLElement {
     if (!this._loaded) body = `<div class="empty">Loading…</div>`;
     else if (v.name === "detail" && this._recipe(v.id)) body = this._detailHtml(this._recipe(v.id));
     else if (v.name === "data") body = this._dataHtml();
+    else if (v.name === "plan") {
+      this._ensurePlan();
+      body = this._planHtml();
+    }
     else if (v.name === "shop" && this._recipe(v.id)) body = this._shopHtml(this._recipe(v.id));
     else if (v.name === "cook" && this._recipe(v.id)) {
       const r = this._recipe(v.id);
@@ -827,7 +873,8 @@ class HassRecipesPanel extends HTMLElement {
     }
     if (this._focusUid) {
       const [uid, part] = this._focusUid.split(":");
-      const el = this.shadowRoot.querySelector(`.ing-row[data-uid="${uid}"] [data-f=${part === "sub" ? "isub" : "itext"}]`);
+      const found = this.shadowRoot.querySelectorAll(`.ing-row[data-uid="${uid}"] [data-f=${part === "sub" ? "isub" : "itext"}]`);
+      const el = found[found.length - 1]; // a new substitute is the last one
       if (el) el.focus();
       this._focusUid = null;
     }
@@ -927,7 +974,8 @@ class HassRecipesPanel extends HTMLElement {
               .map(([v, l]) => `<option value="${v}" ${this._bulkField === v ? "selected" : ""}>${l}</option>`)
               .join("")}
           </select>
-          <input id="bulk-value" placeholder="value" value="${esc(this._bulkValue)}">
+          <input id="bulk-value" list="bulk-values" placeholder="value" value="${esc(this._bulkValue)}" autocomplete="off">
+          <datalist id="bulk-values">${this._usedValues(this._bulkField).map((v) => `<option value="${esc(v)}"></option>`).join("")}</datalist>
           <button class="btn" data-bulk="add">Add</button>
           <button class="btn secondary" data-bulk="remove">Remove</button>
           <button class="btn danger" data-bulk="delete">Delete</button>
@@ -938,6 +986,7 @@ class HassRecipesPanel extends HTMLElement {
       <div class="toolbar">
         <input id="search" type="search" placeholder="Search recipes, tags, ingredients…" value="${esc(this._search)}">
         <button class="btn" data-act="new" title="New recipe">+<span class="only-desk"> New</span></button>
+        <button class="btn secondary only-desk" data-act="plan">Meal plan</button>
         <button class="btn secondary only-desk" data-act="import">Import URL</button>
         <button class="btn secondary only-desk ${this._select ? "active" : ""}" data-act="select">${this._select ? "Done selecting" : "Select"}</button>
         <button class="btn secondary only-desk" data-act="data" title="Export, import files, migrate from Mealie">⇅ Backup &amp; migrate</button>
@@ -945,6 +994,7 @@ class HassRecipesPanel extends HTMLElement {
       <div class="only-mob" style="margin:-4px 0 10px">
         <details><summary class="muted" style="cursor:pointer">More actions</summary>
           <div class="actions" style="margin-top:8px">
+            <button class="btn secondary" data-act="plan">Meal plan</button>
             <button class="btn secondary" data-act="import">Import URL</button>
             <button class="btn secondary" data-act="select">${this._select ? "Done selecting" : "Select"}</button>
             <button class="btn secondary" data-act="data">⇅ Backup &amp; migrate</button>
@@ -959,6 +1009,391 @@ class HassRecipesPanel extends HTMLElement {
           ${shown.length ? `<div class="recipes">${items}</div>` : `<div class="empty">${this._recipes.length ? "No recipes match." : "No recipes yet. Create one or import from a URL."}</div>`}
         </div>
       </div>`;
+  }
+
+  // ---- categories / tools / tags: a checklist of what is in use, with "create" (like Mealie) ----
+  _usedValues(kind) {
+    const seen = new Map();
+    for (const r of this._recipes) for (const v of r[kind] || []) if (!seen.has(v.toLowerCase())) seen.set(v.toLowerCase(), v);
+    return [...seen.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }
+  _multiValues(text) {
+    return String(text || "").split(",").map((t) => t.trim()).filter(Boolean);
+  }
+  _multiHtml(kind, label, singular, value) {
+    return `<div class="multi" data-multi="${kind}" data-singular="${esc(singular)}">
+      <label class="lbl">${label}</label>
+      <input type="hidden" name="${kind}" value="${esc(value)}">
+      <div class="multi-body"></div>
+    </div>`;
+  }
+  _bindMulti(root) {
+    root.querySelectorAll(".multi").forEach((box) => {
+      const kind = box.dataset.multi;
+      const singular = box.dataset.singular;
+      const hidden = box.querySelector("input[type=hidden]");
+      const body = box.querySelector(".multi-body");
+      let filter = "";
+      let open = false;
+      const chosen = () => this._multiValues(hidden.value);
+      const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+      const commit = (values) => {
+        hidden.value = values.join(", ");
+        this._formDirty = true;
+        draw(true);
+      };
+      const toggle = (name) => {
+        const values = chosen();
+        const at = values.findIndex((v) => same(v, name));
+        if (at >= 0) values.splice(at, 1);
+        else values.push(name);
+        commit(values);
+      };
+      const create = (raw) => {
+        const name = String(raw || "").replace(/,/g, " ").trim();
+        if (!name) return;
+        const values = chosen();
+        if (!values.some((v) => same(v, name))) {
+          // reuse the spelling already in use, so "dessert" does not become a second category
+          values.push(this._usedValues(kind).find((v) => same(v, name)) || name);
+        }
+        filter = "";
+        commit(values);
+      };
+      const draw = (refocus) => {
+        const values = chosen();
+        const all = [...new Map([...this._usedValues(kind), ...values].map((v) => [v.toLowerCase(), v])).values()].sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" })
+        );
+        const needle = filter.trim().toLowerCase();
+        const shown = needle ? all.filter((v) => v.toLowerCase().includes(needle)) : all;
+        const exact = all.some((v) => v.toLowerCase() === needle);
+        const chips = values
+          .map((v) => `<span class="chip active multi-chip">${esc(v)}<button type="button" class="multi-x" data-multi-remove="${esc(v)}" aria-label="Remove ${esc(v)}">✕</button></span>`)
+          .join("");
+        const rows = shown
+          .map((v) => {
+            const on = values.some((c) => same(c, v));
+            return `<label class="multi-opt"><input type="checkbox" data-multi-opt="${esc(v)}" ${on ? "checked" : ""}><span>${esc(v)}</span></label>`;
+          })
+          .join("");
+        body.innerHTML = `<div class="multi-field">${chips}<input type="text" class="multi-filter" data-multi-filter
+            placeholder="${values.length ? "" : `Select or create a ${esc(singular)}…`}" value="${esc(filter)}" maxlength="60" autocomplete="off"></div>
+          <div class="multi-menu" ${open ? "" : "hidden"}>
+            ${rows || (needle ? "" : `<div class="muted multi-empty">No ${esc(kind)} yet. Type a name to create one.</div>`)}
+            ${needle && !exact ? `<button type="button" class="multi-create" data-multi-create>＋ Create “${esc(filter.trim())}”</button>` : ""}
+          </div>`;
+        const input = body.querySelector("[data-multi-filter]");
+        if (refocus) {
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+        const openMenu = () => {
+          if (!open) {
+            open = true;
+            body.querySelector(".multi-menu").hidden = false;
+          }
+        };
+        input.addEventListener("focus", openMenu);
+        // anywhere in the field (not on a chip's x) opens the list and focuses the box
+        body.querySelector(".multi-field").addEventListener("click", (e) => {
+          if (e.target.closest("[data-multi-remove]")) return;
+          openMenu();
+          input.focus();
+        });
+        input.addEventListener("input", () => {
+          filter = input.value;
+          open = true;
+          draw(true);
+        });
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            const text = filter.trim();
+            if (!text) return;
+            const matches = shown;
+            // one match: tick it; otherwise create what was typed
+            if (matches.length === 1 && matches[0].toLowerCase() === text.toLowerCase()) {
+              const values = chosen();
+              if (!values.some((v) => same(v, matches[0]))) {
+                filter = "";
+                commit([...values, matches[0]]);
+              }
+            } else create(text);
+          } else if (e.key === "Escape") {
+            open = false;
+            draw(false);
+            input.blur();
+          } else if (e.key === "Backspace" && !input.value) {
+            const values = chosen();
+            if (values.length) {
+              values.pop();
+              commit(values);
+            }
+          }
+        });
+        body.querySelectorAll("[data-multi-opt]").forEach((cb) =>
+          cb.addEventListener("change", () => {
+            open = true;
+            toggle(cb.dataset.multiOpt);
+          })
+        );
+        body.querySelectorAll("[data-multi-remove]").forEach((b) =>
+          b.addEventListener("click", () => {
+            open = false;
+            commit(chosen().filter((v) => v !== b.dataset.multiRemove));
+          })
+        );
+        const make = body.querySelector("[data-multi-create]");
+        if (make) make.addEventListener("click", () => create(filter));
+      };
+      draw(false);
+      // clicking anywhere else closes the list
+      const away = (e) => {
+        if (!box.isConnected) return document.removeEventListener("pointerdown", away, true);
+        if (open && !e.composedPath().includes(box)) {
+          open = false;
+          filter = "";
+          draw(false);
+        }
+      };
+      document.addEventListener("pointerdown", away, true);
+    });
+  }
+
+  // ---- meal plan ----
+  _planMonday() {
+    const w = this._view.name === "plan" && this._view.week ? new Date(`${this._view.week}T12:00:00`) : new Date();
+    return mondayOf(w);
+  }
+  /** Fetch the visible week when it changes, and repaint when it arrives. */
+  _ensurePlan() {
+    const start = isoDate(this._planMonday());
+    if (this._planLoaded === start || this._planLoading === start) return;
+    this._planLoading = start;
+    this._ws({ type: "hass_recipes/plan_list", start, end: isoDate(addDays(this._planMonday(), 6)) })
+      .then((res) => {
+        this._planEntries = res.entries;
+        this._planLoaded = start;
+      })
+      .catch((err) => {
+        this._error = err.message || String(err);
+      })
+      .finally(() => {
+        this._planLoading = null;
+        if (this._view.name === "plan") this._render();
+      });
+    this._subscribePlan();
+  }
+  _subscribePlan() {
+    if (this._planSub || !this._hass) return;
+    this._planSub = true;
+    this._hass.connection
+      .subscribeEvents(() => {
+        this._planLoaded = null;
+        if (this._view.name === "plan") this._render();
+      }, "hass_recipes_meal_plan_changed")
+      .catch(() => (this._planSub = false));
+  }
+  async _planChange(msg) {
+    try {
+      await this._ws(msg);
+    } catch (err) {
+      this._error = err.message || String(err);
+    }
+    this._planLoaded = null; // the change event also reloads; this covers a missed event
+    this._render();
+  }
+  async _planToShopping() {
+    const start = isoDate(this._planMonday());
+    const entity_id = this._shopEntity || "todo.shopping_list";
+    try {
+      const res = await this._hass.callWS({
+        type: "call_service",
+        domain: "hass_recipes",
+        service: "add_plan_to_shopping_list",
+        service_data: { start, days: 7, entity_id },
+        return_response: true,
+      });
+      const r = res.response || {};
+      this._flash(`Added ${r.added?.length || 0} items from ${r.meals || 0} meals to ${entity_id}${r.skipped?.length ? ` (${r.skipped.length} already there)` : ""}.`);
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._render();
+    }
+  }
+  _bindPlan(root, on) {
+    on("[data-plan-add]", "click", async (e) => {
+      const { date, slot } = e.currentTarget.dataset;
+      if (this._planPending) {
+        const recipe_id = this._planPending;
+        this._planPending = null;
+        await this._planChange({ type: "hass_recipes/plan_add", date, slot, recipe_id });
+        this._flash("Added to the meal plan.");
+        return;
+      }
+      this._planAdd = { date, slot };
+      this._planQuery = "";
+      this._render();
+      setTimeout(() => root.getElementById("plan-search")?.focus(), 30);
+    });
+    on("[data-plan-recipe]", "click", async (e) => {
+      const add = this._planAdd;
+      this._planAdd = null;
+      if (add) await this._planChange({ type: "hass_recipes/plan_add", ...add, recipe_id: e.currentTarget.dataset.planRecipe });
+    });
+    const text = root.getElementById("plan-text-add");
+    if (text) {
+      const submit = async () => {
+        const title = root.getElementById("plan-text").value.trim();
+        const add = this._planAdd;
+        if (!title || !add) return;
+        this._planAdd = null;
+        await this._planChange({ type: "hass_recipes/plan_add", ...add, title });
+      };
+      text.addEventListener("click", submit);
+      root.getElementById("plan-text").addEventListener("keydown", (e) => e.key === "Enter" && submit());
+    }
+    on("[data-plan-cancel]", "click", () => {
+      this._planAdd = null;
+      this._render();
+    });
+    on("[data-plan-del]", "click", (e) =>
+      this._planChange({ type: "hass_recipes/plan_delete", entry_id: e.currentTarget.dataset.planDel })
+    );
+    on("[data-plan-cook]", "click", async (e) => {
+      try {
+        const state = await this._ws({ type: "hass_recipes/plan_cook", entry_id: e.currentTarget.dataset.planCook });
+        this._go({ name: "cook", id: state.recipe_id, step: 0 });
+      } catch (err) {
+        this._error = err.message || String(err);
+        this._render();
+      }
+    });
+    on("[data-plan-scale]", "change", (e) => {
+      const scale = parseFloat(e.currentTarget.value);
+      this._planChange({
+        type: "hass_recipes/plan_update",
+        entry_id: e.currentTarget.dataset.planScale,
+        scale: scale > 0 ? scale : null,
+      });
+    });
+    const search = root.getElementById("plan-search");
+    if (search) {
+      search.addEventListener("input", () => {
+        this._planQuery = search.value;
+        const box = root.getElementById("plan-results");
+        if (box) {
+          box.innerHTML = this._planResultsHtml();
+          box.querySelectorAll("[data-plan-recipe]").forEach((b) =>
+            b.addEventListener("click", async (ev) => {
+              const add = this._planAdd;
+              this._planAdd = null;
+              if (add) await this._planChange({ type: "hass_recipes/plan_add", ...add, recipe_id: ev.currentTarget.dataset.planRecipe });
+            })
+          );
+        }
+      });
+    }
+  }
+  _planResultsHtml() {
+    const q = (this._planQuery || "").trim().toLowerCase();
+    const found = this._recipes
+      .filter((r) => !q || [r.name, ...(r.tags || []), ...(r.categories || [])].join(" ").toLowerCase().includes(q))
+      .slice(0, 12);
+    if (!found.length) return `<div class="muted">No recipes match. Use the text box to add a plain meal.</div>`;
+    return found
+      .map(
+        (r) => `<button class="plan-recipe" data-plan-recipe="${esc(r.id)}">
+          <span class="thumb" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></span>
+          <span>${esc(r.name)}<br><small class="muted">${esc(minutes(r.total_time) || "")}</small></span></button>`
+      )
+      .join("");
+  }
+  _planHtml() {
+    const monday = this._planMonday();
+    const days = [...Array(7)].map((_, i) => addDays(monday, i));
+    const today = isoDate(new Date());
+    const lang = (this._hass && this._hass.language) || undefined;
+    const dayLabel = (d) => new Intl.DateTimeFormat(lang, { weekday: "short", day: "numeric", month: "short" }).format(d);
+    const rangeLabel = `${new Intl.DateTimeFormat(lang, { day: "numeric", month: "short" }).format(days[0])} – ${new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", year: "numeric" }).format(days[6])}`;
+    const entries = this._planLoaded === isoDate(monday) ? this._planEntries || [] : this._planEntries || [];
+    const SLOTS = [["breakfast", "Breakfast"], ["lunch", "Lunch"], ["dinner", "Dinner"], ["snack", "Snack"]];
+    const pending = this._planPending ? this._recipe(this._planPending) : null;
+
+    const dayHtml = (d) => {
+      const iso = isoDate(d);
+      const slots = SLOTS.map(([slot, label]) => {
+        const here = entries.filter((e) => e.date === iso && e.slot === slot);
+        const items = here
+          .map((e) => {
+            const title = e.recipe_exists
+              ? `<a href="#" class="plan-title" data-open="${esc(e.recipe_id)}">${esc(e.title)}</a>`
+              : `<span class="plan-title">${esc(e.title)}</span>`;
+            const scaleBox = e.recipe_exists
+              ? `<label class="plan-scale" title="Scale">×<input type="number" min="0.25" step="0.25" value="${e.scale ? esc(e.scale) : ""}" placeholder="1" data-plan-scale="${esc(e.id)}"></label>`
+              : "";
+            return `<div class="plan-entry">${title}
+              <span class="plan-tools">${scaleBox}
+                ${e.recipe_exists ? `<button class="mini" data-plan-cook="${esc(e.id)}" title="Cook this">🍳</button>` : ""}
+                <button class="mini" data-plan-del="${esc(e.id)}" title="Remove">✕</button></span></div>`;
+          })
+          .join("");
+        return `<div class="plan-slot"><div class="plan-slot-head"><span>${label}</span>
+          <button class="mini" data-plan-add data-date="${iso}" data-slot="${slot}" title="Add to ${label.toLowerCase()}">+</button></div>${items}</div>`;
+      }).join("");
+      return `<section class="plan-day ${iso === today ? "today" : ""}"><h3>${esc(dayLabel(d))}</h3>${slots}</section>`;
+    };
+
+    const adding = this._planAdd
+      ? `<div class="pane plan-picker">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <strong>Add to ${esc(this._planAdd.slot)} · ${esc(dayLabel(new Date(`${this._planAdd.date}T12:00:00`)))}</strong>
+            <button class="btn secondary" data-plan-cancel>Cancel</button></div>
+          <input id="plan-search" type="search" placeholder="Search recipes" value="${esc(this._planQuery || "")}">
+          <div id="plan-results" class="plan-results">${this._planResultsHtml()}</div>
+          <div class="plan-text"><input id="plan-text" placeholder="…or a plain meal, e.g. Leftovers"><button class="btn" id="plan-text-add">Add</button></div>
+        </div>`
+      : "";
+    return `
+      <style>
+        .plan-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+        .plan-bar h2 { margin: 0 12px 0 0; font-size: 22px; font-weight: 500; }
+        .plan-range { min-width: 150px; text-align: center; font-weight: 500; }
+        .plan-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+        @container (max-width: 900px) { .plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @container (max-width: 520px) { .plan-grid { grid-template-columns: minmax(0, 1fr); } }
+        .plan-day { border: 1px solid var(--divider-color); border-radius: 12px; padding: 8px 10px; background: var(--card-background-color); }
+        .plan-day.today { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
+        .plan-day h3 { margin: 0 0 6px; font-size: 14px; font-weight: 500; }
+        .plan-slot { border-top: 1px solid var(--divider-color); padding: 4px 0; min-height: 34px; }
+        .plan-slot-head { display: flex; justify-content: space-between; align-items: center; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--secondary-text-color); }
+        .plan-entry { display: flex; flex-direction: column; gap: 2px; padding: 3px 0; font-size: 14px; }
+        .plan-title { color: var(--primary-text-color); text-decoration: none; overflow-wrap: anywhere; }
+        a.plan-title { color: var(--primary-color); }
+        .plan-tools { display: flex; gap: 4px; align-items: center; }
+        .plan-scale { font-size: 12px; color: var(--secondary-text-color); display: flex; align-items: center; gap: 2px; }
+        .plan-scale input { width: 52px; padding: 1px 4px; font-size: 12px; }
+        .plan-picker { margin-bottom: 14px; display: grid; gap: 10px; }
+        .plan-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; max-height: 260px; overflow: auto; }
+        .plan-recipe { display: flex; gap: 8px; align-items: center; text-align: left; padding: 6px; border: 1px solid var(--divider-color); border-radius: 8px; background: none; color: inherit; font: inherit; cursor: pointer; }
+        .plan-recipe .thumb { width: 36px; height: 36px; border-radius: 6px; flex: none; background: var(--secondary-background-color) center / cover; }
+        .plan-text { display: flex; gap: 8px; }
+        .plan-banner { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--primary-color) 14%, transparent); display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+      </style>
+      <div class="toolbar"><button class="btn secondary" data-act="back">← Back</button></div>
+      <div class="plan-bar">
+        <h2>Meal plan</h2>
+        <button class="btn secondary" data-act="plan-prev" title="Previous week">‹</button>
+        <span class="plan-range">${esc(rangeLabel)}</span>
+        <button class="btn secondary" data-act="plan-next" title="Next week">›</button>
+        <button class="btn secondary" data-act="plan-today">Today</button>
+        <button class="btn" data-act="plan-shop" title="Add the ingredients of this week's recipes to your shopping list">Add week to shopping list</button>
+      </div>
+      ${pending ? `<div class="plan-banner"><span>Pick a meal for <strong>${esc(pending.name)}</strong>: press + on a day.</span><button class="btn secondary" data-act="plan-cancel-pending">Cancel</button></div>` : ""}
+      ${adding}
+      <div class="plan-grid">${days.map(dayHtml).join("")}</div>`;
   }
 
   // ---- export / import / migrate ----
@@ -1161,13 +1596,25 @@ class HassRecipesPanel extends HTMLElement {
           .filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]))
           .map((i) => ingredientChipHtml(r, i, k, this._units))
           .join("");
-        const running = this._timerRunning(`${r.id}:${n}`);
         return `<div class="step-item ${done ? "done" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}" tabindex="0" title="${done ? "Mark as not done" : "Tap to mark as done"}">
           <span class="step-num">${done ? "✓" : num}</span>
           <div class="step-body"><div class="step-text">${esc(s.text)}</div>
             ${links ? `<div class="step-ings">${links}</div>` : ""}
-            ${s.timer ? `<button class="btn secondary timer-btn" data-timer="${n}" data-sec="${s.timer}" ${running ? "disabled" : ""}>⏱ ${running ? "Timer running" : `Start ${duration(s.timer)} timer`}</button>` : ""}
+            ${this._timerButtonsHtml(r, s, n, num, "secondary")}
           </div></div>`;
+      })
+      .join("");
+  }
+
+  /** One start button per timer of a step. `n` is the step's index, `num` its number among the steps. */
+  _timerButtonsHtml(r, st, n, num, extra = "") {
+    return timerSpecs(r, n, num, st.timers || [])
+      .map((sp) => {
+        const running = this._timerRunning(sp.key);
+        const what = sp.name ? ` (${esc(sp.name)})` : "";
+        return `<button class="btn ${extra} timer-btn" data-timer-key="${esc(sp.key)}" data-timer-label="${esc(sp.label)}" data-timer-step="${n}" data-sec="${sp.seconds}" ${running ? "disabled" : ""}>⏱ ${
+          running ? "Timer running" : `Start ${duration(sp.seconds)} timer${what}`
+        }</button>`;
       })
       .join("");
   }
@@ -1206,7 +1653,7 @@ class HassRecipesPanel extends HTMLElement {
         ${section ? `<div class="cook-section">${esc(section)}</div>` : ""}
         <div class="cook-text" data-step-toggle="${st.i}" style="${done ? "opacity:.55;text-decoration:line-through" : ""}" title="Tap to mark as done">${esc(st.text)}</div>
         ${links ? `<div class="step-ings">${links}</div>` : ""}
-        ${st.timer ? `<button class="btn timer-btn" data-timer="${st.i}" data-sec="${st.timer}" ${running ? "disabled" : ""}>⏱ ${running ? "Timer running" : `Start ${duration(st.timer)} timer`}</button>` : ""}
+        ${this._timerButtonsHtml(r, st, st.i, n + 1)}
         <label class="cook-done"><input type="checkbox" data-step-done="${st.i}" ${done ? "checked" : ""}> Mark this step as done</label>
         <div class="cook-nav">
           <button class="btn secondary" data-act="cook-prev" ${n === 0 ? "disabled" : ""}>← Previous</button>
@@ -1265,7 +1712,7 @@ class HassRecipesPanel extends HTMLElement {
           <div class="cstep-head"><span>Step ${num}</span><span class="tick">${done ? "✓" : ""}</span></div>
           <div class="cstep-text">${esc(st.text)}</div>
           ${links ? `<div class="step-ings">${links}</div>` : ""}
-          ${st.timer ? `<button class="btn timer-btn" data-timer="${n}" data-sec="${st.timer}" ${running ? "disabled" : ""}>⏱ ${running ? "Timer running" : `Start ${duration(st.timer)} timer`}</button>` : ""}
+          ${this._timerButtonsHtml(r, st, n, num)}
         </div>`;
       })
       .join("");
@@ -1323,7 +1770,7 @@ class HassRecipesPanel extends HTMLElement {
       .map((st) => {
         if (st.section) return `<h3>${esc(st.text)}</h3>`;
         num += 1;
-        return `<p class="step"><span class="n">${num}.</span> ${esc(st.text)}${st.timer ? ` <span class="timer">(${esc(duration(st.timer))})</span>` : ""}</p>`;
+        return `<p class="step"><span class="n">${num}.</span> ${esc(st.text)}${st.timers.length ? ` <span class="timer">(${esc(st.timers.map((t) => duration(t.seconds) + (t.label ? ` ${t.label}` : "")).join(", "))})</span>` : ""}</p>`;
       })
       .join("");
     const ings = r.ingredients
@@ -1430,6 +1877,7 @@ class HassRecipesPanel extends HTMLElement {
       </div>
       ${barHtml("bar-bottom")}
       <div class="more-actions">
+        <button data-act="plan-this" data-id="${esc(r.id)}">Add to meal plan</button>
         ${anyChecks ? `<button data-act="progress-reset">↺ Clear checks</button>` : ""}
         <button class="danger" data-act="delete" data-id="${esc(r.id)}">Delete recipe</button>
       </div>`;
@@ -1488,9 +1936,9 @@ class HassRecipesPanel extends HTMLElement {
 
   /** Stored ingredient strings -> editor rows (heading / text + substitute). */
   _rowFromString(str) {
-    if (isHeader(str)) return { uid: this._nextUid(), header: true, text: headerText(str), sub: "", showSub: false };
-    const [text, sub] = splitSub(str);
-    return { uid: this._nextUid(), header: false, text, sub, showSub: !!sub };
+    if (isHeader(str)) return { uid: this._nextUid(), header: true, text: headerText(str), subs: [] };
+    const { main, alts } = splitSubs(str);
+    return { uid: this._nextUid(), header: false, text: main, subs: alts };
   }
 
   _initForm(id) {
@@ -1518,7 +1966,12 @@ class HassRecipesPanel extends HTMLElement {
         section: st.section,
         // links are kept as stable row ids so reordering ingredients never breaks them
         ingredients: st.ingredients.map((i) => rows[i]).filter((row) => row && !row.header).map((row) => row.uid),
-        timer: st.timer ? Math.round((st.timer / 60) * 100) / 100 : "",
+        timers: st.timers.map((t) => ({
+          h: Math.floor(t.seconds / 3600) || "",
+          m: Math.floor((t.seconds % 3600) / 60) || "",
+          s: t.seconds % 60 || "",
+          label: t.label || "",
+        })),
       })),
     };
     // An imported draft has not been saved yet, so leaving it should ask first.
@@ -1537,13 +1990,17 @@ class HassRecipesPanel extends HTMLElement {
       uid: el.dataset.uid,
       header: el.dataset.header === "1",
       text: el.querySelector("[data-f=itext]").value,
-      sub: (el.querySelector("[data-f=isub]") || { value: "" }).value,
-      showSub: !!el.querySelector("[data-f=isub]"),
+      subs: [...el.querySelectorAll("[data-f=isub]")].map((i) => i.value),
     }));
     this._form.steps = [...form.querySelectorAll(".step")].map((el) => ({
       section: el.dataset.section === "1",
       text: el.querySelector("[data-f=text]").value,
-      timer: (el.querySelector("[data-f=timer]") || { value: "" }).value,
+      timers: [...el.querySelectorAll(".timer-row")].map((row) => ({
+        h: row.querySelector("[data-f=th]").value,
+        m: row.querySelector("[data-f=tm]").value,
+        s: row.querySelector("[data-f=ts]").value,
+        label: row.querySelector("[data-f=tl]").value,
+      })),
       ingredients: [...el.querySelectorAll(".chip.active[data-uid]")].map((c) => c.dataset.uid),
     }));
   }
@@ -1563,11 +2020,13 @@ class HassRecipesPanel extends HTMLElement {
     const inputs = row.header
       ? `<input data-f="itext" placeholder="Section title, e.g. Dough" value="${esc(row.text)}">`
       : `<input data-f="itext" placeholder="e.g. 200 g butter" value="${esc(row.text)}">
-         ${
-           row.showSub || row.sub
-             ? `<input data-f="isub" placeholder="Substitute with its own amount, e.g. 180 g coconut oil" value="${esc(row.sub)}">`
-             : `<button type="button" class="mini link" data-row-act="sub" data-uid="${esc(row.uid)}">+ substitute</button>`
-         }`;
+         ${row.subs
+           .map(
+             (sub, n) => `<div class="sub-row"><input data-f="isub" placeholder="Substitute with its own amount, e.g. 180 g coconut oil" value="${esc(sub)}">
+               <button type="button" class="mini" data-row-act="sub-remove" data-uid="${esc(row.uid)}" data-i="${n}" title="Remove this substitute">✕</button></div>`
+           )
+           .join("")}
+         <button type="button" class="mini link" data-row-act="sub" data-uid="${esc(row.uid)}">+ ${row.subs.length ? "another " : ""}substitute</button>`;
     return `<div class="ing-row ${row.header ? "is-header" : ""}" data-uid="${esc(row.uid)}" data-header="${row.header ? 1 : 0}">
       <div class="ing-inputs">${inputs}</div>
       <span class="row-btns">
@@ -1601,8 +2060,18 @@ class HassRecipesPanel extends HTMLElement {
         num += 1;
         return `<div class="step" data-n="${n}" data-section="0">${head(`Step ${num}`)}
           <textarea data-f="text" rows="3" placeholder="What to do…">${esc(st.text)}</textarea>
-          <div class="timer-field"><label class="lbl">Timer (minutes, optional)</label>
-            <input data-f="timer" type="number" min="0" step="any" value="${esc(st.timer)}"></div>
+          <div class="timer-field"><label class="lbl">Timers (optional)</label>
+            ${st.timers
+              .map(
+                (t, ti) => `<div class="timer-row">
+                  <input data-f="th" type="number" min="0" step="1" placeholder="0" value="${esc(t.h)}" aria-label="Hours"><span>h</span>
+                  <input data-f="tm" type="number" min="0" step="1" placeholder="0" value="${esc(t.m)}" aria-label="Minutes"><span>min</span>
+                  <input data-f="ts" type="number" min="0" step="1" placeholder="0" value="${esc(t.s)}" aria-label="Seconds"><span>sec</span>
+                  <input data-f="tl" class="timer-label" placeholder="Label, e.g. simmer" value="${esc(t.label)}" maxlength="60">
+                  <button type="button" class="mini" data-step-act="remove-timer" data-n="${n}" data-t="${ti}" title="Remove this timer">✕</button></div>`
+              )
+              .join("")}
+            <button type="button" class="mini link" data-step-act="add-timer" data-n="${n}">+ ${st.timers.length ? "another " : ""}timer</button></div>
           <label class="lbl">Ingredients used in this step</label>
           <div class="chips step-ings-edit">${this._stepChips(st, d.rows)}</div>
         </div>`;
@@ -1642,9 +2111,9 @@ class HassRecipesPanel extends HTMLElement {
             <div><label class="lbl">Total (min)</label><input name="total_time" type="number" min="0" value="${f("total_time")}"></div>
           </div>
           <div class="row field">
-            <div><label class="lbl">Categories (comma separated)</label><input name="categories" value="${f("categories")}" placeholder="Dessert, Dinner"></div>
-            <div><label class="lbl">Tools (comma separated)</label><input name="tools" value="${f("tools")}" placeholder="Air fryer, Blender"></div>
-            <div><label class="lbl">Tags (comma separated)</label><input name="tags" value="${f("tags")}"></div>
+            ${this._multiHtml("categories", "Categories", "category", d.categories)}
+            ${this._multiHtml("tools", "Tools", "tool", d.tools)}
+            ${this._multiHtml("tags", "Tags", "tag", d.tags)}
           </div>
           <div class="field"><label class="lbl">Ingredients</label>
             <div id="rows">${d.rows.map((row) => this._rowHtml(row)).join("")}</div>
@@ -1681,13 +2150,13 @@ class HassRecipesPanel extends HTMLElement {
     });
   }
 
-  _rowAction(act, uid) {
+  _rowAction(act, uid, idx) {
     this._syncForm();
     const rows = this._form.rows;
     const at = rows.findIndex((r) => r.uid === uid);
     let focus = null;
     if (act === "add" || act === "add-section") {
-      const row = { uid: this._nextUid(), header: act === "add-section", text: "", sub: "", showSub: false };
+      const row = { uid: this._nextUid(), header: act === "add-section", text: "", subs: [] };
       rows.splice(at >= 0 ? at + 1 : rows.length, 0, row);
       focus = row.uid;
     } else if (act === "remove" && at >= 0) {
@@ -1698,8 +2167,10 @@ class HassRecipesPanel extends HTMLElement {
     } else if (act === "down" && at >= 0 && at < rows.length - 1) {
       [rows[at + 1], rows[at]] = [rows[at], rows[at + 1]];
     } else if (act === "sub" && at >= 0) {
-      rows[at].showSub = true;
+      rows[at].subs.push("");
       focus = `${uid}:sub`;
+    } else if (act === "sub-remove" && at >= 0) {
+      rows[at].subs.splice(Number(idx), 1);
     }
     this._formDirty = true;
     this._focusUid = focus;
@@ -1724,11 +2195,13 @@ class HassRecipesPanel extends HTMLElement {
     this._render();
   }
 
-  _stepAction(act, n) {
+  _stepAction(act, n, t) {
     this._syncForm();
     const steps = this._form.steps;
-    if (act === "add") steps.push({ text: "", ingredients: [], timer: "", section: false });
-    else if (act === "add-section") steps.push({ text: "", ingredients: [], timer: "", section: true });
+    if (act === "add") steps.push({ text: "", ingredients: [], timers: [], section: false });
+    else if (act === "add-section") steps.push({ text: "", ingredients: [], timers: [], section: true });
+    else if (act === "add-timer" && steps[n]) steps[n].timers.push({ h: "", m: "", s: "", label: "" });
+    else if (act === "remove-timer" && steps[n]) steps[n].timers.splice(Number(t), 1);
     else if (act === "remove") steps.splice(n, 1);
     else if (act === "up" && n > 0) [steps[n - 1], steps[n]] = [steps[n], steps[n - 1]];
     else if (act === "down" && n < steps.length - 1) [steps[n + 1], steps[n]] = [steps[n], steps[n + 1]];
@@ -1773,6 +2246,7 @@ class HassRecipesPanel extends HTMLElement {
     const on = (sel, ev, fn) => root.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, fn));
 
     on("[data-open]", "click", (e) => this._go({ name: "detail", id: e.currentTarget.dataset.open }));
+    this._bindPlan(root, on);
     on("[data-facet]", "click", (e) => {
       const { facet, value } = e.currentTarget.dataset;
       const set = this._sel[facet];
@@ -1798,7 +2272,12 @@ class HassRecipesPanel extends HTMLElement {
     });
     on("[data-bulk]", "click", (e) => this._bulkAction(e.currentTarget.dataset.bulk));
     const bulkField = root.getElementById("bulk-field");
-    if (bulkField) bulkField.addEventListener("change", () => (this._bulkField = bulkField.value));
+    if (bulkField)
+      bulkField.addEventListener("change", () => {
+        this._bulkField = bulkField.value;
+        const list = root.getElementById("bulk-values");
+        if (list) list.innerHTML = this._usedValues(this._bulkField).map((v) => `<option value="${esc(v)}"></option>`).join("");
+      });
     const bulkValue = root.getElementById("bulk-value");
     if (bulkValue) bulkValue.addEventListener("input", () => (this._bulkValue = bulkValue.value));
     on("input[data-shop]", "change", (e) => {
@@ -1867,10 +2346,10 @@ class HassRecipesPanel extends HTMLElement {
       });
     }
 
-    on("[data-timer]", "click", (e) => {
+    on("[data-timer-key]", "click", (e) => {
       const r = this._recipe(this._view.id);
-      const n = +e.currentTarget.dataset.timer;
-      this._startTimer(`${r.id}:${n}`, `${r.name} · step ${n + 1}`, +e.currentTarget.dataset.sec, r.id, n);
+      const d = e.currentTarget.dataset;
+      this._startTimer(d.timerKey, d.timerLabel, +d.sec, r.id, +d.timerStep);
     });
 
     const toggleStep = (n) => this._setStepDone(n, !this._doneSteps.has(n));
@@ -1893,6 +2372,7 @@ class HassRecipesPanel extends HTMLElement {
 
     const form = root.getElementById("form");
     if (form) {
+      this._bindMulti(root);
       form.addEventListener("submit", (e) => this._save(e, form));
       form.addEventListener("input", (e) => {
         this._formDirty = true;
@@ -1929,9 +2409,9 @@ class HassRecipesPanel extends HTMLElement {
           return;
         }
         const rowBtn = e.target.closest("[data-row-act]");
-        if (rowBtn) return this._rowAction(rowBtn.dataset.rowAct, rowBtn.dataset.uid);
+        if (rowBtn) return this._rowAction(rowBtn.dataset.rowAct, rowBtn.dataset.uid, rowBtn.dataset.i);
         const btn = e.target.closest("[data-step-act]");
-        if (btn) this._stepAction(btn.dataset.stepAct, +btn.dataset.n);
+        if (btn) this._stepAction(btn.dataset.stepAct, +btn.dataset.n, btn.dataset.t);
       });
     }
     on("[data-open-new]", "click", async (e) => {
@@ -1955,6 +2435,30 @@ class HassRecipesPanel extends HTMLElement {
         break;
       case "import":
         this._go({ name: "import" });
+        break;
+      case "plan":
+        this._planPending = null;
+        this._go({ name: "plan", week: "" });
+        break;
+      case "plan-this":
+        this._planPending = id;
+        this._go({ name: "plan", week: "" });
+        break;
+      case "plan-prev":
+      case "plan-next":
+      case "plan-today": {
+        const monday = this._planMonday();
+        const next = act === "plan-today" ? new Date() : addDays(monday, act === "plan-prev" ? -7 : 7);
+        this._planAdd = null;
+        this._go({ name: "plan", week: act === "plan-today" ? "" : isoDate(mondayOf(next)) }, false, "replace");
+        break;
+      }
+      case "plan-shop":
+        await this._planToShopping();
+        break;
+      case "plan-cancel-pending":
+        this._planPending = null;
+        this._render();
         break;
       case "back":
       case "cancel":
@@ -2159,7 +2663,7 @@ class HassRecipesPanel extends HTMLElement {
       const text = row.text.trim();
       if (!text) continue;
       indexOf.set(row.uid, ingredients.length);
-      ingredients.push(row.header ? `## ${text}` : joinSub(text, row.sub));
+      ingredients.push(row.header ? `## ${text}` : joinSubs(text, row.subs));
     }
     const payload = {
       name: d.name.trim(),
@@ -2179,12 +2683,18 @@ class HassRecipesPanel extends HTMLElement {
       instructions: d.steps
         .filter((st) => st.text.trim())
         .map((st) => {
-          if (st.section) return { text: st.text.trim(), ingredients: [], timer: null, section: true };
-          const minutesValue = parseFloat(st.timer);
+          if (st.section) return { text: st.text.trim(), ingredients: [], timer: null, timers: [], section: true };
+          const timers = (st.timers || [])
+            .map((t) => ({
+              seconds: Math.round((parseFloat(t.h) || 0) * 3600 + (parseFloat(t.m) || 0) * 60 + (parseFloat(t.s) || 0)),
+              label: String(t.label || "").trim(),
+            }))
+            .filter((t) => t.seconds > 0);
           return {
             text: st.text.trim(),
             ingredients: [...new Set(st.ingredients.map((u) => indexOf.get(u)).filter((i) => i !== undefined))].sort((x, y) => x - y),
-            timer: minutesValue > 0 ? Math.max(1, Math.round(minutesValue * 60)) : null,
+            timer: timers.length ? timers[0].seconds : null,
+            timers,
             section: false,
           };
         }),

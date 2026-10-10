@@ -96,3 +96,103 @@ def test_section_headings_and_substitutes():
     assert alt["grams"] is not None and alt["approximate"]
     assert r["text"] == "200 g butter"
     assert parse("1 egg")["substitute"] is None
+
+
+def test_words_with_non_ascii_letters_are_not_cut_into_units():
+    # "l" of "løg" is not litres, "g" of "gærn" is not grams, "c" of "cæsar" is not a cup
+    onion = parse("2 løg")
+    assert (onion["quantity"], onion["unit"], onion["food"]) == (2.0, None, "løg")
+    assert onion["ml"] is None
+    assert parse("1 løg, hakket")["food"] == "løg"
+    assert parse("3 gærn")["unit"] is None
+    assert parse("2 cæsarsalater")["unit"] is None
+    assert parse("2 æg")["food"] == "æg"
+
+
+def test_real_units_next_to_non_ascii_foods_still_work():
+    litres = parse("2 l væske")
+    assert (litres["unit"], litres["ml"], litres["food"]) == ("l", 2000.0, "væske")
+    grams = parse("250 g løg")
+    assert (grams["unit"], grams["grams"], grams["food"]) == ("g", 250.0, "løg")
+    deci = parse("3 dl fløde")
+    assert (deci["unit"], deci["ml"]) == ("dl", 300.0)
+
+
+def test_danish_units_convert_like_their_english_counterparts():
+    tsp = parse("2 tsk salt")
+    assert (tsp["unit"], round(tsp["ml"], 1), tsp["food"]) == ("tsp", 9.9, "salt")
+    tbsp = parse("1 spsk smør")
+    assert tbsp["unit"] == "tbsp" and tbsp["grams"] == 14.2
+    assert parse("3 dl mel")["grams"] == 159.0
+    clove = parse("2 fed hvidløg")
+    assert (clove["unit"], clove["grams"]) == ("clove", 6.0)
+    assert parse("1 knsp salt")["unit"] == "pinch"
+    assert parse("1 dsk honning")["unit"] == "dsp"
+    assert parse("2 spiseskefulde sukker")["unit"] == "tbsp"
+
+
+def test_a_counted_piece_uses_the_weight_of_one_piece():
+    onions = parse("2 stk. løg")
+    assert (onions["unit"], onions["unit_text"], onions["grams"]) == ("piece", "stk", 300.0)
+    assert parse("1 stk citron")["grams"] == 85.0
+    assert parse("2 løg")["grams"] == 300.0  # no unit at all: same answer
+
+
+def test_units_in_other_languages():
+    for line, unit in [
+        ("2 EL Zucker", "tbsp"),
+        ("1 TL Salz", "tsp"),
+        ("3 Zehen Knoblauch", "clove"),
+        ("1 Prise Salz", "pinch"),
+        ("1 msk smör", "tbsp"),
+        ("1 krm salt", "krm"),
+        ("2 ss sukker", "tbsp"),
+        ("2 cucharadas de azúcar", "tbsp"),
+        ("2 dientes de ajo", "clove"),
+        ("1 cucchiaino di sale", "tsp"),
+        ("2 eetlepels suiker", "tbsp"),
+        ("1 blik tomaten", "can"),
+        ("2 tranches de pain", "slice"),
+    ]:
+        assert parse(line)["unit"] == unit, line
+
+
+def test_link_words_between_unit_and_food_are_dropped_only_after_a_unit():
+    assert parse("2 cucharadas de azúcar")["food"] == "azúcar"
+    assert parse("1 cucchiaino di sale")["food"] == "sale"
+    assert parse("2 de Jonge")["food"] == "de Jonge"  # no unit: leave the text alone
+
+
+def test_english_units_are_unchanged_by_the_other_languages():
+    assert parse("2 cups flour")["unit"] == "cup"
+    assert parse("1 tbsp butter")["unit"] == "tbsp"
+    assert parse("3 cloves garlic")["unit"] == "clove"
+    assert parse("1 can tomatoes")["unit"] == "can"
+    assert parse("2 l water")["ml"] == 2000.0
+
+
+def test_superscript_fractions_are_read_as_fractions():
+    potatoes = parse("1 ¹/₂ kilogram kartofler")
+    assert (potatoes["quantity"], potatoes["unit"], potatoes["grams"], potatoes["food"]) == (1.5, "kg", 1500.0, "kartofler")
+    tea = parse("³/₄ teske salt")
+    assert (tea["quantity"], tea["unit"]) == (0.75, "tsp")
+
+
+def test_a_danish_drys_is_a_dash():
+    muskat = parse("1 drys muskatnød")
+    assert (muskat["unit"], muskat["food"]) == ("dash", "muskatnød")
+
+
+def test_an_ingredient_can_have_any_number_of_substitutes():
+    p = parse("200 g smør || 180 g kokosolie || 2 dl fløde || 150 g margarine")
+    assert (p["food"], p["grams"]) == ("smør", 200.0)
+    assert [s["food"] for s in p["substitutes"]] == ["kokosolie", "fløde", "margarine"]
+    assert p["substitutes"][0]["grams"] == 180.0
+    assert p["substitute"]["food"] == "kokosolie"  # the first, for older clients
+
+
+def test_no_substitutes_and_blank_ones():
+    assert parse("2 eggs")["substitutes"] == [] and parse("2 eggs")["substitute"] is None
+    assert parse("2 eggs || ")["substitutes"] == []
+    assert parse("## Dough")["substitutes"] == []
+    assert [s["food"] for s in parse("1 butter ||  || 1 oil")["substitutes"]] == ["oil"]

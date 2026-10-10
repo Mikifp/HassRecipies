@@ -136,3 +136,44 @@ def test_state_survives_a_reload_and_clears_with_the_recipe():
     assert (again.cooking_step, again.cooking_scale) == (1, 1.5)
     again.delete(recipe["id"])
     assert again.cooking_state()["recipe_id"] is None and again.cooking_step == 0
+
+
+def test_a_step_can_carry_any_number_of_timers():
+    step = store_mod.normalize_step(
+        {"text": "Roast", "timers": [{"seconds": 1800, "label": "roast"}, {"seconds": 600, "label": "rest"}, 45]}
+    )
+    assert step["timer"] == 1800  # the first, for older clients
+    assert [(t["seconds"], t["label"]) for t in step["timers"]] == [(1800, "roast"), (600, "rest"), (45, "")]
+
+
+def test_the_older_single_timer_still_works():
+    step = store_mod.normalize_step({"text": "Simmer", "timer": 300})
+    assert step["timers"] == [{"seconds": 300, "label": ""}] and step["timer"] == 300
+    assert store_mod.normalize_step("plain text")["timers"] == []
+    assert store_mod.normalize_step({"text": "x", "timers": [{"seconds": 0}, {"seconds": -5}, "bad"]})["timers"] == []
+
+
+def test_timer_keys_keep_the_old_key_for_the_first_timer():
+    specs = store_mod.step_timer_specs(
+        "abc", "Roast", 2, 3, [{"seconds": 1800, "label": "roast"}, {"seconds": 600, "label": ""}, {"seconds": 60, "label": ""}]
+    )
+    assert specs == [
+        ("abc:3", "Roast · step 2 · roast", 1800),
+        ("abc:3:1", "Roast · step 2 · timer 2", 600),
+        ("abc:3:2", "Roast · step 2 · timer 3", 60),
+    ]
+    single = store_mod.step_timer_specs("abc", "Roast", 2, 3, [{"seconds": 60, "label": ""}])
+    assert single == [("abc:3", "Roast · step 2", 60)]  # unchanged for one timer
+
+
+def test_stored_steps_and_pages_carry_all_timers():
+    _hass, store = _make()
+    recipe = store.create(
+        {
+            "name": "Roast",
+            "instructions": [{"text": "Roast", "timers": [{"seconds": 1800, "label": "roast"}, {"seconds": 600}]}],
+        }
+    )
+    assert len(recipe["instructions"][0]["timers"]) == 2
+    pages = store_mod.cooking_pages(recipe)
+    assert [t["seconds"] for t in pages[-1]["timers"]] == [1800, 600] and pages[-1]["timer"] == 1800
