@@ -85,3 +85,38 @@ async def async_add_to_shopping_list(
         existing.add(item.casefold())
         added.append(item)
     return {"recipe": recipe["name"], "entity_id": entity_id, "added": added, "skipped": skipped}
+
+
+async def async_add_plan_to_shopping_list(
+    hass: HomeAssistant,
+    store: RecipeStore,
+    entries: list[dict[str, Any]],
+    entity_id: str,
+    units: str = "grams",
+) -> dict[str, Any]:
+    """Send the ingredients of every planned recipe to a to-do list.
+
+    Amounts are not summed across meals: an item already on the list (from an
+    earlier meal in the same run or from before) is skipped, as for a single recipe.
+    """
+    added: list[str] = []
+    skipped: list[str] = []
+    meals = 0
+    for entry in entries:
+        recipe = store.get(entry.get("recipe_id") or "")
+        if recipe is None:
+            continue  # a free-text meal has no ingredients
+        result = await async_add_to_shopping_list(
+            hass,
+            store,
+            {
+                "recipe": recipe["id"],
+                "entity_id": entity_id,
+                "units": units,
+                **({"scale": entry["scale"]} if entry.get("scale") else {}),
+            },
+        )
+        meals += 1
+        added += result["added"]
+        skipped += result["skipped"]
+    return {"entity_id": entity_id, "meals": meals, "added": added, "skipped": skipped}

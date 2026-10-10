@@ -76,6 +76,76 @@
           "description": "A single timer to snooze; leave empty for all finished timers."
         }
       }
+    },
+    "plan_meal": {
+      "name": "Plan a meal",
+      "description": "Puts a recipe on the meal plan.",
+      "fields": {
+        "recipe": {
+          "name": "Recipe",
+          "description": "Recipe name or id."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Defaults to today."
+        },
+        "slot": {
+          "name": "Meal",
+          "description": "Breakfast, lunch, dinner or snack."
+        },
+        "scale": {
+          "name": "Scale",
+          "description": "Multiplier for the recipe's amounts."
+        },
+        "servings": {
+          "name": "Servings",
+          "description": "Scale to this many servings instead of using a multiplier."
+        },
+        "note": {
+          "name": "Note",
+          "description": "An optional note shown with the meal."
+        }
+      }
+    },
+    "clear_meal_plan": {
+      "name": "Clear the meal plan",
+      "description": "Removes planned meals for a day or a range of days.",
+      "fields": {
+        "start": {
+          "name": "From",
+          "description": "Defaults to today."
+        },
+        "end": {
+          "name": "To",
+          "description": "Defaults to the same day as From."
+        },
+        "slot": {
+          "name": "Meal",
+          "description": "Only this meal; leave empty for all."
+        }
+      }
+    },
+    "add_plan_to_shopping_list": {
+      "name": "Add the plan to the shopping list",
+      "description": "Adds the ingredients of the planned recipes to a to-do list, skipping items already on it.",
+      "fields": {
+        "start": {
+          "name": "From",
+          "description": "Defaults to today."
+        },
+        "days": {
+          "name": "Days",
+          "description": "How many days to include."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "Defaults to todo.shopping_list."
+        },
+        "units": {
+          "name": "Units",
+          "description": "grams or original."
+        }
+      }
     }
   },
   "options": {

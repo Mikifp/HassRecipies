@@ -25,6 +25,8 @@ INTENT_REPEAT = "HassRecipesRepeatStep"
 INTENT_INGREDIENTS = "HassRecipesReadIngredients"
 INTENT_TIME_LEFT = "HassRecipesTimeLeft"
 INTENT_START_TIMER = "HassRecipesStartTimer"
+INTENT_PLANNED_MEAL = "HassRecipesPlannedMeal"
+INTENT_COOK_PLANNED = "HassRecipesCookPlanned"
 
 _TEXT = {
     "en": {
@@ -44,6 +46,13 @@ _TEXT = {
         "min": "{n} minute{s}",
         "sec": "{n} second{s}",
         "and": " and ",
+        "plan_none": "Nothing is planned for {slot} {day}.",
+        "plan_meal": "{slot} {day}: {titles}.",
+        "plan_cook": "Let's cook {name}. ",
+        "plan_nothing_to_cook": "There is no recipe planned for {slot} {day}.",
+        "today": "today",
+        "tomorrow": "tomorrow",
+        "slots": {"breakfast": "Breakfast", "lunch": "Lunch", "dinner": "Dinner", "snack": "Snack"},
     },
     "da": {
         "nothing": "Du har ikke valgt en opskrift endnu.",
@@ -62,6 +71,13 @@ _TEXT = {
         "min": "{n} minut{s}",
         "sec": "{n} sekund{s}",
         "and": " og ",
+        "plan_none": "Der er ikke planlagt noget til {slot} {day}.",
+        "plan_meal": "{slot} {day}: {titles}.",
+        "plan_cook": "Lad os lave {name}. ",
+        "plan_nothing_to_cook": "Der er ingen opskrift planlagt til {slot} {day}.",
+        "today": "i dag",
+        "tomorrow": "i morgen",
+        "slots": {"breakfast": "Morgenmad", "lunch": "Frokost", "dinner": "Aftensmad", "snack": "Mellemmåltid"},
     },
 }
 
@@ -217,7 +233,57 @@ class _TimeLeftIntent(_CookingIntent):
         return response
 
 
-ALL_INTENTS = (INTENT_NEXT, INTENT_PREVIOUS, INTENT_REPEAT, INTENT_INGREDIENTS, INTENT_TIME_LEFT, INTENT_START_TIMER)
+ALL_INTENTS = (
+    INTENT_NEXT,
+    INTENT_PREVIOUS,
+    INTENT_REPEAT,
+    INTENT_INGREDIENTS,
+    INTENT_TIME_LEFT,
+    INTENT_START_TIMER,
+    INTENT_PLANNED_MEAL,
+    INTENT_COOK_PLANNED,
+)
+
+
+def _slot_value(intent_obj, name: str, default: str) -> str:
+    slot = (intent_obj.slots or {}).get(name) or {}
+    return str(slot.get("value") or default)
+
+
+class _PlanIntent(_CookingIntent):
+    """Answers from the meal plan; works without a chosen recipe."""
+
+    async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
+        from datetime import date, timedelta  # local: keeps module import light
+
+        hass = intent_obj.hass
+        language = intent_obj.language
+        t = _t(language)
+        plan = hass.data[f"{DOMAIN}_plan"]
+        slot = _slot_value(intent_obj, "meal_slot", "dinner")
+        day_word = _slot_value(intent_obj, "plan_day", "today")
+        day = date.today() + timedelta(days=1 if day_word == "tomorrow" else 0)
+        slot_text = t["slots"].get(slot, slot).lower()
+        day_text = t["tomorrow"] if day_word == "tomorrow" else t["today"]
+        entries = [e for e in plan.list(day, day) if e["slot"] == slot]
+        response = intent_obj.create_response()
+        if self.intent_type == INTENT_PLANNED_MEAL:
+            if entries:
+                speech = t["plan_meal"].format(
+                    slot=t["slots"].get(slot, slot), day=day_text, titles=t["and"].join(e["title"] for e in entries)
+                )
+            else:
+                speech = t["plan_none"].format(slot=slot_text, day=day_text)
+        else:
+            cookable = next((e for e in entries if e.get("recipe_exists")), None)
+            if cookable is None:
+                speech = t["plan_nothing_to_cook"].format(slot=slot_text, day=day_text)
+            else:
+                store: RecipeStore = hass.data[DOMAIN]
+                store.set_cooking(cookable["recipe_id"], scale=cookable.get("scale"))
+                speech = t["plan_cook"].format(name=cookable["title"]) + _page_text(hass, language)
+        response.async_set_speech(speech)
+        return response
 
 
 def async_remove_intents(hass: HomeAssistant) -> None:
@@ -229,6 +295,8 @@ def async_setup_intents(hass: HomeAssistant) -> None:
     for kind in (INTENT_NEXT, INTENT_PREVIOUS, INTENT_REPEAT, INTENT_INGREDIENTS, INTENT_START_TIMER):
         intent.async_register(hass, _CookingIntent(kind))
     intent.async_register(hass, _TimeLeftIntent(INTENT_TIME_LEFT))
+    for kind in (INTENT_PLANNED_MEAL, INTENT_COOK_PLANNED):
+        intent.async_register(hass, _PlanIntent(kind))
 
 
 def _install_sentences_sync(config_dir: Path, source: Path) -> bool:

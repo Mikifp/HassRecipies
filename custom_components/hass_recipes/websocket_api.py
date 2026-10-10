@@ -15,6 +15,7 @@ import voluptuous as vol
 from .const import DOMAIN, SIGNAL_TIMERS
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .images import MAX_IMAGE_BYTES, image_url
+from .mealplan import MealPlanError
 from .migrate import from_mealie
 from .scraper import RecipeImportError, async_import_url
 from .store import RecipeStore
@@ -64,6 +65,12 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_set_cooking_recipe,
         ws_set_cooking,
         ws_timer_snooze,
+        ws_plan_list,
+        ws_plan_add,
+        ws_plan_update,
+        ws_plan_delete,
+        ws_plan_clear,
+        ws_plan_cook,
         ws_create,
         ws_update,
         ws_delete,
@@ -396,6 +403,126 @@ def ws_timer_snooze(
 ) -> None:
     count = _timers(hass).snooze(msg["seconds"], msg.get("timer_id"))
     connection.send_result(msg["id"], {"snoozed": count})
+
+
+def _plan(hass: HomeAssistant):
+    return hass.data[f"{DOMAIN}_plan"]
+
+
+def _plan_error(connection: websocket_api.ActiveConnection, msg_id: int, err: Exception) -> None:
+    connection.send_error(msg_id, "invalid_format", str(err))
+
+
+_DAY = vol.All(str, vol.Length(min=10, max=10))
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/plan_list", vol.Required("start"): _DAY, vol.Required("end"): _DAY}
+)
+@callback
+def ws_plan_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    try:
+        connection.send_result(msg["id"], {"entries": _plan(hass).list(msg["start"], msg["end"])})
+    except MealPlanError as err:
+        _plan_error(connection, msg["id"], err)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/plan_add",
+        vol.Required("date"): _DAY,
+        vol.Required("slot"): str,
+        vol.Optional("recipe_id"): vol.Any(None, str),
+        vol.Optional("title"): vol.All(str, vol.Length(max=200)),
+        vol.Optional("scale"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1000))),
+        vol.Optional("note"): vol.All(str, vol.Length(max=500)),
+    }
+)
+@callback
+def ws_plan_add(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    try:
+        entry = _plan(hass).add(
+            msg["date"],
+            msg["slot"],
+            recipe_id=msg.get("recipe_id"),
+            title=msg.get("title"),
+            scale=msg.get("scale"),
+            note=msg.get("note", ""),
+        )
+    except MealPlanError as err:
+        _plan_error(connection, msg["id"], err)
+        return
+    connection.send_result(msg["id"], entry)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/plan_update",
+        vol.Required("entry_id"): str,
+        vol.Optional("date"): _DAY,
+        vol.Optional("slot"): str,
+        vol.Optional("recipe_id"): vol.Any(None, str),
+        vol.Optional("title"): vol.All(str, vol.Length(max=200)),
+        vol.Optional("scale"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1000))),
+        vol.Optional("note"): vol.All(str, vol.Length(max=500)),
+    }
+)
+@callback
+def ws_plan_update(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    fields = {k: v for k, v in msg.items() if k not in ("id", "type", "entry_id")}
+    try:
+        entry = _plan(hass).update(msg["entry_id"], **fields)
+    except MealPlanError as err:
+        _plan_error(connection, msg["id"], err)
+        return
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Meal not found")
+        return
+    connection.send_result(msg["id"], entry)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/plan_delete", vol.Required("entry_id"): str}
+)
+@callback
+def ws_plan_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if not _plan(hass).delete(msg["entry_id"]):
+        connection.send_error(msg["id"], "not_found", "Meal not found")
+        return
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/plan_clear",
+        vol.Required("start"): _DAY,
+        vol.Optional("end"): _DAY,
+        vol.Optional("slot"): str,
+    }
+)
+@callback
+def ws_plan_clear(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    try:
+        removed = _plan(hass).clear(msg["start"], msg.get("end"), msg.get("slot"))
+    except MealPlanError as err:
+        _plan_error(connection, msg["id"], err)
+        return
+    connection.send_result(msg["id"], {"removed": removed})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/plan_cook", vol.Required("entry_id"): str}
+)
+@callback
+def ws_plan_cook(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Make a planned recipe the one being cooked (at the planned scale)."""
+    entry = _plan(hass).get(msg["entry_id"])
+    store = _store(hass)
+    if entry is None or not entry.get("recipe_exists"):
+        connection.send_error(msg["id"], "not_found", "That meal has no recipe to cook")
+        return
+    store.set_cooking(entry["recipe_id"], scale=entry.get("scale"))
+    connection.send_result(msg["id"], store.cooking_state())
 
 
 @websocket_api.require_admin

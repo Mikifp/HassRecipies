@@ -66,3 +66,89 @@ snooze_timer:
           mode: box
     timer_id:
       required: false
+
+plan_meal:
+  fields:
+    recipe:
+      required: true
+      example: Lasagne
+      selector:
+        text:
+    date:
+      required: false
+      selector:
+        date:
+    slot:
+      default: dinner
+      selector:
+        select:
+          options:
+            - breakfast
+            - lunch
+            - dinner
+            - snack
+    scale:
+      required: false
+      selector:
+        number:
+          min: 0.25
+          max: 20
+          step: 0.25
+          mode: box
+    servings:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
+    note:
+      required: false
+      selector:
+        text:
+
+clear_meal_plan:
+  fields:
+    start:
+      required: false
+      selector:
+        date:
+    end:
+      required: false
+      selector:
+        date:
+    slot:
+      required: false
+      selector:
+        select:
+          options:
+            - breakfast
+            - lunch
+            - dinner
+            - snack
+
+add_plan_to_shopping_list:
+  fields:
+    start:
+      required: false
+      selector:
+        date:
+    days:
+      default: 7
+      selector:
+        number:
+          min: 1
+          max: 60
+          mode: box
+    entity_id:
+      default: todo.shopping_list
+      selector:
+        entity:
+          domain: todo
+    units:
+      default: grams
+      selector:
+        select:
+          options:
+            - grams
+            - original

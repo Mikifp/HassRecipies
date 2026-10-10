@@ -76,6 +76,76 @@
           "description": "Én enkelt timer at udsætte; lad stå tom for alle færdige timere."
         }
       }
+    },
+    "plan_meal": {
+      "name": "Planlæg et måltid",
+      "description": "Sætter en opskrift på madplanen.",
+      "fields": {
+        "recipe": {
+          "name": "Opskrift",
+          "description": "Opskriftens navn eller id."
+        },
+        "date": {
+          "name": "Dato",
+          "description": "Standard er i dag."
+        },
+        "slot": {
+          "name": "Måltid",
+          "description": "Morgenmad, frokost, aftensmad eller mellemmåltid."
+        },
+        "scale": {
+          "name": "Skala",
+          "description": "Multiplikator for opskriftens mængder."
+        },
+        "servings": {
+          "name": "Portioner",
+          "description": "Skalér til dette antal portioner i stedet for en multiplikator."
+        },
+        "note": {
+          "name": "Note",
+          "description": "En valgfri note der vises ved måltidet."
+        }
+      }
+    },
+    "clear_meal_plan": {
+      "name": "Ryd madplanen",
+      "description": "Fjerner planlagte måltider for en dag eller en periode.",
+      "fields": {
+        "start": {
+          "name": "Fra",
+          "description": "Standard er i dag."
+        },
+        "end": {
+          "name": "Til",
+          "description": "Standard er samme dag som Fra."
+        },
+        "slot": {
+          "name": "Måltid",
+          "description": "Kun dette måltid; lad stå tom for alle."
+        }
+      }
+    },
+    "add_plan_to_shopping_list": {
+      "name": "Føj planen til indkøbslisten",
+      "description": "Tilføjer ingredienserne fra de planlagte opskrifter til en opgaveliste og springer varer over, der allerede står på den.",
+      "fields": {
+        "start": {
+          "name": "Fra",
+          "description": "Standard er i dag."
+        },
+        "days": {
+          "name": "Dage",
+          "description": "Hvor mange dage der medtages."
+        },
+        "entity_id": {
+          "name": "Opgaveliste",
+          "description": "Standard er todo.shopping_list."
+        },
+        "units": {
+          "name": "Enheder",
+          "description": "grams eller original."
+        }
+      }
     }
   },
   "options": {
