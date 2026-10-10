@@ -86,3 +86,7 @@ actions:
 
 ## Roadmap ideas
 Meal plan as a `calendar` entity, ingredients → HA todo/shopping list, image upload, servings scaling, ratings.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
