@@ -28,6 +28,7 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Steps can link to ingredients and carry a countdown timer (alarm sounds when done; timers survive page reloads)
 - Import from a URL using `recipe-scrapers` (hundreds of sites) with a built-in JSON-LD/HTML fallback; one URL gets a review step, several URLs (up to 25) import in bulk
 - Ingredients are parsed into quantity/unit/food; a Grams view converts weights exactly and volumes by density (≈ = estimate)
+- Units are understood in Danish, Swedish, Norwegian, German, Dutch, French, Spanish and Italian as well as English (for example `2 tsk`, `1 spsk`, `2 fed hvidløg`, `2 stk løg`, `3 dl`, `1 EL`, `1 Prise`, `2 cucharadas de azúcar`), including a link word such as *de* or *di*. Weights and volumes convert to grams for English and Danish food names; in other languages the amount is still scaled and converted to ml
 - Categories, tools and tags, with multi-select filters on the list page
 - Cookbooks: save any combination of category/tool/tag filters + search as a named view
 - Bulk actions: select many recipes to add/remove a category, tag or tool, or delete
