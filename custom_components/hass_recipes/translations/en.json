@@ -62,6 +62,20 @@
     "stop_timer_alarm": {
       "name": "Stop timer alarm",
       "description": "Dismisses all finished timers and silences their repeating alarms."
+    },
+    "snooze_timer": {
+      "name": "Snooze timer",
+      "description": "Gives finished timers more time and silences their alarms.",
+      "fields": {
+        "seconds": {
+          "name": "Seconds",
+          "description": "How long to add."
+        },
+        "timer_id": {
+          "name": "Timer",
+          "description": "A single timer to snooze; leave empty for all finished timers."
+        }
+      }
     }
   },
   "options": {

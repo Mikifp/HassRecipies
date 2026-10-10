@@ -52,3 +52,17 @@ add_to_shopping_list:
 test_timer_sound:
 
 stop_timer_alarm:
+
+snooze_timer:
+  fields:
+    seconds:
+      default: 120
+      example: 120
+      selector:
+        number:
+          min: 10
+          max: 3600
+          unit_of_measurement: s
+          mode: box
+    timer_id:
+      required: false

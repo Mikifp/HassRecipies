@@ -69,8 +69,58 @@ data:
 
 - **Notify service** – push to your phone.
 - **Speakers** – one or more `media_player` entities. **Sound on speakers** is a chime, the timer's name spoken through a text-to-speech engine, or both. The chime is a small file served from Home Assistant, so the speakers must be able to reach your **internal URL** (Settings → System → Network); `localhost` will not work.
-- **Repeat until stopped** keeps the alert going every few seconds until you press **Stop** on the timer in the panel (or call `hass_recipes.stop_timer_alarm`, e.g. from a button or voice command). **Stop automatically after** is a safety limit (default 5 minutes).
+- **Repeat until stopped** keeps the alert going every few seconds until you press **Stop** on the timer in the panel, tap the speaker or tell it to stop (see below), or call `hass_recipes.stop_timer_alarm`, e.g. from a button or voice command. **Stop automatically after** is a safety limit (default 5 minutes).
+- **Stopping from the speaker**: on a Google Nest / Chromecast speaker, tapping it or saying "Hey Google, stop" while the alarm is sounding silences it and clears the finished timer. Needs a player that reports its position, which Cast speakers do. Saying stop in the quiet moment between repeats has nothing to stop, so say it while the chime is playing.
 - Use the `hass_recipes.test_timer_sound` service (Developer tools → Actions) to check the setup.
+
+**Entities for dashboards.** Every timer that is running gets its own sensor (for example `sensor.pancakes_step_2`) whose state is the moment it ends, so cards show a live countdown. The sensor disappears when the timer is dismissed. Attributes: `label`, `finished`, `recipe_id`, `recipe_name`, `step`. Two fixed entities sit beside them: `binary_sensor.recipe_timers_timer_alarm` is on while a finished timer has not been dismissed, and `button.recipe_timers_stop_timer_alarm` stops the alarm. All belong to the **Recipe timers** device.
+
+```yaml
+type: entities
+entities:
+  - entity: sensor.pancakes_step_2
+    format: relative        # shows "in 4 minutes"
+  - button.recipe_timers_stop_timer_alarm
+```
+
+**Dashboard cards.** Three custom cards load automatically on every dashboard (add them from the card picker, or in YAML):
+
+```yaml
+type: custom:hass-recipes-list-card      # search and open recipes
+title: Recipes
+limit: 20                                # optional: list_height, category / tag filter, show_search: false
+---
+type: custom:hass-recipes-cooking-card   # live timers, with a Stop alarm button
+title: Now cooking
+---
+type: custom:hass-recipes-cook-card      # one recipe, one step at a time
+recipe: Lasagne                          # optional: name or id
+---
+type: custom:hass-recipes-kitchen-card   # a mini app: pick a recipe, then cook it
+limit: 20                                # optional: layout, show: all | list | steps, list_height, category / tag filter
+```
+
+The **kitchen** card is a small app made of the list and cook cards. It opens on the recipe list; tap a recipe and the list gives way to cook mode, with a **Recipes** button to go back (and a button in the list to resume the recipe you were cooking). Picking a recipe is the same choice as the panel's Dashboard button, so every card follows; the open icon on a row reads it in the Recipes panel. Running timers show on both screens.
+
+**Cooking options** (cook and kitchen cards, also in the visual editor):
+`text_size: normal | large | xlarge` for reading from across the counter, `swipe: true` (the default) to swipe left and right between steps, and `keep_awake: true` to stop the screen switching off while the card is showing. Ingredients and steps can be ticked off; the ticks are the same ones the Recipes panel keeps, so both agree on that device. The cards follow the language Home Assistant is set to (English and Danish).
+
+**Sizing.** In a sections dashboard the cards follow `grid_options` (resize them in the dashboard editor, or set `columns` / `rows`): a card with a set height fills it, and the recipe list and the step text scroll inside it. Without a set height the list stops at `list_height` pixels and the step text at `content_height` (default 480, 0 for no limit) and scrolls beyond that.
+
+Set `layout` to show the recipe and the list at the same time: `layout: vertical` puts the recipe above the list, `layout: horizontal` puts the list beside the recipe (it stacks on its own when the card is narrow). The default, `app`, is the mini app described above.
+
+To use only part of the card, set `show: list` (just the recipe list, which still picks the recipe the other cards follow) or `show: steps` (just the ingredients and steps, no list and no back button). Long lists scroll inside the card: `list_height` sets the height in pixels (default 360 for the list card and 320 for the kitchen card, 0 for no scrolling), and `limit` how many recipes are loaded into it (default 20).
+
+Without `recipe`, the cook card shows the recipe you chose in the Recipes panel (open a recipe and press **Show on dashboard cook card**), and changes as soon as you pick another one. On the ingredients page you can change how much it makes or serves; amounts scale everywhere in the card (option `units: original` keeps amounts as written instead of grams). It remembers its step and amount in the browser, starts the step's timer, and lists every running timer under the step; those timers also show in the cooking card and as timer entities.
+
+**Cooking state, entities and voice.** The recipe being cooked, the page you are on and the scale are shared by every card, the panel and Assist, so tapping *Next* on a tablet moves a wall display too. They are exposed as:
+
+- `select.recipe_timers_cooking_recipe`: choose the recipe from an automation or any dashboard
+- `sensor.recipe_timers_cooking`: the recipe name, with `step_number`, `steps`, `step_text`, `step_timer_seconds`, `scale` and more as attributes
+- `button.recipe_timers_next_step` and `button.recipe_timers_previous_step`
+- `hass_recipes.snooze_timer` (and a **+2 min** button on finished timers in the cards) gives a finished timer more time
+
+**Assist.** The integration installs sentences for English and Danish into `custom_sentences/` (and reloads Assist). Say things like "next step", "previous step", "repeat the step", "read the ingredients", "how much time is left" or "start the step timer" (Danish: "næste trin", "gentag trinnet", "læs ingredienserne op", "hvor lang tid er der tilbage"). Ingredients are read at the current scale.
 
 **Events** for automations: `hass_recipes_recipe_added`, `hass_recipes_recipe_updated`, `hass_recipes_recipe_deleted` (data: `recipe_id`, `name`, `categories`, `tags`).
 

@@ -61,6 +61,9 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
     for command in (
         ws_list,
         ws_get,
+        ws_set_cooking_recipe,
+        ws_set_cooking,
+        ws_timer_snooze,
         ws_create,
         ws_update,
         ws_delete,
@@ -85,7 +88,14 @@ def ws_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
     store = _store(hass)
     connection.send_result(
         msg["id"],
-        {"recipes": store.list(), "tags": store.tags(), "cookbooks": store.cookbooks()},
+        {
+            "recipes": store.list(),
+            "tags": store.tags(),
+            "cookbooks": store.cookbooks(),
+            "cooking_recipe_id": store.cooking_recipe_id,
+            "cooking_step": store.cooking_step,
+            "cooking_scale": store.cooking_scale,
+        },
     )
 
 
@@ -99,6 +109,51 @@ def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg:
         connection.send_error(msg["id"], "not_found", "Recipe not found")
         return
     connection.send_result(msg["id"], recipe)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/set_cooking_recipe",
+        vol.Required("recipe_id"): vol.Any(None, str),
+    }
+)
+@callback
+def ws_set_cooking_recipe(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Pick the recipe the dashboard cook card shows by default (null clears it)."""
+    if not _store(hass).set_cooking_recipe(msg["recipe_id"]):
+        connection.send_error(msg["id"], "not_found", "Recipe not found")
+        return
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/set_cooking",
+        vol.Optional("recipe_id"): vol.Any(None, str),
+        vol.Optional("step"): vol.All(int, vol.Range(min=0)),
+        vol.Optional("delta"): vol.All(int, vol.Range(min=-1000, max=1000)),
+        vol.Optional("scale"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1000)),
+    }
+)
+@callback
+def ws_set_cooking(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Move the shared cooking state: recipe, step (absolute or relative) and scale."""
+    store = _store(hass)
+    kwargs: dict[str, Any] = {
+        "step": msg.get("step"),
+        "scale": msg.get("scale"),
+        "delta": msg.get("delta", 0),
+    }
+    if "recipe_id" in msg:
+        kwargs["recipe_id"] = msg["recipe_id"]
+    if not store.set_cooking(**kwargs):
+        connection.send_error(msg["id"], "not_found", "Recipe not found")
+        return
+    connection.send_result(msg["id"], store.cooking_state())
 
 
 @websocket_api.websocket_command(
@@ -326,6 +381,21 @@ def ws_timer_dismiss(
 ) -> None:
     _timers(hass).dismiss(msg["timer_id"])
     connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/timer_snooze",
+        vol.Optional("timer_id"): str,
+        vol.Optional("seconds", default=120): vol.All(int, vol.Range(min=10, max=3600)),
+    }
+)
+@callback
+def ws_timer_snooze(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    count = _timers(hass).snooze(msg["seconds"], msg.get("timer_id"))
+    connection.send_result(msg["id"], {"snoozed": count})
 
 
 @websocket_api.require_admin

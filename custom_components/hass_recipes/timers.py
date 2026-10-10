@@ -15,11 +15,11 @@ from typing import Any
 import uuid
 
 from homeassistant.components.media_player.browse_media import async_process_play_media_url
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.network import NoURLAvailableError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers.event import async_track_point_in_utc_time, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 
 from .const import (
@@ -41,6 +41,12 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_PLAYING = ("playing", "buffering")
+# A speaker that stops with more than this left of the clip was stopped by a person
+_EARLY_STOP_SECONDS = 1.5
+# Ignore speaker state changes this long after we start something ourselves
+_START_GRACE_SECONDS = 4.0
+
 
 class TimerManager:
     def __init__(self, hass: HomeAssistant, get_options: Callable[[], Mapping[str, object]]) -> None:
@@ -50,6 +56,7 @@ class TimerManager:
         self._timers: dict[str, dict[str, Any]] = {}
         self._unsubs: dict[str, CALLBACK_TYPE] = {}
         self._alarms: dict[str, asyncio.Task] = {}  # timer id -> repeating alarm
+        self._grace_until = 0.0  # loop time before which speaker changes are our own doing
 
     async def async_load(self) -> None:
         data = await self._store.async_load()
@@ -65,6 +72,16 @@ class TimerManager:
                 self._finish(timer["id"], stale=True)
             else:
                 self._schedule(timer["id"], ends)
+
+    @property
+    def timers(self) -> Mapping[str, dict[str, Any]]:
+        """Live timers by id; read-only for entities."""
+        return self._timers
+
+    @property
+    def any_finished(self) -> bool:
+        """True while a timer has finished and has not been dismissed."""
+        return any(t["done"] for t in self._timers.values())
 
     @callback
     def async_unload(self) -> None:
@@ -93,6 +110,7 @@ class TimerManager:
                 "step": t.get("step"),
                 "done": t["done"],
                 "ends_at_ms": int(datetime.fromisoformat(t["ends_at"]).timestamp() * 1000),
+                "total_ms": int(t["seconds"] * 1000) if t.get("seconds") else None,
             }
             for t in sorted(self._timers.values(), key=lambda t: t["ends_at"])
         ]
@@ -127,6 +145,7 @@ class TimerManager:
             "recipe_name": recipe_name,
             "step": step,
             "ends_at": ends.isoformat(),
+            "seconds": seconds,
             "done": False,
         }
         self._timers[timer["id"]] = timer
@@ -153,6 +172,29 @@ class TimerManager:
         for timer_id in finished:
             self.dismiss(timer_id)
         return len(finished)
+
+    @callback
+    def snooze(self, seconds: int = 120, timer_id: str | None = None) -> int:
+        """Give finished timers more time: silence them and count down again."""
+        targets = [
+            t["id"]
+            for t in self._timers.values()
+            if t["done"] and (timer_id is None or t["id"] == timer_id)
+        ]
+        for tid in targets:
+            timer = self._timers[tid]
+            ends = datetime.now(UTC) + timedelta(seconds=seconds)
+            timer.update({"done": False, "ends_at": ends.isoformat(), "seconds": seconds})
+            if (alarm := self._alarms.pop(tid, None)) is not None:
+                alarm.cancel()
+            if unsub := self._unsubs.pop(tid, None):
+                unsub()
+            self._schedule(tid, ends)
+        if targets:
+            if not any(t["done"] for t in self._timers.values()):
+                self._hass.async_create_task(self._stop_speakers())
+            self._changed()
+        return len(targets)
 
     @callback
     def _finish(self, timer_id: str, stale: bool = False) -> None:
@@ -199,6 +241,7 @@ class TimerManager:
             options.get(CONF_SPEAKER_SOUND) or SOUND_CHIME, 5.0
         )
         started = self._hass.loop.time()
+        unwatch = self._watch_speakers()
         try:
             while True:
                 if not await self.async_play_alarm(label):
@@ -211,7 +254,33 @@ class TimerManager:
         except asyncio.CancelledError:
             raise
         finally:
+            unwatch()
             self._alarms.pop(timer_id, None)
+
+    def _watch_speakers(self) -> CALLBACK_TYPE:
+        """Silence the alarms when someone taps the speaker or says "stop" to it.
+
+        Either makes the speaker stop or pause while our clip still has time left,
+        which is told apart from the clip simply ending.
+        """
+        speakers = list(self._get_options().get(CONF_SPEAKERS) or [])
+        if not speakers:
+            return lambda: None
+
+        @callback
+        def _changed(event: Event) -> None:
+            old: State | None = event.data.get("old_state")
+            new: State | None = event.data.get("new_state")
+            if old is None or new is None or old.state not in _PLAYING or new.state in _PLAYING:
+                return
+            if self._hass.loop.time() < self._grace_until:
+                return
+            remaining = _seconds_left(old)
+            if remaining is not None and remaining > _EARLY_STOP_SECONDS:
+                _LOGGER.debug("%s was stopped by hand; silencing timer alarms", new.entity_id)
+                self.stop_alarms()
+
+        return async_track_state_change_event(self._hass, speakers, _changed)
 
     async def _stop_speakers(self) -> None:
         speakers = list(self._get_options().get(CONF_SPEAKERS) or [])
@@ -231,6 +300,7 @@ class TimerManager:
         if not speakers:
             return False
         mode = options.get(CONF_SPEAKER_SOUND) or SOUND_CHIME
+        self._grace_until = self._hass.loop.time() + _START_GRACE_SECONDS
         try:
             if mode in (SOUND_CHIME, SOUND_BOTH):
                 url = async_process_play_media_url(self._hass, ALARM_PATH)
@@ -266,4 +336,21 @@ class TimerManager:
                     "internal URL (Settings > System > Network)."
                 ) from err
             return False
+        self._grace_until = self._hass.loop.time() + _START_GRACE_SECONDS
         return True
+
+
+def _seconds_left(state: State) -> float | None:
+    """How much of the playing clip remained at ``state``, if the player says."""
+    attrs = state.attributes
+    duration = attrs.get("media_duration")
+    position = attrs.get("media_position")
+    if duration is None or position is None:
+        return None
+    try:
+        elapsed = float(position)
+        if (updated := attrs.get("media_position_updated_at")) is not None:
+            elapsed += max(0.0, (datetime.now(UTC) - updated).total_seconds())
+        return float(duration) - elapsed
+    except (TypeError, ValueError):
+        return None
