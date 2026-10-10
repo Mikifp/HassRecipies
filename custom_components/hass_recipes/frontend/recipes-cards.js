@@ -65,7 +65,22 @@ const I18N = {
     open_in: "Open in Recipes",
     mark_done: "Mark as done",
     is_done: "Done",
+    plan_title: "Meal plan",
+    plan_today: "Today",
+    plan_tomorrow: "Tomorrow",
+    plan_nothing: "Nothing planned.",
+    slot_breakfast: "Breakfast",
+    slot_lunch: "Lunch",
+    slot_dinner: "Dinner",
+    slot_snack: "Snack",
+    cook_planned: "Cook this",
     // editor
+    ed_days: "Days to show",
+    ed_slots: "Meals to show",
+    ed_tap: "Tapping a meal",
+    ed_show_empty: "Show days with nothing planned",
+    opt_tap_cook: "Starts cooking it",
+    opt_tap_open: "Opens the recipe",
     ed_title: "Title",
     ed_limit: "Recipes to show",
     ed_show_search: "Show the search box",
@@ -134,6 +149,21 @@ const I18N = {
     open_in: "Åbn i Opskrifter",
     mark_done: "Markér som færdig",
     is_done: "Færdig",
+    plan_title: "Madplan",
+    plan_today: "I dag",
+    plan_tomorrow: "I morgen",
+    plan_nothing: "Intet planlagt.",
+    slot_breakfast: "Morgenmad",
+    slot_lunch: "Frokost",
+    slot_dinner: "Aftensmad",
+    slot_snack: "Mellemmåltid",
+    cook_planned: "Lav denne",
+    ed_days: "Antal dage",
+    ed_slots: "Måltider der vises",
+    ed_tap: "Tryk på et måltid",
+    ed_show_empty: "Vis dage uden planlagte måltider",
+    opt_tap_cook: "Starter madlavning",
+    opt_tap_open: "Åbner opskriften",
     ed_title: "Titel",
     ed_limit: "Antal opskrifter",
     ed_show_search: "Vis søgefeltet",
@@ -1075,6 +1105,126 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
   }
 }
 
+/* ---- meal plan ------------------------------------------------------------ */
+const isoLocal = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const PLAN_SLOTS = ["breakfast", "lunch", "dinner", "snack"];
+
+class HassRecipesPlanCard extends RecipesBase {
+  getGridOptions() {
+    return { columns: 6, min_columns: 3, rows: "auto", min_rows: 3 };
+  }
+  static getStubConfig() {
+    return { days: 3 };
+  }
+  setConfig(config) {
+    this._config = { days: 3, tap: "cook", ...config };
+    if (this._entries) this._render();
+  }
+  getCardSize() {
+    return 2 + Math.min(Number(this._config?.days) || 3, 6);
+  }
+  async _start() {
+    this._started = true;
+    await this._load();
+    this._sub(() => this._hass.connection.subscribeEvents(() => this._load(), "hass_recipes_meal_plan_changed"));
+    this._sub(() => this._hass.connection.subscribeEvents(() => this._load(), "hass_recipes_recipe_updated"));
+    // a card left open overnight moves on to the new day
+    this._today = isoLocal(new Date());
+    this._tick = setInterval(() => {
+      if (isoLocal(new Date()) !== this._today) {
+        this._today = isoLocal(new Date());
+        this._load();
+      }
+    }, 60000);
+  }
+  _days() {
+    const n = Math.min(Math.max(Number(this._config.days) || 3, 1), 14);
+    const now = new Date();
+    return [...Array(n)].map((_, i) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, 12));
+  }
+  async _load() {
+    try {
+      const days = this._days();
+      const res = await this._hass.callWS({
+        type: "hass_recipes/plan_list",
+        start: isoLocal(days[0]),
+        end: isoLocal(days[days.length - 1]),
+      });
+      this._entries = res.entries;
+      this._error = "";
+    } catch (err) {
+      this._error = err.message || "Could not load the meal plan";
+    }
+    this._render();
+  }
+  _dayLabel(d, i) {
+    if (i === 0) return this._t("plan_today");
+    if (i === 1) return this._t("plan_tomorrow");
+    const lang = this._hass?.language || undefined;
+    return new Intl.DateTimeFormat(lang, { weekday: "long", day: "numeric", month: "short" }).format(d);
+  }
+  _render() {
+    if (!this._config) return;
+    const title = this._config.title ?? this._t("plan_title");
+    const slots = Array.isArray(this._config.slots) && this._config.slots.length ? this._config.slots : PLAN_SLOTS;
+    let body;
+    if (this._error) body = `<div class="empty">${esc(this._error)}</div>`;
+    else if (!this._entries) body = `<div class="empty">${esc(this._t("loading"))}</div>`;
+    else {
+      const rows = this._days()
+        .map((d, i) => {
+          const iso = isoLocal(d);
+          const here = this._entries.filter((e) => e.date === iso && slots.includes(e.slot));
+          if (!here.length && i > 0 && !this._config.show_empty) return "";
+          const meals = here.length
+            ? here
+                .map((e) => {
+                  const img = e.image ? `style="background-image:url('${esc(e.image)}')"` : "";
+                  const meta = [this._t(`slot_${e.slot}`), e.total_time ? minutes(e.total_time) : "", e.note].filter(Boolean).join(" · ");
+                  const playable = e.recipe_exists;
+                  return `<div class="meal${playable ? " go" : ""}" ${playable ? `data-meal="${esc(e.id)}" data-recipe="${esc(e.recipe_id)}" tabindex="0"` : ""}>
+                    <div class="thumb" ${img}>${e.image ? "" : '<ha-icon icon="mdi:silverware-fork-knife"></ha-icon>'}</div>
+                    <div style="flex:1;min-width:0"><div class="mname">${esc(e.title)}</div><div class="muted">${esc(meta)}</div></div>
+                    ${playable ? `<ha-icon icon="mdi:${this._config.tap === "open" ? "open-in-new" : "chef-hat"}" style="color:var(--primary-color)"></ha-icon>` : ""}</div>`;
+                })
+                .join("")
+            : `<div class="muted" style="padding:6px 16px 10px">${esc(this._t("plan_nothing"))}</div>`;
+          return `<div class="pday"><div class="pdayhead">${esc(this._dayLabel(d, i))}</div>${meals}</div>`;
+        })
+        .join("");
+      body = rows || `<div class="empty">${esc(this._t("plan_nothing"))}</div>`;
+    }
+    this._paint(`
+      <style>
+        .pday { border-top: 1px solid var(--divider-color); }
+        .pdayhead { padding: 10px 16px 4px; font-size: calc(12px * var(--hr-fs, 1)); text-transform: uppercase; letter-spacing: .06em; color: var(--secondary-text-color); }
+        .meal { display: flex; align-items: center; gap: 12px; padding: 6px 16px; }
+        .meal.go { cursor: pointer; }
+        .meal.go:hover, .meal.go:focus-visible { background: var(--secondary-background-color); outline: 0; }
+        .mname { font-size: calc(14px * var(--hr-fs, 1)); font-weight: 500; overflow-wrap: anywhere; }
+      </style>
+      <div class="head"><span class="title">${esc(title)}</span>
+        <button class="btn" id="open">${esc(this._t("open_recipes"))}</button></div>
+      <div class="scroll" style="${this._scrollStyle(480)}">${body}</div>`);
+    const root = this.shadowRoot;
+    root.getElementById("open").onclick = () => this._openPath("/recipes#/plan");
+    const act = async (el) => {
+      if (this._config.tap === "open") return this._openPath(`/recipes#/recipe/${el.dataset.recipe}`);
+      try {
+        await this._hass.callWS({ type: "hass_recipes/plan_cook", entry_id: el.dataset.meal });
+      } catch (err) {
+        this._error = err.message;
+        this._render();
+      }
+    };
+    for (const el of root.querySelectorAll("[data-meal]")) {
+      el.onclick = () => act(el);
+      el.onkeydown = (e) => (e.key === "Enter" ? act(el) : null);
+    }
+  }
+}
+
 /* ---- visual editor ------------------------------------------------------- */
 /** HA only loads ha-form when one of its own card editors is opened; make sure it exists. */
 const ensureHaForm = async () => {
@@ -1146,6 +1296,27 @@ class HassRecipesCardEditor extends HTMLElement {
       units,
     ];
     switch (this.kind) {
+      case "plan":
+        return [
+          { name: "title", selector: { text: {} } },
+          { name: "days", selector: { number: { min: 1, max: 14, mode: "box" } } },
+          {
+            name: "slots",
+            selector: {
+              select: {
+                multiple: true,
+                mode: "list",
+                options: ["breakfast", "lunch", "dinner", "snack"].map((v) => ({ value: v, label: t(`slot_${v}`) })),
+              },
+            },
+          },
+          select("tap", [
+            { value: "cook", label: t("opt_tap_cook") },
+            { value: "open", label: t("opt_tap_open") },
+          ]),
+          { name: "show_empty", selector: { boolean: {} } },
+          num("list_height"),
+        ];
       case "list":
         return [{ name: "title", selector: { text: {} } }, ...list];
       case "cooking":
@@ -1188,7 +1359,8 @@ class HassRecipesCardEditor extends HTMLElement {
         ev.stopPropagation();
         const config = { ...this._config, ...ev.detail.value };
         for (const key of Object.keys(config)) {
-          if (config[key] === "" || config[key] === undefined || config[key] === null) delete config[key];
+          const v = config[key];
+          if (v === "" || v === undefined || v === null || (Array.isArray(v) && !v.length)) delete config[key];
         }
         this._config = config;
         this.dispatchEvent(new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true }));
@@ -1199,7 +1371,10 @@ class HassRecipesCardEditor extends HTMLElement {
     this._form.schema = this._schema();
     // empty values are stripped from the saved config, so show them as empty again
     const data = { ...this._config };
-    for (const item of this._form.schema) if (data[item.name] === undefined && item.selector.select) data[item.name] = "";
+    for (const item of this._form.schema) {
+      if (data[item.name] === undefined && item.selector.select) data[item.name] = item.selector.select.multiple ? [] : "";
+    }
+    if (this.kind === "plan" && !data.tap) data.tap = "cook";
     if (this.kind === "kitchen") {
       if (!data.layout) data.layout = "app";
       if (!data.show) data.show = "all";
@@ -1222,12 +1397,14 @@ HassRecipesListCard.getConfigElement = editorFor("list");
 HassRecipesCookingCard.getConfigElement = editorFor("cooking");
 HassRecipesCookCard.getConfigElement = editorFor("cook");
 HassRecipesKitchenCard.getConfigElement = editorFor("kitchen");
+HassRecipesPlanCard.getConfigElement = editorFor("plan");
 
 for (const [tag, cls, name, description] of [
   ["hass-recipes-list-card", HassRecipesListCard, "Recipes list", "Search and open your recipes"],
   ["hass-recipes-cooking-card", HassRecipesCookingCard, "Recipe timers", "Live kitchen timers with a stop button"],
   ["hass-recipes-cook-card", HassRecipesCookCard, "Recipe cook mode", "Cook one recipe a step at a time"],
   ["hass-recipes-kitchen-card", HassRecipesKitchenCard, "Recipe kitchen", "Cook mode with the recipe list underneath"],
+  ["hass-recipes-plan-card", HassRecipesPlanCard, "Meal plan", "What is planned for the coming days"],
 ]) {
   if (!customElements.get(tag)) customElements.define(tag, cls);
   window.customCards = window.customCards || [];
