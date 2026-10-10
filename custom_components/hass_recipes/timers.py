@@ -7,27 +7,43 @@ and, if configured, calls a notify service.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 import logging
 from typing import Any
 import uuid
 
+from homeassistant.components.media_player.browse_media import async_process_play_media_url
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.network import NoURLAvailableError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.storage import Store
 
-from .const import EVENT_TIMER_FINISHED, SIGNAL_TIMERS, STORAGE_VERSION, TIMERS_STORAGE_KEY
+from .const import (
+    ALARM_PATH,
+    CONF_NOTIFY_SERVICE,
+    CONF_SPEAKER_SOUND,
+    CONF_SPEAKERS,
+    CONF_TTS_ENTITY,
+    EVENT_TIMER_FINISHED,
+    SIGNAL_TIMERS,
+    SOUND_BOTH,
+    SOUND_CHIME,
+    SOUND_SPEECH,
+    STORAGE_VERSION,
+    TIMERS_STORAGE_KEY,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class TimerManager:
-    def __init__(self, hass: HomeAssistant, get_notify_service: Callable[[], str | None]) -> None:
+    def __init__(self, hass: HomeAssistant, get_options: Callable[[], Mapping[str, object]]) -> None:
         self._hass = hass
-        self._get_notify_service = get_notify_service
+        self._get_options = get_options
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, TIMERS_STORAGE_KEY)
         self._timers: dict[str, dict[str, Any]] = {}
         self._unsubs: dict[str, CALLBACK_TYPE] = {}
@@ -135,8 +151,11 @@ class TimerManager:
                 "step": timer.get("step"),
             },
         )
-        if service := self._get_notify_service():
-            self._hass.async_create_task(self._notify(service, timer))
+        options = self._get_options()
+        if service := options.get(CONF_NOTIFY_SERVICE):
+            self._hass.async_create_task(self._notify(str(service), timer))
+        if options.get(CONF_SPEAKERS):
+            self._hass.async_create_task(self.async_play_alarm(timer["label"]))
         self._changed()
 
     async def _notify(self, service: str, timer: dict[str, Any]) -> None:
@@ -149,3 +168,45 @@ class TimerManager:
             )
         except HomeAssistantError as err:
             _LOGGER.warning("Could not send timer notification via notify.%s: %s", service, err)
+
+    async def async_play_alarm(self, label: str, *, raise_errors: bool = False) -> None:
+        """Play the chime and/or speak the label on the configured speakers."""
+        options = self._get_options()
+        speakers = list(options.get(CONF_SPEAKERS) or [])
+        if not speakers:
+            return
+        mode = options.get(CONF_SPEAKER_SOUND) or SOUND_CHIME
+        try:
+            if mode in (SOUND_CHIME, SOUND_BOTH):
+                url = async_process_play_media_url(self._hass, ALARM_PATH)
+                await self._hass.services.async_call(
+                    "media_player",
+                    "play_media",
+                    {"media_content_id": url, "media_content_type": "music"},
+                    target={"entity_id": speakers},
+                    blocking=True,
+                )
+            if mode == SOUND_BOTH:
+                await asyncio.sleep(3.5)  # let the chime finish before speaking
+            if mode in (SOUND_SPEECH, SOUND_BOTH):
+                tts = options.get(CONF_TTS_ENTITY) or next(
+                    iter(sorted(self._hass.states.async_entity_ids("tts"))), None
+                )
+                if not tts:
+                    raise HomeAssistantError("No text-to-speech entity is available")
+                text = "Timer finished. " + label.replace(" \u00b7 ", ", ")
+                for speaker in speakers:
+                    await self._hass.services.async_call(
+                        "tts",
+                        "speak",
+                        {"media_player_entity_id": speaker, "message": text},
+                        target={"entity_id": str(tts)},
+                        blocking=True,
+                    )
+        except (HomeAssistantError, NoURLAvailableError) as err:
+            _LOGGER.warning("Could not play the timer sound on %s: %s", speakers, err)
+            if raise_errors:
+                raise HomeAssistantError(
+                    f"Could not play the timer sound: {err}. Speakers need a reachable "
+                    "internal URL (Settings > System > Network)."
+                ) from err

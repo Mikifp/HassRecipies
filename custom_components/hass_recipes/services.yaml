@@ -48,3 +48,5 @@ add_to_shopping_list:
           options:
             - grams
             - original
+
+test_timer_sound:

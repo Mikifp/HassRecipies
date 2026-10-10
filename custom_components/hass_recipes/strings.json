@@ -54,15 +54,28 @@
           "description": "Scale to this many of the recipe's yield (for example 16 pancakes). Without scale, servings or makes, the recipe's default multiplier is used."
         }
       }
+    },
+    "test_timer_sound": {
+      "name": "Test timer sound",
+      "description": "Plays the timer alert on the speakers chosen in the integration's options."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Recipes options",
-        "description": "Optionally call a notify service when a kitchen timer finishes (for example your phone). Timers also fire the `hass_recipes_timer_finished` event for automations.",
+        "title": "Timer alerts",
+        "description": "Choose how you want to be told when a kitchen timer finishes. Timers also fire the `hass_recipes_timer_finished` event for automations. Speakers need a reachable internal URL (Settings > System > Network) to play the chime.",
         "data": {
-          "notify_service": "Notify service"
+          "notify_service": "Notify service",
+          "speakers": "Speakers",
+          "speaker_sound": "Sound on speakers",
+          "tts_entity": "Text-to-speech engine"
+        },
+        "data_description": {
+          "notify_service": "Optional. A notify service, for example your phone, called when a timer finishes.",
+          "speakers": "Optional. Media players that play the alert.",
+          "speaker_sound": "A short chime, the timer's name spoken aloud, or both.",
+          "tts_entity": "Used for spoken messages. Leave empty to use the first available engine."
         }
       }
     }

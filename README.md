@@ -65,7 +65,11 @@ data:
   units: grams              # or: original
 ```
 
-**Timers** run on the server, so they are shared between devices, survive restarts and keep going with no browser open. When one finishes, `hass_recipes_timer_finished` fires (data: `label`, `recipe_id`, `recipe_name`, `step`, `timer_id`). To get a phone notification without writing an automation, set **Settings → Devices & services → Recipes → Configure → Notify service**.
+**Timers** run on the server, so they are shared between devices, survive restarts and keep going with no browser open. When one finishes, `hass_recipes_timer_finished` fires (data: `label`, `recipe_id`, `recipe_name`, `step`, `timer_id`). To be alerted without writing an automation, open **Settings → Devices & services → Recipes → Configure**:
+
+- **Notify service** – push to your phone.
+- **Speakers** – one or more `media_player` entities. **Sound on speakers** is a chime, the timer's name spoken through a text-to-speech engine, or both. The chime is a small file served from Home Assistant, so the speakers must be able to reach your **internal URL** (Settings → System → Network); `localhost` will not work.
+- Use the `hass_recipes.test_timer_sound` service (Developer tools → Actions) to check the setup.
 
 **Events** for automations: `hass_recipes_recipe_added`, `hass_recipes_recipe_updated`, `hass_recipes_recipe_deleted` (data: `recipe_id`, `name`, `categories`, `tags`).
 

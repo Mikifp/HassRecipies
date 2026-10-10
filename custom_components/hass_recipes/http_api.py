@@ -7,6 +7,7 @@ WebSocket message, so the panel talks to these plain HTTP views instead.
 from __future__ import annotations
 
 import base64
+from pathlib import Path
 from typing import Any
 
 from aiohttp import web
@@ -112,6 +113,21 @@ class RecipesUploadImageView(HomeAssistantView):
         except ValueError as err:
             return self.json_message(str(err), 400)
         return self.json({"image": image_url(image_id)})
+
+
+class RecipesAlarmView(HomeAssistantView):
+    """GET /api/hass_recipes/alarm.wav: the chime played on speakers.
+
+    Speakers cannot send an auth header, so this one file is public.
+    """
+
+    url = "/api/hass_recipes/alarm.wav"
+    name = "api:hass_recipes:alarm"
+    requires_auth = False
+
+    async def get(self, request: web.Request) -> web.StreamResponse:
+        path = Path(__file__).parent / "sounds" / "alarm.wav"
+        return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
 
 
 class RecipesImageView(HomeAssistantView):
