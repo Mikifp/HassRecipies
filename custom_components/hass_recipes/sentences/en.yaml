@@ -1,0 +1,39 @@
+language: "en"
+intents:
+  HassRecipesNextStep:
+    data:
+      - sentences:
+          - "(next|following) step"
+          - "what's next"
+          - "go to the next step"
+          - "next recipe step"
+  HassRecipesPreviousStep:
+    data:
+      - sentences:
+          - "(previous|last) step"
+          - "go back a step"
+          - "go back to the previous step"
+  HassRecipesRepeatStep:
+    data:
+      - sentences:
+          - "(repeat|read) (the|this) step"
+          - "what's the current step"
+          - "what step am I on"
+          - "repeat that"
+  HassRecipesReadIngredients:
+    data:
+      - sentences:
+          - "(read|list) the ingredients"
+          - "what ingredients do I need"
+          - "what do I need for [this] recipe"
+  HassRecipesTimeLeft:
+    data:
+      - sentences:
+          - "how much time is left"
+          - "how long is left on the (timer|timers)"
+          - "how long until the (timer|timers) (is|are) done"
+  HassRecipesStartTimer:
+    data:
+      - sentences:
+          - "start the (step|recipe) timer"
+          - "start the timer for this step"

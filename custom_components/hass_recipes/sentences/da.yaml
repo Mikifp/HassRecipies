@@ -1,0 +1,40 @@
+language: "da"
+intents:
+  HassRecipesNextStep:
+    data:
+      - sentences:
+          - "næste trin"
+          - "hvad er næste trin"
+          - "gå til næste trin"
+          - "videre til næste trin"
+  HassRecipesPreviousStep:
+    data:
+      - sentences:
+          - "forrige trin"
+          - "gå et trin tilbage"
+          - "gå tilbage til forrige trin"
+  HassRecipesRepeatStep:
+    data:
+      - sentences:
+          - "gentag trinnet"
+          - "læs trinnet [op]"
+          - "hvad er det nuværende trin"
+          - "hvilket trin er jeg på"
+          - "gentag det"
+  HassRecipesReadIngredients:
+    data:
+      - sentences:
+          - "læs ingredienserne [op]"
+          - "hvilke ingredienser skal jeg bruge"
+          - "hvad skal jeg bruge til [denne] opskrift"
+  HassRecipesTimeLeft:
+    data:
+      - sentences:
+          - "hvor lang tid er der tilbage"
+          - "hvor lang tid er der tilbage på (timeren|timerne)"
+          - "hvornår er (timeren|timerne) færdig[e]"
+  HassRecipesStartTimer:
+    data:
+      - sentences:
+          - "start timeren for dette trin"
+          - "start (trin|opskrift)timeren"

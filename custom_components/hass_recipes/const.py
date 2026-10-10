@@ -7,6 +7,7 @@ STORAGE_VERSION = 1
 
 PANEL_URL_PATH = "recipes"
 PANEL_ELEMENT = "hass-recipes-panel"
+CARDS_JS = "recipes-cards.js"
 FRONTEND_URL = f"/{DOMAIN}_static"
 
 SERVICE_IMPORT_RECIPE = "import_recipe"
@@ -18,6 +19,7 @@ EVENT_RECIPE_ADDED = f"{DOMAIN}_recipe_added"
 EVENT_RECIPE_UPDATED = f"{DOMAIN}_recipe_updated"
 EVENT_RECIPE_DELETED = f"{DOMAIN}_recipe_deleted"
 EVENT_TIMER_FINISHED = f"{DOMAIN}_timer_finished"
+EVENT_COOKING_RECIPE_CHANGED = f"{DOMAIN}_cooking_recipe_changed"
 
 SIGNAL_TIMERS = f"{DOMAIN}_timers_updated"
 TIMERS_STORAGE_KEY = f"{DOMAIN}.timers"
@@ -34,3 +36,8 @@ SERVICE_TEST_TIMER_SOUND = "test_timer_sound"
 CONF_ALARM_REPEAT = "alarm_repeat"
 CONF_ALARM_MINUTES = "alarm_minutes"
 SERVICE_STOP_TIMER_ALARM = "stop_timer_alarm"
+
+PLATFORMS = ["sensor", "binary_sensor", "button", "select"]
+TIMER_UNIQUE_PREFIX = "timer_"
+SERVICE_SNOOZE_TIMER = "snooze_timer"
+DEFAULT_SNOOZE_SECONDS = 120
