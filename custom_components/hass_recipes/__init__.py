@@ -9,22 +9,25 @@ from homeassistant.components import panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 import voluptuous as vol
 
 from .const import (
-    CONF_NOTIFY_SERVICE,
+    CONF_SPEAKERS,
     DOMAIN,
     FRONTEND_URL,
     PANEL_ELEMENT,
     PANEL_URL_PATH,
     SERVICE_ADD_TO_SHOPPING_LIST,
     SERVICE_IMPORT_RECIPE,
+    SERVICE_STOP_TIMER_ALARM,
+    SERVICE_TEST_TIMER_SOUND,
 )
 from .http_api import (
+    RecipesAlarmView,
     RecipesExportView,
     RecipesImageView,
     RecipesImportView,
@@ -47,7 +50,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
     entry.runtime_data = store
     hass.data[DOMAIN] = store
 
-    timers = TimerManager(hass, lambda: entry.options.get(CONF_NOTIFY_SERVICE) or None)
+    timers = TimerManager(hass, lambda: entry.options)
     await timers.async_load()
     hass.data[f"{DOMAIN}_timers"] = timers
     entry.async_on_unload(timers.async_unload)
@@ -59,6 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
             RecipesExportView(),
             RecipesUploadImageView(),
             RecipesImageView(),
+            RecipesAlarmView(),
         ):
             hass.http.register_view(view)
         hass.data[f"{DOMAIN}_view"] = True
@@ -130,6 +134,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
         ),
         supports_response=SupportsResponse.OPTIONAL,
     )
+
+    async def test_timer_sound(call: ServiceCall) -> None:
+        if not entry.options.get(CONF_SPEAKERS):
+            raise ServiceValidationError(
+                "No speakers are configured. Choose them in Settings > Devices & services "
+                "> Recipes > Configure."
+            )
+        await timers.async_play_alarm("Test timer", raise_errors=True)
+
+    hass.services.async_register(DOMAIN, SERVICE_TEST_TIMER_SOUND, test_timer_sound)
+
+    async def stop_timer_alarm(call: ServiceCall) -> None:
+        timers.stop_alarms()
+
+    hass.services.async_register(DOMAIN, SERVICE_STOP_TIMER_ALARM, stop_timer_alarm)
     return True
 
 
@@ -140,6 +159,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> 
     frontend.async_remove_panel(hass, PANEL_URL_PATH)
     hass.services.async_remove(DOMAIN, SERVICE_IMPORT_RECIPE)
     hass.services.async_remove(DOMAIN, SERVICE_ADD_TO_SHOPPING_LIST)
+    hass.services.async_remove(DOMAIN, SERVICE_TEST_TIMER_SOUND)
+    hass.services.async_remove(DOMAIN, SERVICE_STOP_TIMER_ALARM)
     hass.data.pop(DOMAIN, None)
     hass.data.pop(f"{DOMAIN}_timers", None)
     hass.data.pop(f"{DOMAIN}_images", None)

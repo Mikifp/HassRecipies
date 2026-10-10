@@ -54,15 +54,36 @@
           "description": "Scale to this many of the recipe's yield (for example 16 pancakes). Without scale, servings or makes, the recipe's default multiplier is used."
         }
       }
+    },
+    "test_timer_sound": {
+      "name": "Test timer sound",
+      "description": "Plays the timer alert on the speakers chosen in the integration's options."
+    },
+    "stop_timer_alarm": {
+      "name": "Stop timer alarm",
+      "description": "Dismisses all finished timers and silences their repeating alarms."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Recipes options",
-        "description": "Optionally call a notify service when a kitchen timer finishes (for example your phone). Timers also fire the `hass_recipes_timer_finished` event for automations.",
+        "title": "Timer alerts",
+        "description": "Choose how you want to be told when a kitchen timer finishes. Timers also fire the `hass_recipes_timer_finished` event for automations. Speakers need a reachable internal URL (Settings > System > Network) to play the chime.",
         "data": {
-          "notify_service": "Notify service"
+          "notify_service": "Notify service",
+          "speakers": "Speakers",
+          "speaker_sound": "Sound on speakers",
+          "tts_entity": "Text-to-speech engine",
+          "alarm_repeat": "Repeat until stopped",
+          "alarm_minutes": "Stop automatically after"
+        },
+        "data_description": {
+          "notify_service": "Optional. A notify service, for example your phone, called when a timer finishes.",
+          "speakers": "Optional. Media players that play the alert.",
+          "speaker_sound": "A short chime, the timer's name spoken aloud, or both.",
+          "tts_entity": "Used for spoken messages. Leave empty to use the first available engine.",
+          "alarm_repeat": "Keep sounding the alert until you dismiss the timer in the panel (or call the stop_timer_alarm service).",
+          "alarm_minutes": "A safety limit so the alert cannot ring for ever when nobody is home."
         }
       }
     }

@@ -12,14 +12,31 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
+    EntitySelector,
+    EntitySelectorConfig,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectSelectorMode,
 )
 import voluptuous as vol
 
-from .const import CONF_NOTIFY_SERVICE, DOMAIN
+from .const import (
+    CONF_ALARM_MINUTES,
+    CONF_ALARM_REPEAT,
+    CONF_NOTIFY_SERVICE,
+    CONF_SPEAKER_SOUND,
+    CONF_SPEAKERS,
+    CONF_TTS_ENTITY,
+    DOMAIN,
+    SOUND_BOTH,
+    SOUND_CHIME,
+    SOUND_SPEECH,
+)
 
 
 class RecipesConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -41,7 +58,7 @@ class RecipesConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class RecipesOptionsFlow(OptionsFlow):
-    """Pick a notify service to call when a timer finishes."""
+    """Where to be told that a timer has finished."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
@@ -57,16 +74,38 @@ class RecipesOptionsFlow(OptionsFlow):
         current = self.config_entry.options.get(CONF_NOTIFY_SERVICE)
         if current and current not in services:
             services.append(current)
-        options = [SelectOptionDict(value=name, label=f"notify.{name}") for name in services]
         schema = vol.Schema(
             {
-                vol.Optional(
-                    CONF_NOTIFY_SERVICE, description={"suggested_value": current}
-                ): SelectSelector(
+                vol.Optional(CONF_NOTIFY_SERVICE): SelectSelector(
                     SelectSelectorConfig(
-                        options=options, mode=SelectSelectorMode.DROPDOWN, custom_value=True
+                        options=[SelectOptionDict(value=n, label=f"notify.{n}") for n in services],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        custom_value=True,
                     )
-                )
+                ),
+                vol.Optional(CONF_SPEAKERS): EntitySelector(
+                    EntitySelectorConfig(domain="media_player", multiple=True)
+                ),
+                vol.Optional(CONF_SPEAKER_SOUND, default=SOUND_CHIME): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=SOUND_CHIME, label="Chime"),
+                            SelectOptionDict(value=SOUND_SPEECH, label="Spoken message"),
+                            SelectOptionDict(value=SOUND_BOTH, label="Chime, then spoken message"),
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(CONF_TTS_ENTITY): EntitySelector(EntitySelectorConfig(domain="tts")),
+                vol.Optional(CONF_ALARM_REPEAT, default=True): BooleanSelector(),
+                vol.Optional(CONF_ALARM_MINUTES, default=5): NumberSelector(
+                    NumberSelectorConfig(
+                        min=1, max=60, step=1, mode=NumberSelectorMode.BOX, unit_of_measurement="min"
+                    )
+                ),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(schema, dict(self.config_entry.options)),
+        )
