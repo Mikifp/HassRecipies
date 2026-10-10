@@ -25,6 +25,13 @@ _STEP = vol.Schema(
         vol.Required("text"): str,
         vol.Optional("ingredients", default=[]): [vol.All(int, vol.Range(min=0))],
         vol.Optional("timer"): vol.Any(None, vol.All(int, vol.Range(min=1, max=7 * 86400))),
+        # any number of timers per step, each with an optional label ("simmer", "rest")
+        vol.Optional("timers", default=[]): [
+            {
+                vol.Required("seconds"): vol.All(int, vol.Range(min=1, max=7 * 86400)),
+                vol.Optional("label", default=""): vol.All(str, vol.Length(max=60)),
+            }
+        ],
         vol.Optional("section", default=False): bool,
     }
 )

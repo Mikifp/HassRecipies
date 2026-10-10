@@ -41,23 +41,42 @@ EDITABLE_FIELDS = (
 )
 
 
-def normalize_step(step: Any) -> dict[str, Any]:
-    """Return a step as {"text", "ingredients", "timer"}.
+MAX_TIMER_SECONDS = 7 * 86400
 
-    ``ingredients`` are indexes into the recipe's ingredient list and ``timer``
-    is a duration in seconds (or None). Plain strings (older data, imports) are
-    accepted too.
+
+def normalize_timers(step: dict[str, Any]) -> list[dict[str, Any]]:
+    """A step's timers as [{"seconds", "label"}], from ``timers`` or the older ``timer``."""
+    found: list[dict[str, Any]] = []
+    raw = step.get("timers")
+    for item in raw if isinstance(raw, list) else []:
+        seconds, label = (item, "") if not isinstance(item, dict) else (item.get("seconds"), item.get("label", ""))
+        if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0:
+            found.append({"seconds": int(min(seconds, MAX_TIMER_SECONDS)), "label": str(label or "").strip()[:60]})
+    if not found:
+        legacy = step.get("timer")
+        if isinstance(legacy, (int, float)) and not isinstance(legacy, bool) and legacy > 0:
+            found.append({"seconds": int(min(legacy, MAX_TIMER_SECONDS)), "label": ""})
+    return found
+
+
+def normalize_step(step: Any) -> dict[str, Any]:
+    """Return a step as {"text", "ingredients", "timer", "timers"}.
+
+    ``ingredients`` are indexes into the recipe's ingredient list. ``timers`` is any
+    number of {"seconds", "label"}; ``timer`` is the first one's duration (or None),
+    kept for older clients. Plain strings (older data, imports) are accepted too.
     """
     if isinstance(step, str):
-        return {"text": step, "ingredients": [], "timer": None, "section": False}
+        return {"text": step, "ingredients": [], "timer": None, "timers": [], "section": False}
     if step.get("section"):
-        return {"text": step.get("text", ""), "ingredients": [], "timer": None, "section": True}
+        return {"text": step.get("text", ""), "ingredients": [], "timer": None, "timers": [], "section": True}
     links = {i for i in step.get("ingredients", []) if isinstance(i, int) and i >= 0}
-    timer = step.get("timer")
+    timers = normalize_timers(step)
     return {
         "text": step.get("text", ""),
         "ingredients": sorted(links),
-        "timer": timer if isinstance(timer, int) and timer > 0 else None,
+        "timer": timers[0]["seconds"] if timers else None,
+        "timers": timers,
         "section": False,
     }
 
@@ -78,6 +97,26 @@ def _normalize_steps(recipe: dict[str, Any]) -> None:
     recipe.setdefault("default_scale", 1)
 
 
+def step_timer_specs(
+    recipe_id: str, recipe_name: str, step_number: int, step_index: int, timers: list[dict[str, Any]]
+) -> list[tuple[str, str, int]]:
+    """(key, label, seconds) for each timer of a step.
+
+    The first timer keeps the key ``<recipe>:<step>`` that single timers always had, so
+    a timer started before an update is still recognised; later ones add ``:<n>``.
+    """
+    specs = []
+    for n, timer in enumerate(timers):
+        key = f"{recipe_id}:{step_index}" + (f":{n}" if n else "")
+        label = f"{recipe_name} · step {step_number}"
+        if timer.get("label"):
+            label += f" · {timer['label']}"
+        elif len(timers) > 1:
+            label += f" · timer {n + 1}"
+        specs.append((key, label, int(timer["seconds"])))
+    return specs
+
+
 def cooking_pages(recipe: dict[str, Any]) -> list[dict[str, Any]]:
     """What a cook card steps through: an ingredients page, then each real step.
 
@@ -96,6 +135,7 @@ def cooking_pages(recipe: dict[str, Any]) -> list[dict[str, Any]]:
                 "index": index,
                 "text": step.get("text", ""),
                 "timer": step.get("timer"),
+                "timers": step.get("timers") or [],
                 "ingredients": step.get("ingredients", []),
             }
         )

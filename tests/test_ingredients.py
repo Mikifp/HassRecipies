@@ -181,3 +181,18 @@ def test_superscript_fractions_are_read_as_fractions():
 def test_a_danish_drys_is_a_dash():
     muskat = parse("1 drys muskatnød")
     assert (muskat["unit"], muskat["food"]) == ("dash", "muskatnød")
+
+
+def test_an_ingredient_can_have_any_number_of_substitutes():
+    p = parse("200 g smør || 180 g kokosolie || 2 dl fløde || 150 g margarine")
+    assert (p["food"], p["grams"]) == ("smør", 200.0)
+    assert [s["food"] for s in p["substitutes"]] == ["kokosolie", "fløde", "margarine"]
+    assert p["substitutes"][0]["grams"] == 180.0
+    assert p["substitute"]["food"] == "kokosolie"  # the first, for older clients
+
+
+def test_no_substitutes_and_blank_ones():
+    assert parse("2 eggs")["substitutes"] == [] and parse("2 eggs")["substitute"] is None
+    assert parse("2 eggs || ")["substitutes"] == []
+    assert parse("## Dough")["substitutes"] == []
+    assert [s["food"] for s in parse("1 butter ||  || 1 oil")["substitutes"]] == ["oil"]

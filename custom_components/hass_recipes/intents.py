@@ -15,7 +15,7 @@ from homeassistant.helpers import intent
 
 from .const import DOMAIN
 from .ingredients import is_header, parse_ingredient
-from .store import RecipeStore, cooking_pages
+from .store import RecipeStore, cooking_pages, step_timer_specs
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -191,23 +191,20 @@ class _CookingIntent(intent.IntentHandler):
             return t["ingredients_page"].format(name=recipe["name"], items=", ".join(items))
         if kind == INTENT_START_TIMER:
             page = pages[min(store.cooking_step, len(pages) - 1)] if pages else {}
-            seconds = page.get("timer")
-            if not seconds:
+            if not page.get("timers"):
                 return t["no_step_timer"]
-            timers = hass.data[f"{DOMAIN}_timers"]
-            key = f"{recipe['id']}:{page['index']}"
-            if any(x["key"] == key and not x["done"] for x in timers.timers.values()):
-                return t["timer_running"]
+            manager = hass.data[f"{DOMAIN}_timers"]
             steps = [p for p in pages if p["kind"] == "step"]
-            timers.start(
-                key,
-                f"{recipe['name']} · step {steps.index(page) + 1}",
-                seconds,
-                recipe_id=recipe["id"],
-                recipe_name=recipe["name"],
-                step=page["index"],
-            )
-            return t["timer_started"].format(left=_duration(language, seconds))
+            specs = step_timer_specs(recipe["id"], recipe["name"], steps.index(page) + 1, page["index"], page["timers"])
+            running = {x["key"] for x in manager.timers.values() if not x["done"]}
+            fresh = [spec for spec in specs if spec[0] not in running]
+            if not fresh:
+                return t["timer_running"]
+            for key, label, seconds in fresh:
+                manager.start(
+                    key, label, seconds, recipe_id=recipe["id"], recipe_name=recipe["name"], step=page["index"]
+                )
+            return t["and"].join(t["timer_started"].format(left=_duration(language, s)) for _, _, s in fresh)
         return t["nothing"]
 
 

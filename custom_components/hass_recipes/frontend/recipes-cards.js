@@ -15,7 +15,8 @@ const {
   normStep,
   isHeader,
   headerText,
-  splitSub,
+  splitSubs,
+  timerSpecs,
   clock,
   ingParts,
   SCALES,
@@ -62,6 +63,7 @@ const I18N = {
     not_found: "Recipe “{name}” was not found.",
     no_steps: "This recipe has no steps yet.",
     cook_this: "Cook this recipe",
+    or: "or",
     open_in: "Open in Recipes",
     mark_done: "Mark as done",
     is_done: "Done",
@@ -146,6 +148,7 @@ const I18N = {
     not_found: "Opskriften “{name}” blev ikke fundet.",
     no_steps: "Denne opskrift har ingen trin endnu.",
     cook_this: "Lav denne opskrift",
+    or: "eller",
     open_in: "Åbn i Opskrifter",
     mark_done: "Markér som færdig",
     is_done: "Færdig",
@@ -800,7 +803,16 @@ class HassRecipesCookCard extends RecipesBase {
     const k = this._scale();
     const mode = this._config.units === "original" ? "original" : "grams";
     const progress = loadProgress(r.id);
-    const partsOf = (i) => ingParts((r.parsed_ingredients || [])[i], splitSub(r.ingredients[i] ?? ""), k, mode);
+    const partsOf = (i) => ingParts((r.parsed_ingredients || [])[i], splitSubs(r.ingredients[i] ?? "").main, k, mode);
+    // "or 180 g coconut oil" lines for every alternative of an ingredient
+    const altsOf = (i) => {
+      const p = (r.parsed_ingredients || [])[i] || {};
+      const subs = p.substitutes || (p.substitute ? [p.substitute] : []);
+      return splitSubs(r.ingredients[i] ?? "").alts.map((text, n) => {
+        const b = ingParts(subs[n], text, k, mode);
+        return `${b.qty ? `${b.qty} ` : ""}${b.food}`;
+      });
+    };
     let section = "";
     for (const x of all.slice(0, Math.max(st.i, 0))) if (x.section) section = x.text;
     const ings = st.ingredients
@@ -821,15 +833,25 @@ class HassRecipesCookCard extends RecipesBase {
             return `<label class="irow${on ? " on" : ""}"><input type="checkbox" data-ing="${i}" ${on ? "checked" : ""}>
               <span class="itext">${a.qty ? `<span class="q">${esc(a.qty)}</span> ` : ""}<b>${esc(a.food)}</b>${
                 a.note ? `<span class="muted">, ${esc(a.note)}</span>` : ""
-              }${a.sub ? ` <span class="muted sub">${esc(a.sub)}</span>` : ""}</span></label>`;
+              }${a.sub ? ` <span class="muted sub">${esc(a.sub)}</span>` : ""}${altsOf(i)
+                .map((alt) => `<span class="muted alt">${esc(this._t("or"))} ${esc(alt)}</span>`)
+                .join("")}</span></label>`;
           })
           .join("")}</div>`
       : `<div class="text${stepDone ? " done" : ""}" data-done-toggle="${st.i}">${esc(st.text)}</div>
          <button class="btn donebtn${stepDone ? " p" : ""}" data-done="${st.i}"><ha-icon icon="mdi:${stepDone ? "check-circle" : "check-circle-outline"}"></ha-icon>${esc(
            this._t(stepDone ? "is_done" : "mark_done")
          )}</button>`;
-    const key = `${r.id}:${st.i}`;
-    const running = (this._timers || []).find((t) => t.key === key && !t.done);
+    const specs = timerSpecs(r, st.i, num, st.timers || []);
+    const timerButtons = specs
+      .map((sp) => {
+        const running = (this._timers || []).find((t) => t.key === sp.key && !t.done);
+        const what = sp.name ? ` (${esc(sp.name)})` : "";
+        return `<button class="btn" data-timer-key="${esc(sp.key)}" ${running ? "disabled" : ""}><ha-icon icon="mdi:timer-outline"></ha-icon>${
+          running ? clock(this._left(running)) : esc(this._t("timer", { t: lengthText(sp.seconds) })) + what
+        }</button>`;
+      })
+      .join("");
     const last = n === pages.length - 1;
     const html = `
       <style>
@@ -857,6 +879,8 @@ class HassRecipesCookCard extends RecipesBase {
         .irow.on .itext { opacity: .55; text-decoration: line-through; }
         .irow .q { font-variant-numeric: tabular-nums; }
         .irow .sub { font-size: 12px; }
+        .timer-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+        .irow .alt { display: block; font-size: 12px; }
         .nav { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
         .nav .next { margin-left: auto; }
       </style>
@@ -870,9 +894,9 @@ class HassRecipesCookCard extends RecipesBase {
           ${body}
           ${ings ? `<div class="ings">${ings}</div>` : ""}
         </div>
+        ${timerButtons ? `<div class="timer-btns">${timerButtons}</div>` : ""}
         <div class="nav">
           <button class="btn" id="prev" ${n === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-left"></ha-icon>${esc(this._t("back"))}</button>
-          ${st.timer ? `<button class="btn" id="timer" ${running ? "disabled" : ""}><ha-icon icon="mdi:timer-outline"></ha-icon>${running ? clock(this._left(running)) : esc(this._t("timer", { t: lengthText(st.timer) }))}</button>` : ""}
           <button class="btn p next" id="next">${esc(this._t(last ? "start_over" : "next"))}<ha-icon icon="mdi:${last ? "restart" : "arrow-right"}"></ha-icon></button>
         </div>
         ${this._timersHtml()}
@@ -886,17 +910,20 @@ class HassRecipesCookCard extends RecipesBase {
       };
       root.getElementById("prev").onclick = () => this._goto(n - 1, pages.length);
       root.getElementById("next").onclick = () => (last ? finish() : this._goto(n + 1, pages.length));
-      const timer = root.getElementById("timer");
-      if (timer)
-        timer.onclick = () =>
-          this._timerCall({
-            type: "hass_recipes/timer_start",
-            key,
-            label: `${r.name} · step ${num}`,
-            seconds: st.timer,
-            recipe_id: r.id,
-            step: st.i,
-          });
+      for (const btn of root.querySelectorAll("[data-timer-key]")) {
+        btn.onclick = () => {
+          const sp = specs.find((s) => s.key === btn.dataset.timerKey);
+          if (sp)
+            this._timerCall({
+              type: "hass_recipes/timer_start",
+              key: sp.key,
+              label: sp.label,
+              seconds: sp.seconds,
+              recipe_id: r.id,
+              step: st.i,
+            });
+        };
+      }
       for (const box of root.querySelectorAll("[data-ing]")) {
         box.onchange = () => this._toggle(null, parseInt(box.dataset.ing, 10), r.id, "ing");
       }

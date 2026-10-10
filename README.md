@@ -19,13 +19,13 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Browser-style navigation: every screen has its own address (`/recipes#/recipe/<id>`), so the mouse back button / Alt+← steps back through the app, reloading keeps your place, and recipes can be bookmarked
 - Search by name, tag or ingredient; filter by tag
 - Sections in both ingredients and instructions (`## Dough` in stored ingredients; imported from websites and Mealie where the source has them)
-- Substitutes: any ingredient can carry an alternative with its own amount (stored as `200 g butter || 180 g coconut oil`), converted to grams like the main ingredient
+- Substitutes: any ingredient can carry any number of alternatives, each with its own amount (stored as `200 g butter || 180 g coconut oil || 2 dl cream`), converted to grams like the main ingredient
 - Cook mode shows the whole recipe at once (ingredients beside step cards, current step highlighted, screen kept awake); "One step at a time" switches to a focused view
 - Check off steps (and ingredients) while cooking; checks are remembered per recipe for two days, a finished timer completes its step, and finishing every step resets the checks
 - Unsaved-changes prompt when you leave the editor
 - Yield: say what the ingredients make ("8 pancakes") and the multiplier the recipe opens at (2× = 16 pancakes); type the number you want and everything scales. `makes:` works in the shopping-list service too
 - Scale a recipe (½×–4× or any multiplier); linked ingredients scale too
-- Steps can link to ingredients and carry a countdown timer (alarm sounds when done; timers survive page reloads)
+- Steps can link to ingredients and carry any number of countdown timers, each set in hours, minutes and seconds with an optional label ("roast", "rest"); the alarm sounds when each is done and timers survive page reloads. The step counts as done when its last timer finishes
 - Import from a URL using `recipe-scrapers` (hundreds of sites) with a built-in JSON-LD/HTML fallback; one URL gets a review step, several URLs (up to 25) import in bulk
 - Ingredients are parsed into quantity/unit/food; a Grams view converts weights exactly and volumes by density (≈ = estimate)
 - Units are understood in Danish, Swedish, Norwegian, German, Dutch, French, Spanish and Italian as well as English (for example `2 tsk`, `1 spsk`, `2 fed hvidløg`, `2 stk løg`, `3 dl`, `1 EL`, `1 Prise`, `2 cucharadas de azúcar`), including a link word such as *de* or *di*. Weights and volumes convert to grams for English and Danish food names; in other languages the amount is still scaled and converted to ml

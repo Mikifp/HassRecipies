@@ -13,7 +13,10 @@ const {
   isHeader,
   headerText,
   splitSub,
+  splitSubs,
   joinSub,
+  joinSubs,
+  timerSpecs,
   clock,
   duration,
   fmtGrams,
@@ -42,15 +45,16 @@ const TODO_KEY = "hass_recipes_todo";
 
 /** HTML for ingredient `i`: amount + bold food, faded original amount, optional substitute. */
 const ingredientHtml = (r, i, k, mode) => {
-  const [main, altText] = splitSub(r.ingredients[i] ?? "");
+  const { main, alts } = splitSubs(r.ingredients[i] ?? "");
   const p = (r.parsed_ingredients || [])[i];
+  const subs = (p && (p.substitutes || (p.substitute ? [p.substitute] : []))) || [];
   const a = ingParts(p, main, k, mode);
   let html = `<span class="ing-main">${a.qty ? `<span class="ing-qty">${esc(a.qty)}</span> ` : ""}<strong>${esc(a.food)}</strong>${a.note ? `<span class="ing-note">, ${esc(a.note)}</span>` : ""}</span>`;
   if (a.sub) html += `<small class="ing-sub">${esc(a.sub)}</small>`;
-  if (altText) {
-    const b = ingParts(p && p.substitute, altText, k, mode);
+  alts.forEach((altText, n) => {
+    const b = ingParts(subs[n], altText, k, mode);
     html += `<small class="ing-alt">or ${b.qty ? `${esc(b.qty)} ` : ""}<strong>${esc(b.food)}</strong>${b.note ? `, ${esc(b.note)}` : ""}${b.sub ? ` <span class="ing-sub">(${esc(b.sub)})</span>` : ""}</small>`;
-  }
+  });
   return html;
 };
 
@@ -63,12 +67,14 @@ const ingredientChipHtml = (r, i, k, mode) => {
 
 /** Plain-text line including the substitute (used for printing). */
 const ingredientPlain = (r, i, k, mode) => {
-  const [, altText] = splitSub(r.ingredients[i] ?? "");
+  const { alts } = splitSubs(r.ingredients[i] ?? "");
   let text = ingredientText(r, i, k, mode);
-  if (altText) {
-    const b = ingParts(((r.parsed_ingredients || [])[i] || {}).substitute, altText, k, mode);
+  const p = (r.parsed_ingredients || [])[i] || {};
+  const subs = p.substitutes || (p.substitute ? [p.substitute] : []);
+  alts.forEach((altText, n) => {
+    const b = ingParts(subs[n], altText, k, mode);
     text += ` — or ${b.qty ? `${b.qty} ` : ""}${b.food}`;
-  }
+  });
   return text;
 };
 
@@ -203,7 +209,12 @@ const STYLE = `
   .step-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
   .step-head .spacer { flex: 1; }
   .step-head button { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 2px 8px; font: inherit; }
-  .step .timer-field { width: 160px; margin: 8px 0; }
+  .step .timer-field { margin: 8px 0; }
+  .timer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .timer-row input[type=number] { width: 64px; flex: none; }
+  .timer-row .timer-label { flex: 1 1 140px; min-width: 120px; }
+  .sub-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+  .sub-row input { flex: 1; }
   .step .chips { margin-bottom: 0; }
   .facet-label { font-size: 12px; color: var(--secondary-text-color); align-self: center; text-transform: uppercase; letter-spacing: .04em; }
   .units { margin-left: auto; }
@@ -659,13 +670,19 @@ class HassRecipesPanel extends HTMLElement {
       handled = JSON.parse(localStorage.getItem(HANDLED_KEY) || "[]");
     } catch (_) { /* ignore */ }
     const seen = new Set(handled);
+    const waiting = new Set();
     for (const t of timers) {
       if (t.done && !seen.has(t.id) && t.recipe_id && Number.isInteger(t.step)) {
+        // a step with several timers is done when the last of them has finished
+        if (timers.some((o) => !o.done && o.recipe_id === t.recipe_id && o.step === t.step)) {
+          waiting.add(t.id);
+          continue;
+        }
         this._markStepDoneFor(t.recipe_id, t.step);
       }
     }
     // remember only timers that still exist, so the list cannot grow without bound
-    const keep = timers.filter((t) => t.done).map((t) => t.id);
+    const keep = timers.filter((t) => t.done && !waiting.has(t.id)).map((t) => t.id);
     try {
       localStorage.setItem(HANDLED_KEY, JSON.stringify(keep));
     } catch (_) { /* ignore */ }
@@ -856,7 +873,8 @@ class HassRecipesPanel extends HTMLElement {
     }
     if (this._focusUid) {
       const [uid, part] = this._focusUid.split(":");
-      const el = this.shadowRoot.querySelector(`.ing-row[data-uid="${uid}"] [data-f=${part === "sub" ? "isub" : "itext"}]`);
+      const found = this.shadowRoot.querySelectorAll(`.ing-row[data-uid="${uid}"] [data-f=${part === "sub" ? "isub" : "itext"}]`);
+      const el = found[found.length - 1]; // a new substitute is the last one
       if (el) el.focus();
       this._focusUid = null;
     }
@@ -1578,13 +1596,25 @@ class HassRecipesPanel extends HTMLElement {
           .filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]))
           .map((i) => ingredientChipHtml(r, i, k, this._units))
           .join("");
-        const running = this._timerRunning(`${r.id}:${n}`);
         return `<div class="step-item ${done ? "done" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}" tabindex="0" title="${done ? "Mark as not done" : "Tap to mark as done"}">
           <span class="step-num">${done ? "✓" : num}</span>
           <div class="step-body"><div class="step-text">${esc(s.text)}</div>
             ${links ? `<div class="step-ings">${links}</div>` : ""}
-            ${s.timer ? `<button class="btn secondary timer-btn" data-timer="${n}" data-sec="${s.timer}" ${running ? "disabled" : ""}>⏱ ${running ? "Timer running" : `Start ${duration(s.timer)} timer`}</button>` : ""}
+            ${this._timerButtonsHtml(r, s, n, num, "secondary")}
           </div></div>`;
+      })
+      .join("");
+  }
+
+  /** One start button per timer of a step. `n` is the step's index, `num` its number among the steps. */
+  _timerButtonsHtml(r, st, n, num, extra = "") {
+    return timerSpecs(r, n, num, st.timers || [])
+      .map((sp) => {
+        const running = this._timerRunning(sp.key);
+        const what = sp.name ? ` (${esc(sp.name)})` : "";
+        return `<button class="btn ${extra} timer-btn" data-timer-key="${esc(sp.key)}" data-timer-label="${esc(sp.label)}" data-timer-step="${n}" data-sec="${sp.seconds}" ${running ? "disabled" : ""}>⏱ ${
+          running ? "Timer running" : `Start ${duration(sp.seconds)} timer${what}`
+        }</button>`;
       })
       .join("");
   }
@@ -1623,7 +1653,7 @@ class HassRecipesPanel extends HTMLElement {
         ${section ? `<div class="cook-section">${esc(section)}</div>` : ""}
         <div class="cook-text" data-step-toggle="${st.i}" style="${done ? "opacity:.55;text-decoration:line-through" : ""}" title="Tap to mark as done">${esc(st.text)}</div>
         ${links ? `<div class="step-ings">${links}</div>` : ""}
-        ${st.timer ? `<button class="btn timer-btn" data-timer="${st.i}" data-sec="${st.timer}" ${running ? "disabled" : ""}>⏱ ${running ? "Timer running" : `Start ${duration(st.timer)} timer`}</button>` : ""}
+        ${this._timerButtonsHtml(r, st, st.i, n + 1)}
         <label class="cook-done"><input type="checkbox" data-step-done="${st.i}" ${done ? "checked" : ""}> Mark this step as done</label>
         <div class="cook-nav">
           <button class="btn secondary" data-act="cook-prev" ${n === 0 ? "disabled" : ""}>← Previous</button>
@@ -1682,7 +1712,7 @@ class HassRecipesPanel extends HTMLElement {
           <div class="cstep-head"><span>Step ${num}</span><span class="tick">${done ? "✓" : ""}</span></div>
           <div class="cstep-text">${esc(st.text)}</div>
           ${links ? `<div class="step-ings">${links}</div>` : ""}
-          ${st.timer ? `<button class="btn timer-btn" data-timer="${n}" data-sec="${st.timer}" ${running ? "disabled" : ""}>⏱ ${running ? "Timer running" : `Start ${duration(st.timer)} timer`}</button>` : ""}
+          ${this._timerButtonsHtml(r, st, n, num)}
         </div>`;
       })
       .join("");
@@ -1740,7 +1770,7 @@ class HassRecipesPanel extends HTMLElement {
       .map((st) => {
         if (st.section) return `<h3>${esc(st.text)}</h3>`;
         num += 1;
-        return `<p class="step"><span class="n">${num}.</span> ${esc(st.text)}${st.timer ? ` <span class="timer">(${esc(duration(st.timer))})</span>` : ""}</p>`;
+        return `<p class="step"><span class="n">${num}.</span> ${esc(st.text)}${st.timers.length ? ` <span class="timer">(${esc(st.timers.map((t) => duration(t.seconds) + (t.label ? ` ${t.label}` : "")).join(", "))})</span>` : ""}</p>`;
       })
       .join("");
     const ings = r.ingredients
@@ -1906,9 +1936,9 @@ class HassRecipesPanel extends HTMLElement {
 
   /** Stored ingredient strings -> editor rows (heading / text + substitute). */
   _rowFromString(str) {
-    if (isHeader(str)) return { uid: this._nextUid(), header: true, text: headerText(str), sub: "", showSub: false };
-    const [text, sub] = splitSub(str);
-    return { uid: this._nextUid(), header: false, text, sub, showSub: !!sub };
+    if (isHeader(str)) return { uid: this._nextUid(), header: true, text: headerText(str), subs: [] };
+    const { main, alts } = splitSubs(str);
+    return { uid: this._nextUid(), header: false, text: main, subs: alts };
   }
 
   _initForm(id) {
@@ -1936,7 +1966,12 @@ class HassRecipesPanel extends HTMLElement {
         section: st.section,
         // links are kept as stable row ids so reordering ingredients never breaks them
         ingredients: st.ingredients.map((i) => rows[i]).filter((row) => row && !row.header).map((row) => row.uid),
-        timer: st.timer ? Math.round((st.timer / 60) * 100) / 100 : "",
+        timers: st.timers.map((t) => ({
+          h: Math.floor(t.seconds / 3600) || "",
+          m: Math.floor((t.seconds % 3600) / 60) || "",
+          s: t.seconds % 60 || "",
+          label: t.label || "",
+        })),
       })),
     };
     // An imported draft has not been saved yet, so leaving it should ask first.
@@ -1955,13 +1990,17 @@ class HassRecipesPanel extends HTMLElement {
       uid: el.dataset.uid,
       header: el.dataset.header === "1",
       text: el.querySelector("[data-f=itext]").value,
-      sub: (el.querySelector("[data-f=isub]") || { value: "" }).value,
-      showSub: !!el.querySelector("[data-f=isub]"),
+      subs: [...el.querySelectorAll("[data-f=isub]")].map((i) => i.value),
     }));
     this._form.steps = [...form.querySelectorAll(".step")].map((el) => ({
       section: el.dataset.section === "1",
       text: el.querySelector("[data-f=text]").value,
-      timer: (el.querySelector("[data-f=timer]") || { value: "" }).value,
+      timers: [...el.querySelectorAll(".timer-row")].map((row) => ({
+        h: row.querySelector("[data-f=th]").value,
+        m: row.querySelector("[data-f=tm]").value,
+        s: row.querySelector("[data-f=ts]").value,
+        label: row.querySelector("[data-f=tl]").value,
+      })),
       ingredients: [...el.querySelectorAll(".chip.active[data-uid]")].map((c) => c.dataset.uid),
     }));
   }
@@ -1981,11 +2020,13 @@ class HassRecipesPanel extends HTMLElement {
     const inputs = row.header
       ? `<input data-f="itext" placeholder="Section title, e.g. Dough" value="${esc(row.text)}">`
       : `<input data-f="itext" placeholder="e.g. 200 g butter" value="${esc(row.text)}">
-         ${
-           row.showSub || row.sub
-             ? `<input data-f="isub" placeholder="Substitute with its own amount, e.g. 180 g coconut oil" value="${esc(row.sub)}">`
-             : `<button type="button" class="mini link" data-row-act="sub" data-uid="${esc(row.uid)}">+ substitute</button>`
-         }`;
+         ${row.subs
+           .map(
+             (sub, n) => `<div class="sub-row"><input data-f="isub" placeholder="Substitute with its own amount, e.g. 180 g coconut oil" value="${esc(sub)}">
+               <button type="button" class="mini" data-row-act="sub-remove" data-uid="${esc(row.uid)}" data-i="${n}" title="Remove this substitute">✕</button></div>`
+           )
+           .join("")}
+         <button type="button" class="mini link" data-row-act="sub" data-uid="${esc(row.uid)}">+ ${row.subs.length ? "another " : ""}substitute</button>`;
     return `<div class="ing-row ${row.header ? "is-header" : ""}" data-uid="${esc(row.uid)}" data-header="${row.header ? 1 : 0}">
       <div class="ing-inputs">${inputs}</div>
       <span class="row-btns">
@@ -2019,8 +2060,18 @@ class HassRecipesPanel extends HTMLElement {
         num += 1;
         return `<div class="step" data-n="${n}" data-section="0">${head(`Step ${num}`)}
           <textarea data-f="text" rows="3" placeholder="What to do…">${esc(st.text)}</textarea>
-          <div class="timer-field"><label class="lbl">Timer (minutes, optional)</label>
-            <input data-f="timer" type="number" min="0" step="any" value="${esc(st.timer)}"></div>
+          <div class="timer-field"><label class="lbl">Timers (optional)</label>
+            ${st.timers
+              .map(
+                (t, ti) => `<div class="timer-row">
+                  <input data-f="th" type="number" min="0" step="1" placeholder="0" value="${esc(t.h)}" aria-label="Hours"><span>h</span>
+                  <input data-f="tm" type="number" min="0" step="1" placeholder="0" value="${esc(t.m)}" aria-label="Minutes"><span>min</span>
+                  <input data-f="ts" type="number" min="0" step="1" placeholder="0" value="${esc(t.s)}" aria-label="Seconds"><span>sec</span>
+                  <input data-f="tl" class="timer-label" placeholder="Label, e.g. simmer" value="${esc(t.label)}" maxlength="60">
+                  <button type="button" class="mini" data-step-act="remove-timer" data-n="${n}" data-t="${ti}" title="Remove this timer">✕</button></div>`
+              )
+              .join("")}
+            <button type="button" class="mini link" data-step-act="add-timer" data-n="${n}">+ ${st.timers.length ? "another " : ""}timer</button></div>
           <label class="lbl">Ingredients used in this step</label>
           <div class="chips step-ings-edit">${this._stepChips(st, d.rows)}</div>
         </div>`;
@@ -2099,13 +2150,13 @@ class HassRecipesPanel extends HTMLElement {
     });
   }
 
-  _rowAction(act, uid) {
+  _rowAction(act, uid, idx) {
     this._syncForm();
     const rows = this._form.rows;
     const at = rows.findIndex((r) => r.uid === uid);
     let focus = null;
     if (act === "add" || act === "add-section") {
-      const row = { uid: this._nextUid(), header: act === "add-section", text: "", sub: "", showSub: false };
+      const row = { uid: this._nextUid(), header: act === "add-section", text: "", subs: [] };
       rows.splice(at >= 0 ? at + 1 : rows.length, 0, row);
       focus = row.uid;
     } else if (act === "remove" && at >= 0) {
@@ -2116,8 +2167,10 @@ class HassRecipesPanel extends HTMLElement {
     } else if (act === "down" && at >= 0 && at < rows.length - 1) {
       [rows[at + 1], rows[at]] = [rows[at], rows[at + 1]];
     } else if (act === "sub" && at >= 0) {
-      rows[at].showSub = true;
+      rows[at].subs.push("");
       focus = `${uid}:sub`;
+    } else if (act === "sub-remove" && at >= 0) {
+      rows[at].subs.splice(Number(idx), 1);
     }
     this._formDirty = true;
     this._focusUid = focus;
@@ -2142,11 +2195,13 @@ class HassRecipesPanel extends HTMLElement {
     this._render();
   }
 
-  _stepAction(act, n) {
+  _stepAction(act, n, t) {
     this._syncForm();
     const steps = this._form.steps;
-    if (act === "add") steps.push({ text: "", ingredients: [], timer: "", section: false });
-    else if (act === "add-section") steps.push({ text: "", ingredients: [], timer: "", section: true });
+    if (act === "add") steps.push({ text: "", ingredients: [], timers: [], section: false });
+    else if (act === "add-section") steps.push({ text: "", ingredients: [], timers: [], section: true });
+    else if (act === "add-timer" && steps[n]) steps[n].timers.push({ h: "", m: "", s: "", label: "" });
+    else if (act === "remove-timer" && steps[n]) steps[n].timers.splice(Number(t), 1);
     else if (act === "remove") steps.splice(n, 1);
     else if (act === "up" && n > 0) [steps[n - 1], steps[n]] = [steps[n], steps[n - 1]];
     else if (act === "down" && n < steps.length - 1) [steps[n + 1], steps[n]] = [steps[n], steps[n + 1]];
@@ -2291,10 +2346,10 @@ class HassRecipesPanel extends HTMLElement {
       });
     }
 
-    on("[data-timer]", "click", (e) => {
+    on("[data-timer-key]", "click", (e) => {
       const r = this._recipe(this._view.id);
-      const n = +e.currentTarget.dataset.timer;
-      this._startTimer(`${r.id}:${n}`, `${r.name} · step ${n + 1}`, +e.currentTarget.dataset.sec, r.id, n);
+      const d = e.currentTarget.dataset;
+      this._startTimer(d.timerKey, d.timerLabel, +d.sec, r.id, +d.timerStep);
     });
 
     const toggleStep = (n) => this._setStepDone(n, !this._doneSteps.has(n));
@@ -2354,9 +2409,9 @@ class HassRecipesPanel extends HTMLElement {
           return;
         }
         const rowBtn = e.target.closest("[data-row-act]");
-        if (rowBtn) return this._rowAction(rowBtn.dataset.rowAct, rowBtn.dataset.uid);
+        if (rowBtn) return this._rowAction(rowBtn.dataset.rowAct, rowBtn.dataset.uid, rowBtn.dataset.i);
         const btn = e.target.closest("[data-step-act]");
-        if (btn) this._stepAction(btn.dataset.stepAct, +btn.dataset.n);
+        if (btn) this._stepAction(btn.dataset.stepAct, +btn.dataset.n, btn.dataset.t);
       });
     }
     on("[data-open-new]", "click", async (e) => {
@@ -2608,7 +2663,7 @@ class HassRecipesPanel extends HTMLElement {
       const text = row.text.trim();
       if (!text) continue;
       indexOf.set(row.uid, ingredients.length);
-      ingredients.push(row.header ? `## ${text}` : joinSub(text, row.sub));
+      ingredients.push(row.header ? `## ${text}` : joinSubs(text, row.subs));
     }
     const payload = {
       name: d.name.trim(),
@@ -2628,12 +2683,18 @@ class HassRecipesPanel extends HTMLElement {
       instructions: d.steps
         .filter((st) => st.text.trim())
         .map((st) => {
-          if (st.section) return { text: st.text.trim(), ingredients: [], timer: null, section: true };
-          const minutesValue = parseFloat(st.timer);
+          if (st.section) return { text: st.text.trim(), ingredients: [], timer: null, timers: [], section: true };
+          const timers = (st.timers || [])
+            .map((t) => ({
+              seconds: Math.round((parseFloat(t.h) || 0) * 3600 + (parseFloat(t.m) || 0) * 60 + (parseFloat(t.s) || 0)),
+              label: String(t.label || "").trim(),
+            }))
+            .filter((t) => t.seconds > 0);
           return {
             text: st.text.trim(),
             ingredients: [...new Set(st.ingredients.map((u) => indexOf.get(u)).filter((i) => i !== undefined))].sort((x, y) => x - y),
-            timer: minutesValue > 0 ? Math.max(1, Math.round(minutesValue * 60)) : null,
+            timer: timers.length ? timers[0].seconds : null,
+            timers,
             section: false,
           };
         }),

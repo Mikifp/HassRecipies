@@ -332,15 +332,17 @@ def parse_ingredient(line: str) -> dict[str, Any]:
 
     Two inline conventions keep the stored data a plain list of strings:
     ``## Dough`` is a section heading, and ``200 g butter || 180 g coconut oil``
-    carries a substitute with its own amount (parsed into ``substitute``).
+    carries a substitute with its own amount; ``200 g butter || 180 g oil || 3 dl cream``
+    carries several. They are parsed into ``substitutes`` (``substitute`` is the first).
     """
     if is_header(line):
         title = _HEADER.sub("", line.strip()).strip()
         return {**_empty(title), "header": True}
     if SUBSTITUTE_SEP in line:
-        main, _, alt = line.partition(SUBSTITUTE_SEP)
-        result = _parse_line(main.strip())
-        result["substitute"] = _parse_line(alt.strip()) if alt.strip() else None
+        main, *alternatives = (part.strip() for part in line.split(SUBSTITUTE_SEP))
+        result = _parse_line(main)
+        result["substitutes"] = [_parse_line(alt) for alt in alternatives if alt]
+        result["substitute"] = result["substitutes"][0] if result["substitutes"] else None
         return result
     return _parse_line(line)
 
@@ -360,6 +362,7 @@ def _empty(line: str) -> dict[str, Any]:
         "approximate": False,
         "header": False,
         "substitute": None,
+        "substitutes": [],
     }
 
 
@@ -378,6 +381,7 @@ def _parse_line(line: str) -> dict[str, Any]:
         "approximate": False,
         "header": False,
         "substitute": None,
+        "substitutes": [],
     }
     text = _expand_fractions(line.strip())
     m = _QTY.match(text)
