@@ -122,6 +122,15 @@ Without `recipe`, the cook card shows the recipe you chose in the Recipes panel 
 
 **Assist.** The integration installs sentences for English and Danish into `custom_sentences/` (and reloads Assist). Say things like "next step", "previous step", "repeat the step", "read the ingredients", "how much time is left" or "start the step timer" (Danish: "næste trin", "gentag trinnet", "læs ingredienserne op", "hvor lang tid er der tilbage"). Ingredients are read at the current scale.
 
+**Meal plan.** Open **Meal plan** in the Recipes panel for a week view: press **+** on a day and meal (breakfast, lunch, dinner, snack) to pick a recipe or type a plain meal such as "Leftovers", set a scale per meal, press the pan to start cooking it, and use **Add week to shopping list** to send that week's ingredients to your to-do list (items already on the list are skipped; amounts are not summed across meals). On a recipe page, **Add to meal plan** lets you pick the day. The plan is also available as:
+
+- `calendar.recipe_timers_meal_plan`: meals show in the calendar dashboard at 07:30 (breakfast), 12:00 (lunch), 15:00 (snack) and 18:00 (dinner), and work with calendar triggers in automations
+- `hass_recipes.plan_meal` (`recipe`, `date`, `slot`, `scale` or `servings`, `note`), `hass_recipes.clear_meal_plan` and `hass_recipes.add_plan_to_shopping_list` (`start`, `days`, `entity_id`)
+- the `custom:hass-recipes-plan-card` dashboard card (`days`, `slots`, `show_empty`, `tap: cook | open`, `list_height`), which starts cooking a planned recipe when you tap it, so the cook and kitchen cards follow
+- Assist: "what's for dinner [tomorrow]", "cook dinner" (English) and "hvad skal vi have til aftensmad [i morgen]", "lav aftensmad" (Danish)
+
+When a recipe is deleted its planned meals stay on the plan as plain text.
+
 **Events** for automations: `hass_recipes_recipe_added`, `hass_recipes_recipe_updated`, `hass_recipes_recipe_deleted` (data: `recipe_id`, `name`, `categories`, `tags`).
 
 ```yaml
