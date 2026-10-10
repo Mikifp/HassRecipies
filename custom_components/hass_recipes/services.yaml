@@ -50,3 +50,5 @@ add_to_shopping_list:
             - original
 
 test_timer_sound:
+
+stop_timer_alarm:

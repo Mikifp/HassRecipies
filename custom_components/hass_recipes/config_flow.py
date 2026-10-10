@@ -12,16 +12,22 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectSelectorMode,
 )
 import voluptuous as vol
 
 from .const import (
+    CONF_ALARM_MINUTES,
+    CONF_ALARM_REPEAT,
     CONF_NOTIFY_SERVICE,
     CONF_SPEAKER_SOUND,
     CONF_SPEAKERS,
@@ -91,6 +97,12 @@ class RecipesOptionsFlow(OptionsFlow):
                     )
                 ),
                 vol.Optional(CONF_TTS_ENTITY): EntitySelector(EntitySelectorConfig(domain="tts")),
+                vol.Optional(CONF_ALARM_REPEAT, default=True): BooleanSelector(),
+                vol.Optional(CONF_ALARM_MINUTES, default=5): NumberSelector(
+                    NumberSelectorConfig(
+                        min=1, max=60, step=1, mode=NumberSelectorMode.BOX, unit_of_measurement="min"
+                    )
+                ),
             }
         )
         return self.async_show_form(

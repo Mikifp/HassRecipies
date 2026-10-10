@@ -193,6 +193,7 @@ const STYLE = `
   .timer .t-time { font-variant-numeric: tabular-nums; font-weight: 600; }
   .timer.done { background: var(--error-color, #db4437); color: #fff; border-color: transparent; animation: pulse 1s infinite; }
   .timer button { background: none; border: 0; color: inherit; cursor: pointer; padding: 0 2px; font: inherit; }
+  .timer button.stop { background: #fff; color: var(--error-color, #db4437); border-radius: 12px; padding: 2px 12px; font-weight: 600; }
   @keyframes pulse { 50% { opacity: .6; } }
   header h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; }
   header .menu { background: none; border: 0; color: inherit; cursor: pointer; padding: 4px; }
@@ -523,7 +524,10 @@ class HassRecipesPanel extends HTMLElement {
     const wasDone = new Set(this._timers.filter((t) => t.done).map((t) => t.id));
     this._skew = snapshot.now_ms - Date.now();
     this._timers = snapshot.timers;
-    if (this._timers.some((t) => t.done && !wasDone.has(t.id))) this._beep();
+    if (this._timers.some((t) => t.done && !wasDone.has(t.id))) {
+      this._lastBeep = Date.now();
+      this._beep();
+    }
     this._handleFinishedTimers(this._timers);
     if (!this._loaded) return;
     // Never rebuild a form the user may be typing in; just refresh the timer bar.
@@ -547,6 +551,12 @@ class HassRecipesPanel extends HTMLElement {
   }
   _tick() {
     this._renderTimers();
+    const now = Date.now() + this._skew;
+    const ringing = this._timers.some((t) => t.done && now - t.ends_at_ms < 5 * 60e3);
+    if (ringing && Date.now() - (this._lastBeep || 0) > 7000) {
+      this._lastBeep = Date.now();
+      this._beep();
+    }
   }
   _renderTimers() {
     const box = this.shadowRoot.getElementById("timers");
@@ -558,7 +568,7 @@ class HassRecipesPanel extends HTMLElement {
         .map(
           (t) => `<div class="timer ${t.done ? "done" : ""}">
             <span>⏱ ${esc(t.label)}</span><span class="t-time" data-end="${t.ends_at_ms}"></span>
-            <button data-dismiss="${esc(t.id)}" title="Dismiss">✕</button></div>`
+            <button data-dismiss="${esc(t.id)}" class="${t.done ? "stop" : ""}" title="${t.done ? "Stop the alarm" : "Cancel timer"}">${t.done ? "Stop" : "✕"}</button></div>`
         )
         .join("");
       box.querySelectorAll("[data-dismiss]").forEach((b) =>

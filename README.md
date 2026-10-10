@@ -69,6 +69,7 @@ data:
 
 - **Notify service** – push to your phone.
 - **Speakers** – one or more `media_player` entities. **Sound on speakers** is a chime, the timer's name spoken through a text-to-speech engine, or both. The chime is a small file served from Home Assistant, so the speakers must be able to reach your **internal URL** (Settings → System → Network); `localhost` will not work.
+- **Repeat until stopped** keeps the alert going every few seconds until you press **Stop** on the timer in the panel (or call `hass_recipes.stop_timer_alarm`, e.g. from a button or voice command). **Stop automatically after** is a safety limit (default 5 minutes).
 - Use the `hass_recipes.test_timer_sound` service (Developer tools → Actions) to check the setup.
 
 **Events** for automations: `hass_recipes_recipe_added`, `hass_recipes_recipe_updated`, `hass_recipes_recipe_deleted` (data: `recipe_id`, `name`, `categories`, `tags`).

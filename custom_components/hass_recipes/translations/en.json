@@ -58,6 +58,10 @@
     "test_timer_sound": {
       "name": "Test timer sound",
       "description": "Plays the timer alert on the speakers chosen in the integration's options."
+    },
+    "stop_timer_alarm": {
+      "name": "Stop timer alarm",
+      "description": "Dismisses all finished timers and silences their repeating alarms."
     }
   },
   "options": {
@@ -69,13 +73,17 @@
           "notify_service": "Notify service",
           "speakers": "Speakers",
           "speaker_sound": "Sound on speakers",
-          "tts_entity": "Text-to-speech engine"
+          "tts_entity": "Text-to-speech engine",
+          "alarm_repeat": "Repeat until stopped",
+          "alarm_minutes": "Stop automatically after"
         },
         "data_description": {
           "notify_service": "Optional. A notify service, for example your phone, called when a timer finishes.",
           "speakers": "Optional. Media players that play the alert.",
           "speaker_sound": "A short chime, the timer's name spoken aloud, or both.",
-          "tts_entity": "Used for spoken messages. Leave empty to use the first available engine."
+          "tts_entity": "Used for spoken messages. Leave empty to use the first available engine.",
+          "alarm_repeat": "Keep sounding the alert until you dismiss the timer in the panel (or call the stop_timer_alarm service).",
+          "alarm_minutes": "A safety limit so the alert cannot ring for ever when nobody is home."
         }
       }
     }

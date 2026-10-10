@@ -23,6 +23,7 @@ from .const import (
     PANEL_URL_PATH,
     SERVICE_ADD_TO_SHOPPING_LIST,
     SERVICE_IMPORT_RECIPE,
+    SERVICE_STOP_TIMER_ALARM,
     SERVICE_TEST_TIMER_SOUND,
 )
 from .http_api import (
@@ -143,6 +144,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
         await timers.async_play_alarm("Test timer", raise_errors=True)
 
     hass.services.async_register(DOMAIN, SERVICE_TEST_TIMER_SOUND, test_timer_sound)
+
+    async def stop_timer_alarm(call: ServiceCall) -> None:
+        timers.stop_alarms()
+
+    hass.services.async_register(DOMAIN, SERVICE_STOP_TIMER_ALARM, stop_timer_alarm)
     return True
 
 
@@ -154,6 +160,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> 
     hass.services.async_remove(DOMAIN, SERVICE_IMPORT_RECIPE)
     hass.services.async_remove(DOMAIN, SERVICE_ADD_TO_SHOPPING_LIST)
     hass.services.async_remove(DOMAIN, SERVICE_TEST_TIMER_SOUND)
+    hass.services.async_remove(DOMAIN, SERVICE_STOP_TIMER_ALARM)
     hass.data.pop(DOMAIN, None)
     hass.data.pop(f"{DOMAIN}_timers", None)
     hass.data.pop(f"{DOMAIN}_images", None)
