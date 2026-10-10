@@ -1,0 +1,8 @@
+# local dev instance data (keep only the sample configuration)
+dev/config/*
+!dev/config/configuration.yaml
+# build / editor output
+__pycache__/
+*.pyc
+.venv/
+hass_recipes.zip

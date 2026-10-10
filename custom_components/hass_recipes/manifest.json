@@ -1,0 +1,23 @@
+{
+  "domain": "hass_recipes",
+  "name": "Recipes",
+  "codeowners": [
+    "@Mikifp"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "frontend",
+    "panel_custom",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/Mikifp/HassRecipies",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/Mikifp/HassRecipies/issues",
+  "requirements": [
+    "recipe-scrapers==15.12.0"
+  ],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

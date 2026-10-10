@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Recipes",
+        "description": "Add a recipe manager to your Home Assistant sidebar."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Recipes is already set up."
+    }
+  },
+  "services": {
+    "import_recipe": {
+      "name": "Import recipe",
+      "description": "Imports a recipe from a web page and stores it.",
+      "fields": {
+        "url": {
+          "name": "URL",
+          "description": "Address of the recipe page."
+        }
+      }
+    },
+    "add_to_shopping_list": {
+      "name": "Add to shopping list",
+      "description": "Adds a recipe's ingredients to a to-do list, skipping items already on it.",
+      "fields": {
+        "recipe": {
+          "name": "Recipe",
+          "description": "Recipe name or id."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "Defaults to todo.shopping_list."
+        },
+        "scale": {
+          "name": "Scale",
+          "description": "Multiplier for the quantities (2 = double)."
+        },
+        "servings": {
+          "name": "Servings",
+          "description": "Scale to this many servings instead of using a multiplier."
+        },
+        "units": {
+          "name": "Units",
+          "description": "grams (weights/volumes converted where possible) or original."
+        },
+        "ingredients": {
+          "name": "Ingredients",
+          "description": "Only these ingredient positions (0-based); default is all."
+        },
+        "makes": {
+          "name": "Makes",
+          "description": "Scale to this many of the recipe's yield (for example 16 pancakes). Without scale, servings or makes, the recipe's default multiplier is used."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Recipes options",
+        "description": "Optionally call a notify service when a kitchen timer finishes (for example your phone). Timers also fire the `hass_recipes_timer_finished` event for automations.",
+        "data": {
+          "notify_service": "Notify service"
+        }
+      }
+    }
+  }
+}

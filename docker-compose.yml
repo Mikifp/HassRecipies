@@ -1,0 +1,8 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    ports:
+      - "8123:8123"
+    volumes:
+      - ./dev/config:/config
+      - ./custom_components/hass_recipes:/config/custom_components/hass_recipes
