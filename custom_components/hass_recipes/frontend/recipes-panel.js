@@ -1,148 +1,36 @@
 /* Recipes panel: dependency-free web component rendered in the HA sidebar. */
 
-const esc = (value) =>
-  String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-
-const minutes = (m) => {
-  if (!m) return "";
-  const h = Math.floor(m / 60);
-  const r = m % 60;
-  return h ? `${h} h${r ? ` ${r} min` : ""}` : `${r} min`;
-};
+// Shared helpers (also used by the dashboard cards), versioned like this file.
+const __v = new URL(import.meta.url).searchParams.get("v");
+const {
+  esc,
+  minutes,
+  parseNumber,
+  formatNumber,
+  scaleIngredient,
+  baseServings,
+  normStep,
+  isHeader,
+  headerText,
+  splitSub,
+  joinSub,
+  clock,
+  duration,
+  fmtGrams,
+  COUNT_AS_ITEMS,
+  ingredientText,
+  ingParts,
+  fmtYield,
+  SCALES,
+  scaleBasis,
+  roundAmount, lengthText
+} = await import(`./recipes-shared.js${__v ? `?v=${__v}` : ""}`);
 
 const lines = (text) => text.split("\n").map((l) => l.trim()).filter(Boolean);
+
 const toInt = (v) => (v === "" || v == null ? null : Math.max(0, parseInt(v, 10) || 0));
 
-// ---- ingredient scaling -------------------------------------------------
-const UNICODE_FRACTIONS = { "½": 0.5, "⅓": 1 / 3, "⅔": 2 / 3, "¼": 0.25, "¾": 0.75, "⅕": 0.2, "⅖": 0.4, "⅗": 0.6, "⅘": 0.8, "⅙": 1 / 6, "⅚": 5 / 6, "⅛": 0.125, "⅜": 0.375, "⅝": 0.625, "⅞": 0.875 };
-const FRAC_CHARS = Object.keys(UNICODE_FRACTIONS).join("");
-const NUM = `(?:\\d+\\s+\\d+/\\d+|\\d+/\\d+|\\d+\\s*[${FRAC_CHARS}]|[${FRAC_CHARS}]|\\d+(?:[.,]\\d+)?)`;
-const LEADING_QTY = new RegExp(`^(${NUM})(?:(\\s*[-–]\\s*)(${NUM}))?(?![\\d/])`);
-
-const parseNumber = (str) => {
-  str = str.trim();
-  let m;
-  if ((m = str.match(/^(\d+)\s+(\d+)\/(\d+)$/))) return +m[1] + +m[2] / +m[3];
-  if ((m = str.match(/^(\d+)\/(\d+)$/))) return +m[1] / +m[2];
-  if ((m = str.match(new RegExp(`^(\\d+)\\s*([${FRAC_CHARS}])$`)))) return +m[1] + UNICODE_FRACTIONS[m[2]];
-  if (UNICODE_FRACTIONS[str] !== undefined) return UNICODE_FRACTIONS[str];
-  return parseFloat(str.replace(",", "."));
-};
-
-const FRACTION_GLYPHS = [[0.125, "⅛"], [0.25, "¼"], [1 / 3, "⅓"], [0.5, "½"], [2 / 3, "⅔"], [0.75, "¾"], [0.875, "⅞"]];
-const formatNumber = (n) => {
-  if (n >= 10) return String(Math.round(n * 10) / 10).replace(/\.0$/, "");
-  const whole = Math.floor(n + 0.02);
-  const frac = n - whole;
-  if (frac < 0.02) return String(whole);
-  for (const [value, glyph] of FRACTION_GLYPHS) {
-    if (Math.abs(frac - value) < 0.03) return whole ? `${whole}${glyph}` : glyph;
-  }
-  return String(Math.round(n * 100) / 100);
-};
-
-const scaleIngredient = (text, k) => {
-  if (k === 1) return text;
-  const m = text.match(LEADING_QTY);
-  if (!m) return text;
-  const a = parseNumber(m[1]);
-  if (!Number.isFinite(a)) return text;
-  let out = formatNumber(a * k);
-  if (m[3]) {
-    const b = parseNumber(m[3]);
-    if (!Number.isFinite(b)) return text;
-    out += m[2] + formatNumber(b * k);
-  }
-  return out + text.slice(m[0].length);
-};
-
-const baseServings = (servings) => {
-  const m = String(servings ?? "").match(/\d+(?:[.,]\d+)?/);
-  return m ? parseFloat(m[0].replace(",", ".")) : null;
-};
-
-// ---- steps & timers -----------------------------------------------------
-const normStep = (s) =>
-  typeof s === "string"
-    ? { text: s, ingredients: [], timer: null, section: false }
-    : { text: s.text || "", ingredients: s.ingredients || [], timer: s.timer || null, section: !!s.section };
-
-// Stored as plain strings: "## Dough" is a section heading, "200 g butter || 180 g oil"
-// carries a substitute with its own amount.
-const isHeader = (t) => /^#{1,6}\s/.test(String(t));
-const headerText = (t) => String(t).replace(/^#{1,6}\s*/, "").trim();
-const splitSub = (t) => {
-  const s = String(t);
-  const i = s.indexOf(" || ");
-  return i < 0 ? [s.trim(), ""] : [s.slice(0, i).trim(), s.slice(i + 4).trim()];
-};
-const joinSub = (text, sub) => (sub.trim() ? `${text.trim()} || ${sub.trim()}` : text.trim());
-
-const clock = (sec) => {
-  sec = Math.max(0, Math.ceil(sec));
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const pad = (n) => String(n).padStart(2, "0");
-  return h ? `${h}:${pad(m)}:${pad(sec % 60)}` : `${pad(m)}:${pad(sec % 60)}`;
-};
-
-const duration = (sec) => {
-  if (sec < 60) return `${sec} sec`;
-  const m = Math.round((sec / 60) * 100) / 100;
-  return minutes(Math.floor(m)) + (m % 1 ? ` ${Math.round((m % 1) * 60)} sec` : "");
-};
-
 const TODO_KEY = "hass_recipes_todo";
-
-
-const fmtGrams = (g) => {
-  if (g >= 100) return String(Math.round(g));
-  if (g >= 10) return String(Math.round(g * 2) / 2).replace(/\.0$/, "");
-  return String(Math.round(g * 10) / 10).replace(/\.0$/, "");
-};
-
-// Whole items read better as counts than as estimated weights.
-const COUNT_AS_ITEMS = new Set(["clove", "slice", "piece", "sprig", "head", "bunch", "handful", "sheet"]);
-
-/** Text for ingredient `i` of recipe `r`, scaled by `k`, in the chosen unit mode. */
-const ingredientText = (r, i, k, mode) => {
-  const raw = r.ingredients[i] ?? "";
-  if (isHeader(raw)) return headerText(raw);
-  const text = splitSub(raw)[0];
-  const p = (r.parsed_ingredients || [])[i];
-  const countable = p && p.approximate && (p.unit === null || COUNT_AS_ITEMS.has(p.unit));
-  if (mode === "grams" && p && p.quantity !== null && !countable) {
-    const food = p.food + (p.note ? `, ${p.note}` : "");
-    const tilde = p.approximate ? "≈ " : "";
-    if (p.grams !== null) {
-      const hi = p.grams_max !== null ? `–${fmtGrams(p.grams_max * k)}` : "";
-      return `${tilde}${fmtGrams(p.grams * k)}${hi} g ${food}`;
-    }
-    if (p.ml !== null) return `${fmtGrams(p.ml * k)} ml ${food}`;
-  }
-  return scaleIngredient(text, k);
-};
-
-/**
- * Pieces of one ingredient for display: a main amount, the food, a note and (when
- * grams were substituted) a faded "as written" amount, e.g. "10 g" + "sukker" + "1¾ cups".
- */
-const ingParts = (p, text, k, mode) => {
-  if (!p || p.quantity === null || p.quantity === undefined) return { qty: "", food: text, note: "", sub: "" };
-  const range = (a, b) => formatNumber(a * k) + (b !== null && b !== undefined ? `–${formatNumber(b * k)}` : "");
-  const orig = range(p.quantity, p.quantity_max) + (p.unit_text ? ` ${p.unit_text}` : "");
-  const base = { food: p.food, note: p.note || "" };
-  const countable = p.approximate && (p.unit === null || COUNT_AS_ITEMS.has(p.unit));
-  if (mode === "grams" && !countable) {
-    const tilde = p.approximate ? "≈ " : "";
-    if (p.grams !== null) {
-      const hi = p.grams_max !== null ? `–${fmtGrams(p.grams_max * k)}` : "";
-      return { ...base, qty: `${tilde}${fmtGrams(p.grams * k)}${hi} g`, sub: p.unit === "g" ? "" : orig };
-    }
-    if (p.ml !== null) return { ...base, qty: `${fmtGrams(p.ml * k)} ml`, sub: p.unit === "ml" ? "" : orig };
-  }
-  return { ...base, qty: orig, sub: "" };
-};
 
 /** HTML for ingredient `i`: amount + bold food, faded original amount, optional substitute. */
 const ingredientHtml = (r, i, k, mode) => {
@@ -177,10 +65,8 @@ const ingredientPlain = (r, i, k, mode) => {
 };
 
 const PROGRESS_KEY = "hass_recipes_progress";
-const HANDLED_KEY = "hass_recipes_timers_handled";
-const fmtYield = (n) => String(Math.round(n * 100) / 100);
 
-const SCALES = [[0.5, "½×"], [1, "1×"], [2, "2×"], [3, "3×"], [4, "4×"]];
+const HANDLED_KEY = "hass_recipes_timers_handled";
 
 const STYLE = `
   :host { display: block; height: 100%; overflow: auto; container-type: inline-size; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
@@ -268,7 +154,10 @@ const STYLE = `
   .bar { position: sticky; bottom: 10px; z-index: 1; display: flex; gap: 6px; max-width: 560px; margin: 16px auto 0; padding: 6px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 14px; box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,.25)); }
   .bar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 0; border-radius: 10px; background: none; color: var(--primary-text-color); font: inherit; font-size: 12px; cursor: pointer; }
   .bar button.p { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+  .bar button.on { color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 16%, transparent); }
   .bar ha-icon { --mdc-icon-size: 22px; }
+  .bar.bar-top { position: static; max-width: none; margin: 0 0 16px; box-shadow: none; }
+  .bar.bar-bottom { display: none; }
   .more-actions { display: flex; gap: 14px; justify-content: center; margin: 14px 0 4px; font-size: 13px; }
   .more-actions button { background: none; border: 0; padding: 4px; cursor: pointer; font: inherit; color: var(--secondary-text-color); }
   .more-actions button.danger { color: var(--error-color, #db4437); }
@@ -287,6 +176,8 @@ const STYLE = `
     .pane.ingredients-pane { position: static; }
     .notes-pane { margin-top: 0; }
     .bar { max-width: none; }
+    .bar.bar-top { display: none; }
+    .bar.bar-bottom { display: flex; }
   }
   ul.ingredients { list-style: none; padding: 0; margin: 0; }
   ul.ingredients li { padding: 6px 0; border-bottom: 1px solid var(--divider-color); }
@@ -338,12 +229,12 @@ const STYLE = `
   .step.is-section { border-left: 4px solid var(--primary-color); }
   .yield-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
   .yield-row input { width: auto; }
-  .makes { display: flex; gap: 6px; align-items: center; margin: -8px 0 14px; }
-  .makes input { width: 72px; padding: 3px 6px; font-size: 14px; }
   .scale { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 16px; }
   .scale { flex-wrap: wrap; gap: 6px 4px; }
   .scale .chip { padding: 3px 9px; white-space: nowrap; }
-  .scale input { width: 64px; flex: 0 0 auto; padding: 3px 6px; font-size: 14px; margin-left: 4px; }
+  .scale input { width: 64px; flex: 0 0 auto; padding: 3px 6px; font-size: 14px; text-align: center; }
+  .scale .step { width: 30px; height: 30px; padding: 0; border: 1px solid var(--divider-color); border-radius: 8px; background: none; color: inherit; font-size: 18px; line-height: 1; cursor: pointer; }
+  .scale .hint { flex-basis: 100%; font-size: 12px; color: var(--secondary-text-color); }
   .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   form .field { margin-bottom: 14px; }
   form label.lbl { display: block; font-size: 13px; color: var(--secondary-text-color); margin-bottom: 4px; }
@@ -444,6 +335,16 @@ class HassRecipesPanel extends HTMLElement {
     this._ignorePop = false;
     this._uid = 0;
     this._focusUid = null;
+    // This module awaits its shared helpers before defining the element, so Home Assistant
+    // may already have set hass/narrow/route/panel on the not-yet-upgraded element. Those
+    // sit as plain own properties and would hide the setters: re-apply them through the class.
+    for (const prop of ["panel", "route", "narrow", "hass"]) {
+      if (Object.prototype.hasOwnProperty.call(this, prop)) {
+        const value = this[prop];
+        delete this[prop];
+        this[prop] = value;
+      }
+    }
   }
 
   connectedCallback() {
@@ -617,6 +518,7 @@ class HassRecipesPanel extends HTMLElement {
       this._recipes = res.recipes;
       this._tags = res.tags;
       this._cookbooks = res.cookbooks || [];
+      this._cookingId = res.cooking_recipe_id || null;
       if (this._cookbookId && !this._cookbooks.some((c) => c.id === this._cookbookId)) this._cookbookId = null;
       this._error = "";
     } catch (err) {
@@ -1321,12 +1223,31 @@ class HassRecipesPanel extends HTMLElement {
       </div>`;
   }
 
-  /** Mealie-style cook mode: the whole recipe at once, ingredients beside the steps. */
-  _cookAllHtml(r) {
-    const k = this._scale;
+  /** One control for scaling: type an amount, nudge it, or pick a multiplier. */
+  _scaleControlHtml(r, k) {
+    const b = scaleBasis(r);
     const presets = SCALES.map(
       ([v, label]) => `<button class="chip ${v === k ? "active" : ""}" data-scale="${v}">${label}</button>`
     ).join("");
+    const amount = fmtYield(b.base * k);
+    const hint =
+      k === 1
+        ? "As written"
+        : `${formatNumber(k)}× the recipe${b.unit === "×" ? "" : ` (written for ${fmtYield(b.base)}${b.unit ? ` ${esc(b.unit)}` : ""})`}`;
+    return `<div class="scale">
+        <span class="muted">${b.label}</span>
+        <button class="step" data-step="-1" aria-label="Less">−</button>
+        <input id="amount" type="number" min="0" step="any" value="${amount}" title="Type how much you want">
+        <button class="step" data-step="1" aria-label="More">+</button>
+        ${b.unit && b.unit !== "×" ? `<span>${esc(b.unit)}</span>` : b.unit === "×" ? "<span>×</span>" : ""}
+        <span style="width:6px"></span>${presets}
+        <span class="hint">${hint}</span>
+      </div>`;
+  }
+
+  /** Mealie-style cook mode: the whole recipe at once, ingredients beside the steps. */
+  _cookAllHtml(r) {
+    const k = this._scale;
     const all = r.instructions.map(normStep);
     const firstOpen = all.findIndex((st, i) => !st.section && !this._doneSteps.has(i));
     let num = 0;
@@ -1353,8 +1274,7 @@ class HassRecipesPanel extends HTMLElement {
       <div class="cookp">
         <div class="cook-top">
           <h2>${esc(r.name)}<span class="muted" style="font-weight:400">${makes}</span></h2>
-          <div class="scale"><span class="muted">Scale</span>${presets}
-            <input id="scale" type="number" min="0" step="any" value="${esc(k)}" title="Custom multiplier"></div>
+          ${this._scaleControlHtml(r, k)}
           <button class="btn secondary" data-act="cook-focus" title="Show one step at a time">One step at a time</button>
           <button class="btn secondary" data-act="cook-exit">Exit</button>
         </div>
@@ -1460,9 +1380,6 @@ class HassRecipesPanel extends HTMLElement {
       makes,
       servings,
     ].join("");
-    const presets = SCALES.map(
-      ([v, label]) => `<button class="chip ${v === k ? "active" : ""}" data-scale="${v}">${label}</button>`
-    ).join("");
     const anyChecks = this._checked.size || this._doneSteps.size;
     const tab = this._tab || "ingredients";
     const tags = [
@@ -1472,6 +1389,20 @@ class HassRecipesPanel extends HTMLElement {
     ].join("");
     const tabBtn = (id, label) => `<button class="${tab === id ? "active" : ""}" data-tab-btn="${id}">${label}</button>`;
     const icon = (n) => `<ha-icon icon="mdi:${n}"></ha-icon>`;
+    // The same actions twice: inline above the columns on a wide screen, and
+    // pinned to the bottom on a narrow one (CSS shows whichever fits).
+    const barHtml = (cls) => `
+      <div class="bar ${cls}">
+        <button class="p" data-act="cook" data-id="${esc(r.id)}">${icon("chef-hat")}Cook</button>
+        <button data-act="shop" data-id="${esc(r.id)}">${icon("cart-outline")}Shop</button>
+        <button data-act="print" data-id="${esc(r.id)}">${icon("printer-outline")}Print</button>
+        <button data-act="dashboard-recipe" data-id="${esc(r.id)}" class="${this._cookingId === r.id ? "on" : ""}" aria-pressed="${this._cookingId === r.id}" title="${
+          this._cookingId === r.id
+            ? "Shown on the dashboard cook card. Press to remove."
+            : "Show this recipe on the dashboard cook card"
+        }">${icon(this._cookingId === r.id ? "view-dashboard" : "view-dashboard-outline")}Dashboard</button>
+        <button data-act="edit" data-id="${esc(r.id)}">${icon("pencil-outline")}Edit</button>
+      </div>`;
     return `
       <div class="toolbar"><button class="btn secondary" data-act="back">← Back</button></div>
       <div class="detail">
@@ -1482,17 +1413,11 @@ class HassRecipesPanel extends HTMLElement {
           ${tags ? `<div class="chips">${tags}</div>` : ""}
           ${stats ? `<div class="stats">${stats}</div>` : ""}
           <div class="tabs">${tabBtn("ingredients", "Ingredients")}${tabBtn("steps", "Instructions")}${r.notes ? tabBtn("notes", "Notes") : ""}</div>
+          ${barHtml("bar-top")}
           <div class="cols">
             <section class="pane ingredients-pane tab-pane ${tab === "ingredients" ? "active" : ""}">
               <h3>Ingredients</h3>
-              <div class="scale"><span class="muted">Scale</span>${presets}
-                <input id="scale" type="number" min="0" step="any" value="${esc(k)}" title="Custom multiplier"></div>
-              ${
-                r.yield_amount
-                  ? `<div class="makes"><span class="muted">Makes</span>
-                      <input id="makes" type="number" min="0" step="any" value="${fmtYield(r.yield_amount * k)}" title="Type how many you want"> <span>${esc(r.yield_unit || "")}</span></div>`
-                  : ""
-              }
+              ${this._scaleControlHtml(r, k)}
               ${this._ingredientsListHtml(r, k)}
             </section>
             <section class="pane tab-pane ${tab === "steps" ? "active" : ""}">
@@ -1503,12 +1428,7 @@ class HassRecipesPanel extends HTMLElement {
           ${r.source_url ? `<p class="muted">Source: <a href="${esc(r.source_url)}" target="_blank" rel="noopener noreferrer">${esc(r.source_url)}</a></p>` : ""}
         </div>
       </div>
-      <div class="bar">
-        <button class="p" data-act="cook" data-id="${esc(r.id)}">${icon("chef-hat")}Cook</button>
-        <button data-act="shop" data-id="${esc(r.id)}">${icon("cart-outline")}Shop</button>
-        <button data-act="print" data-id="${esc(r.id)}">${icon("printer-outline")}Print</button>
-        <button data-act="edit" data-id="${esc(r.id)}">${icon("pencil-outline")}Edit</button>
-      </div>
+      ${barHtml("bar-bottom")}
       <div class="more-actions">
         ${anyChecks ? `<button data-act="progress-reset">↺ Clear checks</button>` : ""}
         <button class="danger" data-act="delete" data-id="${esc(r.id)}">Delete recipe</button>
@@ -1911,23 +1831,23 @@ class HassRecipesPanel extends HTMLElement {
       this._scale = parseFloat(e.currentTarget.dataset.scale);
       this._render();
     });
-    const makesInput = root.getElementById("makes");
-    if (makesInput) {
-      makesInput.addEventListener("change", () => {
-        const r = this._recipe(this._view.id);
-        const want = parseFloat(makesInput.value);
-        if (r && r.yield_amount && want > 0) this._scale = Math.round((want / r.yield_amount) * 10000) / 10000;
-        this._render();
-      });
-    }
-    const scale = root.getElementById("scale");
-    if (scale) {
-      scale.addEventListener("change", () => {
-        const v = parseFloat(scale.value);
-        this._scale = v > 0 ? v : 1;
-        this._render();
-      });
-    }
+    // the amount box and its +/- buttons: whatever the recipe counts, they set the one multiplier
+    const setAmount = (want) => {
+      const r = this._recipe(this._view.id);
+      if (!r || !(want > 0)) return;
+      this._scale = Math.round((want / scaleBasis(r).base) * 10000) / 10000;
+      this._render();
+    };
+    const amount = root.getElementById("amount");
+    if (amount) amount.addEventListener("change", () => setAmount(parseFloat(amount.value)));
+    on("[data-step]", "click", (e) => {
+      const r = this._recipe(this._view.id);
+      if (!r) return;
+      const b = scaleBasis(r);
+      const step = b.unit === "×" ? 0.5 : b.base >= 20 ? Math.round(b.base / 8) : 1;
+      const next = b.base * this._scale + step * parseInt(e.currentTarget.dataset.step, 10);
+      setAmount(Math.max(step, Math.round(next * 100) / 100));
+    });
     on("input[data-i]", "change", (e) => {
       const n = +e.currentTarget.dataset.i;
       if (e.currentTarget.checked) this._checked.add(n);
@@ -2112,6 +2032,19 @@ class HassRecipesPanel extends HTMLElement {
         break;
       case "print":
         this._printRecipe(this._recipe(id));
+        break;
+      case "dashboard-recipe":
+        try {
+          await this._ws({
+            type: "hass_recipes/set_cooking_recipe",
+            recipe_id: this._cookingId === id ? null : id,
+          });
+          await this._load();
+          this._flash(this._cookingId === id ? "Dashboard cook card now shows this recipe." : "Dashboard cook card cleared.");
+        } catch (err) {
+          this._error = err.message;
+        }
+        this._render();
         break;
       case "select":
         this._select = !this._select;
