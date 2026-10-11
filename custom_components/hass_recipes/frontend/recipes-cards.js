@@ -96,6 +96,9 @@ const I18N = {
     ed_list_height: "List height (px, 0 for no scrolling)",
     ed_content_height: "Step height (px, 0 for no scrolling)",
     ed_keep_awake: "Keep the screen awake while cooking",
+    ed_section_buttons: "Buttons to jump between sections",
+    section_prev: "Previous section",
+    section_next: "Next section",
     ed_swipe: "Swipe left and right to change step",
     ed_text_size: "Text size",
     help_recipe: "Leave empty to follow the recipe chosen with the Dashboard button in the Recipes panel.",
@@ -180,6 +183,9 @@ const I18N = {
     ed_list_height: "Listehøjde (px, 0 for ingen rulning)",
     ed_content_height: "Trinhøjde (px, 0 for ingen rulning)",
     ed_keep_awake: "Hold skærmen tændt under madlavning",
+    ed_section_buttons: "Knapper til at skifte mellem sektioner",
+    section_prev: "Forrige sektion",
+    section_next: "Næste sektion",
     ed_swipe: "Stryg til siden for at skifte trin",
     ed_text_size: "Tekststørrelse",
     help_recipe: "Lad stå tom for at følge opskriften valgt med Dashboard-knappen i Opskrifter.",
@@ -214,6 +220,30 @@ const pagesFor = (r) => {
   const hasIngs = (r.ingredients || []).some((t) => !isHeader(t));
   const pages = hasIngs ? [{ page: "ingredients", i: -1, text: "", ingredients: [], timer: null }, ...real] : real;
   return { all, real, pages, hasIngs };
+};
+
+/** Pages where a section begins: [{ page, title }]; empty unless the recipe has two or more. */
+const sectionStarts = (all, pages) => {
+  const starts = [];
+  const pageOf = new Map(pages.map((p, idx) => [p.i, idx]));
+  let lastTitle = null;
+  let section = false;
+  for (const s of all) {
+    if (s.section) {
+      lastTitle = s.text;
+      section = true;
+      continue;
+    }
+    const idx = pageOf.get(s.i);
+    if (idx === undefined) continue;
+    if (section) {
+      starts.push({ page: idx, title: lastTitle });
+      section = false;
+    }
+  }
+  // what comes before the first heading is a place to go back to as well
+  if (starts.length && starts[0].page > 0) starts.unshift({ page: 0, title: "" });
+  return starts.length >= 2 ? starts : [];
 };
 
 /* ---- ticks and done steps: the record the panel keeps, so both agree --------- */
@@ -938,6 +968,18 @@ class HassRecipesCookCard extends RecipesBase {
       })
       .join("");
     const last = n === pages.length - 1;
+    // jumping between sections (an option): the start of this section first, then the one before
+    const sections = this._config.section_buttons ? sectionStarts(all, pages) : [];
+    let secPrev = null;
+    let secNext = null;
+    if (sections.length) {
+      let at = 0;
+      sections.forEach((s, i) => {
+        if (s.page <= n) at = i;
+      });
+      secPrev = sections[at].page < n ? sections[at] : sections[at - 1] || null;
+      secNext = sections[at + 1] || null;
+    }
     const html = `
       <style>
         .body { padding: 4px 16px 16px; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; touch-action: pan-y; }
@@ -969,6 +1011,10 @@ class HassRecipesCookCard extends RecipesBase {
         .timer-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
         .irow .alt { display: block; font-size: 12px; }
         .irow .cmt { display: block; font-size: 12px; font-style: italic; }
+        .secnav { display: flex; gap: 8px; margin-top: 4px; }
+        .secnav .btn { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: calc(13px * var(--hr-fs, 1)); }
+        .secnav .btn span { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+        .secnav .btn small { font-size: 11px; opacity: .75; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .nav { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
         .nav .next { margin-left: auto; }
       </style>
@@ -987,6 +1033,18 @@ class HassRecipesCookCard extends RecipesBase {
         ${this._timersHtml()}
         <div class="actions">
           ${timerButtons ? `<div class="timer-btns">${timerButtons}</div>` : ""}
+          ${
+            sections.length
+              ? `<div class="secnav">
+                  <button class="btn" id="secprev" ${secPrev ? "" : "disabled"} title="${esc(secPrev ? secPrev.title : "")}"><ha-icon icon="mdi:chevron-double-left"></ha-icon><span>${esc(
+                    this._t("section_prev")
+                  )}${secPrev && secPrev.title ? `<small>${esc(secPrev.title)}</small>` : ""}</span></button>
+                  <button class="btn" id="secnext" ${secNext ? "" : "disabled"} title="${esc(secNext ? secNext.title : "")}"><span>${esc(
+                    this._t("section_next")
+                  )}${secNext && secNext.title ? `<small>${esc(secNext.title)}</small>` : ""}</span><ha-icon icon="mdi:chevron-double-right"></ha-icon></button>
+                </div>`
+              : ""
+          }
           <div class="nav">
             <button class="btn" id="prev" ${n === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-left"></ha-icon>${esc(this._t("back"))}</button>
             <button class="btn p next" id="next">${esc(this._t(last ? "start_over" : "next"))}<ha-icon icon="mdi:${last ? "restart" : "arrow-right"}"></ha-icon></button>
@@ -1001,6 +1059,10 @@ class HassRecipesCookCard extends RecipesBase {
         saveProgress(r.id, { ing: new Set(), steps: new Set() });
         this._goto(0, pages.length);
       };
+      const secPrevBtn = root.getElementById("secprev");
+      if (secPrevBtn) secPrevBtn.onclick = () => secPrev && this._goto(secPrev.page, pages.length);
+      const secNextBtn = root.getElementById("secnext");
+      if (secNextBtn) secNextBtn.onclick = () => secNext && this._goto(secNext.page, pages.length);
       root.getElementById("prev").onclick = () => this._goto(n - 1, pages.length);
       root.getElementById("next").onclick = () => (last ? finish() : this._goto(n + 1, pages.length));
       for (const btn of root.querySelectorAll("[data-timer-key]")) {
@@ -1447,6 +1509,7 @@ class HassRecipesCardEditor extends HTMLElement {
         { value: "xlarge", label: t("opt_size_xlarge") },
       ]),
       { name: "swipe", selector: { boolean: {} } },
+      { name: "section_buttons", selector: { boolean: {} } },
       { name: "keep_awake", selector: { boolean: {} } },
       units,
     ];

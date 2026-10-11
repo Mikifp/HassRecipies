@@ -56,6 +56,8 @@ const da = {
     Cook: "Lav mad",
     Shop: "Køb ind",
     Dashboard: "Dashboard",
+    "Previous section": "Forrige sektion",
+    "Next section": "Næste sektion",
     "New editor (beta)": "Ny editor (beta)",
     "Classic editor": "Klassisk editor",
     "Details: photo, times, servings, tags": "Detaljer: foto, tider, portioner, tags",

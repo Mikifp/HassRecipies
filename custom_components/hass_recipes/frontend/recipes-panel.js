@@ -138,6 +138,10 @@ const STYLE = `
   .ing-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 3px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; background: color-mix(in srgb, var(--primary-color) 9%, transparent); border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent); }
   .ing-chip .q { color: var(--secondary-text-color); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .ing-chip b { font-weight: 500; }
+  .cook-sections { display: flex; gap: 8px; margin-top: 14px; }
+  .cook-sections .btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+  .cook-sections .btn small { font-size: 12px; opacity: .8; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cook-jumps { display: inline-flex; gap: 6px; flex-wrap: wrap; }
   .step-text .ing-chip, .cook .cook-text .ing-chip, .cstep .cstep-text .ing-chip { display: inline-flex; padding: 0 8px; margin: 0 1px; font-size: .9em; vertical-align: baseline; }
   .timer-btn { margin-top: 10px; }
   .step { border: 1px solid var(--divider-color); border-radius: 8px; padding: 10px; margin-bottom: 12px; }
@@ -941,6 +945,17 @@ class HassRecipesPanel extends HTMLElement {
       case "cook-next":
         this._cookStep(1);
         break;
+      case "cook-sec-prev":
+        this._cookSection(-1);
+        break;
+      case "cook-sec-next":
+        this._cookSection(1);
+        break;
+      case "cook-jump": {
+        const head = this.shadowRoot.querySelector(`.csection[data-sec="${id}"]`);
+        if (head) head.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
       case "cook-prev":
         this._cookStep(-1);
         break;

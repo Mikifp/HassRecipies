@@ -28,6 +28,7 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - In the editor, drag the ⠿ handle to reorder ingredients and steps (↑ ↓ buttons on touch screens), and use **+ Step here** between steps to insert a step or section anywhere
 - **New editor (beta)**: a toggle in the recipe editor switches to section cards, where each section holds its ingredients and its steps together. Ingredients a step uses appear as chips inside the step text (type `@` to add one); drag ingredients and steps between sections. It edits the same data as the classic form, so you can switch back and forth
 - Steps show the ingredients they name as chips right in the text, with the amount scaled to what you are making, in the recipe page, cook mode and the dashboard cards; ingredients a step uses but does not name stay in the row below it
+- Cook mode has **Previous section** / **Next section** buttons for recipes with sections (and jump buttons per section when the whole recipe is shown)
 - Unsaved-changes prompt when you leave the editor
 - Yield: say what the ingredients make ("8 pancakes") and the multiplier the recipe opens at (2× = 16 pancakes); type the number you want and everything scales. `makes:` works in the shopping-list service too
 - Scale a recipe (½×–4× or any multiplier); linked ingredients scale too
@@ -118,7 +119,7 @@ limit: 20                                # optional: layout, show: all | list | 
 The **kitchen** card is a small app made of the list and cook cards. It opens on the recipe list; tap a recipe and the list gives way to cook mode, with a **Recipes** button to go back (and a button in the list to resume the recipe you were cooking). Picking a recipe is the same choice as the panel's Dashboard button, so every card follows; the open icon on a row reads it in the Recipes panel. Running timers show on both screens.
 
 **Cooking options** (cook and kitchen cards, also in the visual editor):
-`text_size: normal | large | xlarge` for reading from across the counter, `swipe: true` (the default) to swipe left and right between steps, and `keep_awake: true` to stop the screen switching off while the card is showing. Ingredients and steps can be ticked off; the ticks are the same ones the Recipes panel keeps, so both agree on that device. The cards follow the language Home Assistant is set to (English and Danish).
+`text_size: normal | large | xlarge` for reading from across the counter, `swipe: true` (the default) to swipe left and right between steps, `section_buttons: true` to add **Previous section** / **Next section** buttons above Back and Next (they show the section's name and need a recipe with two or more sections), and `keep_awake: true` to stop the screen switching off while the card is showing. Ingredients and steps can be ticked off; the ticks are the same ones the Recipes panel keeps, so both agree on that device. The cards follow the language Home Assistant is set to (English and Danish).
 
 **Sizing.** In a sections dashboard the cards follow `grid_options` (resize them in the dashboard editor, or set `columns` / `rows`): a card with a set height fills it, and the recipe list and the step text scroll inside it. Without a set height the list stops at `list_height` pixels and the step text at `content_height` (default 480, 0 for no limit) and scrolls beyond that.
 

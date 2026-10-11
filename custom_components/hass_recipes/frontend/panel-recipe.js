@@ -145,6 +145,64 @@ export default function (h) {
         .filter((st) => !st.section);
     },
 
+    /** Where each section starts among the cook steps: [{ n, title }] (empty unless there are 2 or more). */
+    _cookSections(r) {
+      const starts = [];
+      let n = 0;
+      let title = null;
+      let first = true;
+      for (const st of r.instructions.map(normStep)) {
+        if (st.section) {
+          title = st.text;
+          first = false;
+          starts.push({ n, title });
+          continue;
+        }
+        if (first && n === 0) starts.push({ n: 0, title: "" });
+        first = false;
+        n += 1;
+      }
+      // a heading with no steps after it, or two in a row, is not a place to go to
+      const cookCount = n;
+      const real = starts.filter((s, i) => s.n < cookCount && (i === starts.length - 1 || starts[i + 1].n > s.n));
+      return real.length >= 2 ? real : [];
+    },
+
+    _cookSection(delta) {
+      const r = this._recipe(this._view.id);
+      if (!r) return;
+      const starts = this._cookSections(r);
+      const steps = this._cookSteps(r);
+      const cur = Math.min(Math.max(this._view.step || 0, 0), Math.max(steps.length - 1, 0));
+      let at = 0;
+      starts.forEach((s, i) => {
+        if (s.n <= cur) at = i;
+      });
+      let target = null;
+      if (delta > 0) target = starts[at + 1];
+      else target = starts[at].n < cur ? starts[at] : starts[at - 1];
+      if (!target) return;
+      this._view = { ...this._view, step: target.n };
+      this._render();
+      this.scrollTo(0, 0);
+    },
+
+    _cookSectionNavHtml(r, cur) {
+      const starts = this._cookSections(r);
+      if (!starts.length) return "";
+      let at = 0;
+      starts.forEach((s, i) => {
+        if (s.n <= cur) at = i;
+      });
+      const prev = starts[at].n < cur ? starts[at] : starts[at - 1];
+      const next = starts[at + 1];
+      const btn = (act, target, label, arrowFirst) =>
+        `<button class="btn secondary" data-act="${act}" ${target ? "" : "disabled"}>${arrowFirst ? "⇤ " : ""}${label}${arrowFirst ? "" : " ⇥"}${
+          target && target.title ? `<small>${esc(target.title)}</small>` : ""
+        }</button>`;
+      return `<div class="cook-sections">${btn("cook-sec-prev", prev, "Previous section", true)}${btn("cook-sec-next", next, "Next section", false)}</div>`;
+    },
+
     _cookHtml(r) {
       const steps = this._cookSteps(r);
       const n = Math.min(Math.max(this._view.step || 0, 0), Math.max(steps.length - 1, 0));
@@ -170,6 +228,7 @@ export default function (h) {
           ${links ? `<div class="step-ings">${links}</div>` : ""}
           ${this._timerButtonsHtml(r, st, st.i, n + 1)}
           <label class="cook-done"><input type="checkbox" data-step-done="${st.i}" ${done ? "checked" : ""}> Mark this step as done</label>
+          ${this._cookSectionNavHtml(r, n)}
           <div class="cook-nav">
             <button class="btn secondary" data-act="cook-prev" ${n === 0 ? "disabled" : ""}>← Previous</button>
             <button class="btn" data-act="${last ? "cook-finish" : "cook-next"}">${last ? "Finish ✓" : "Next →"}</button>
@@ -215,7 +274,7 @@ export default function (h) {
       let num = 0;
       const steps = all
         .map((st, n) => {
-          if (st.section) return `<h3 class="csection">${esc(st.text)}</h3>`;
+          if (st.section) return `<h3 class="csection" data-sec="${n}">${esc(st.text)}</h3>`;
           num += 1;
           const done = this._doneSteps.has(n);
           const { html: textHtml, links } = this._stepTextParts(r, st, k);
@@ -234,6 +293,14 @@ export default function (h) {
           <div class="cook-top">
             <h2>${esc(r.name)}<span class="muted" style="font-weight:400">${makes}</span></h2>
             ${this._scaleControlHtml(r, k)}
+            ${(() => {
+              const jumps = all.map((x, n) => ({ x, n })).filter((o) => o.x.section);
+              return this._cookSections(r).length
+                ? `<span class="cook-jumps">${jumps
+                    .map((o) => `<button class="btn secondary" data-act="cook-jump" data-id="${o.n}">${esc(o.x.text)}</button>`)
+                    .join("")}</span>`
+                : "";
+            })()}
             <button class="btn secondary" data-act="cook-focus" title="Show one step at a time">One step at a time</button>
             <button class="btn secondary" data-act="cook-exit">Exit</button>
           </div>
