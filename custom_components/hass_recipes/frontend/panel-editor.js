@@ -23,30 +23,48 @@ export default function (h) {
   const NUMERIC = /^[\d¼-¾⅐-⅞¹²³⁰-⁹₀-₉⁄/.,\-–\s]+/u;
 
   // words that end the food part of a line: "280 gram sukker jeg brugte halv brun farin"
-  const STOP = new Set("jeg til svarer eller or men som der kan også og and at for med uden evt ca".split(" "));
+  const STOP = new Set("jeg til svarer eller or men som der kan også at for med uden evt ca".split(" "));
+  const JOIN = new Set(["og", "and", "&"]);
 
   /**
    * The food words of an ingredient line, best first: units, amounts and trailing remarks are left
-   * out, and the last word of "røde løg" comes first because that is the noun.
+   * out, and the last word of "røde løg" comes first because that is the noun. A line that names
+   * two foods ("salt og peber") comes back with the whole phrase first and `compound` set.
    */
   const foodWords = (text) => {
     const body = String(text).replace(NUMERIC, "").split(/[;(]/)[0].split(",")[0];
     const words = [];
+    const seq = [];
     for (const raw of body.split(/\s+/)) {
       const w = raw.replace(/[.:]+$/, "");
       if (!w) continue;
       if (STOP.has(w.toLowerCase())) break;
+      if (JOIN.has(w.toLowerCase())) {
+        if (seq.length) seq.push(w);
+        continue;
+      }
       // a capital after the food ("vand Kogende") starts a remark
       if (words.length && /^\p{Lu}/u.test(w)) break;
-      if (/^\p{L}[\p{L}'’-]+$/u.test(w) && !UNITS.has(w.toLowerCase())) words.push(w);
+      if (/^\p{L}[\p{L}'’-]+$/u.test(w) && !UNITS.has(w.toLowerCase())) {
+        words.push(w);
+        seq.push(w);
+      }
     }
+    while (seq.length && JOIN.has(seq[seq.length - 1].toLowerCase())) seq.pop();
     // "tørrede", "hakkede": describing words that follow the noun
     const heads = words.filter((w) => !/ede$/i.test(w));
-    return (heads.length ? heads : words)
+    const out = (heads.length ? heads : words)
+      .slice()
       .reverse()
       // "kidney-bønner" is also found as "bønner"
       .flatMap((w) => (w.includes("-") ? [w, ...w.split("-").filter((p) => p.length >= 3)] : [w]))
       .slice(0, 4);
+    const compound = seq.some((w) => JOIN.has(w.toLowerCase()));
+    if (compound) {
+      out.unshift(seq.join(" "));
+      out.compound = true;
+    }
+    return out;
   };
 
   /** What gets typed into the step text when an ingredient is picked. */
@@ -172,15 +190,30 @@ export default function (h) {
       for (const uid of step.ingredients || []) {
         const row = rowsByUid.get(uid);
         if (!row) continue;
-        // the first food word that is in the text: every mention of it is the ingredient
-        for (const word of foodWords(row.text)) {
+        // the first food word that is in the text: every mention of it is the ingredient.
+        // "salt og peber" is that phrase, or else each of the two foods wherever it is named.
+        const words = foodWords(row.text);
+        const find = (word) => {
           // inflected forms count too: smør / smørret, æg / æggene
-          const re = new RegExp(`(?<![\\p{L}])${escRe(word)}\\p{L}{0,4}(?![\\p{L}])`, "giu");
+          const re = new RegExp(`(?<![\\p{L}])${escRe(word).replace(/ /g, "\\s+")}\\p{L}{0,4}(?![\\p{L}])`, "giu");
           const found = [];
           let m;
           while ((m = re.exec(step.text))) {
             if (!taken(m.index, m.index + m[0].length)) found.push({ uid, start: m.index, len: m[0].length });
           }
+          return found;
+        };
+        if (words.compound) {
+          const whole = find(words[0]);
+          if (whole.length) {
+            chips.push(...whole);
+            continue;
+          }
+          for (const word of words.slice(1)) chips.push(...find(word));
+          continue;
+        }
+        for (const word of words) {
+          const found = find(word);
           if (found.length) {
             chips.push(...found);
             break;
