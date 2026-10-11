@@ -70,16 +70,8 @@ export default function (h) {
   /** What gets typed into the step text when an ingredient is picked. */
   const pickWord = (row) => foodWords(row.text)[0] || String(row.text).trim();
 
-  /** "175 g smør" for the chip: the amount of the line followed by the word used in the text. */
-  const chipLabel = (row, word) => {
-    const text = String(row.text).trim();
-    const m = text.match(NUMERIC);
-    if (!m) return word;
-    const amount = m[0].trim();
-    const unit = text.slice(m[0].length).match(/^\p{L}+\.?/u);
-    const u = unit && UNITS.has(unit[0].replace(/\.$/, "").toLowerCase()) ? ` ${unit[0]}` : "";
-    return `${amount}${u} ${word}`.replace(/\s+/g, " ").trim();
-  };
+  /** A chip shows the ingredient exactly as it is written in the ingredient list. */
+  const chipLabel = (row) => String(row.text).trim();
 
   const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -224,7 +216,7 @@ export default function (h) {
     },
 
     _neChipHtml(row, word) {
-      return `<span class="ne-chip" contenteditable="false" data-uid="${esc(row.uid)}" data-word="${esc(word)}">${esc(chipLabel(row, word))}</span>`;
+      return `<span class="ne-chip" contenteditable="false" data-uid="${esc(row.uid)}" data-word="${esc(word)}">${esc(chipLabel(row))}</span>`;
     },
 
     _neTextHtml(step, rowsByUid) {
@@ -301,7 +293,7 @@ export default function (h) {
                 ? `<div class="ne-extras">${extras
                     .map(
                       (uid) =>
-                        `<span class="ne-chip ne-extra" data-uid="${esc(uid)}">${esc(chipLabel(rowsByUid.get(uid), pickWord(rowsByUid.get(uid))))}<button type="button" data-ne-act="unlink" data-uid="${esc(uid)}" title="Remove" aria-label="Remove">${icon("close")}</button></span>`
+                        `<span class="ne-chip ne-extra" data-uid="${esc(uid)}">${esc(chipLabel(rowsByUid.get(uid)))}<button type="button" data-ne-act="unlink" data-uid="${esc(uid)}" title="Remove" aria-label="Remove">${icon("close")}</button></span>`
                     )
                     .join("")}
                   ${(step.timers || [])
@@ -753,6 +745,15 @@ export default function (h) {
       });
       form.addEventListener("input", (e) => {
         if (e.target.classList && e.target.classList.contains("ne-text")) this._neUpdatePicker(e.target);
+        // chips show the ingredient as it is written, so they follow edits to the ingredient
+        if (e.target.matches && e.target.matches(".ne-row [data-ne-f=text]")) {
+          const uid = e.target.closest(".ne-row").dataset.uid;
+          form.querySelectorAll(`.ne-chip[data-uid="${uid}"]`).forEach((chip) => {
+            const label = e.target.value.trim();
+            if (chip.classList.contains("ne-extra")) chip.firstChild.nodeValue = label;
+            else chip.textContent = label;
+          });
+        }
       });
       form.addEventListener("paste", (e) => {
         if (!(e.target.classList && e.target.classList.contains("ne-text"))) return;

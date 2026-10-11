@@ -172,7 +172,7 @@ const STYLE = `
   .ne-main { flex: 1; min-width: 0; position: relative; }
   .ne-text { outline: none; line-height: 1.9; min-height: 1.9em; white-space: pre-wrap; overflow-wrap: anywhere; }
   .ne-text:empty::before { content: attr(data-ph); color: var(--secondary-text-color); }
-  .ne-chip { display: inline-block; background: color-mix(in srgb, var(--primary-color) 16%, transparent); color: var(--primary-color); border-radius: 6px; padding: 0 6px; line-height: 1.55; font-size: .92em; margin: 0 1px; white-space: nowrap; user-select: all; }
+  .ne-chip { display: inline-block; background: color-mix(in srgb, var(--primary-color) 16%, transparent); color: var(--primary-color); border-radius: 6px; padding: 0 6px; line-height: 1.55; font-size: .92em; margin: 0 1px; user-select: all; }
   .ne-extra { user-select: none; display: inline-flex; align-items: center; gap: 2px; margin: 2px 4px 2px 0; }
   .ne-extra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; display: inline-flex; --mdc-icon-size: 14px; }
   .ne-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
