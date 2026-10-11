@@ -307,10 +307,20 @@ class RecipesBase extends HTMLElement {
     window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
   }
   _paint(body) {
+    // The ha-card element is created once and only its content is replaced. Recreating it
+    // on every paint made the card collapse for a frame (it renders asynchronously), which
+    // is what made the page jump when stepping through a recipe.
+    let card = this.shadowRoot.querySelector("ha-card");
+    if (!card) {
+      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card></ha-card>`;
+      card = this.shadowRoot.querySelector("ha-card");
+    }
     // repaints (timer ticks, selections) must not throw scrolled areas back to the top
-    const tops = [...this.shadowRoot.querySelectorAll(".scroll")].map((s) => s.scrollTop);
-    const fs = TEXT_SIZES[this._config?.text_size] || 1;
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card style="--hr-fs:${fs}">${body}</ha-card>`;
+    // (a new step does start at the top)
+    const tops = this._resetScroll ? [] : [...card.querySelectorAll(".scroll")].map((s) => s.scrollTop);
+    this._resetScroll = false;
+    card.style.setProperty("--hr-fs", String(TEXT_SIZES[this._config?.text_size] || 1));
+    card.innerHTML = body;
     // restored once the repainted card has been laid out (before the next paint, so no flicker)
     if (tops.some((t) => t)) {
       requestAnimationFrame(() => {
@@ -619,7 +629,49 @@ class HassRecipesCookCard extends RecipesBase {
     return !String(this._config.recipe || "").trim();
   }
   _step() {
+    if (this._stepOverride != null) return this._stepOverride; // while measuring the other pages
     return this._follows() ? this._srvStep || 0 : this._localStep || 0;
+  }
+  /**
+   * Work out how tall the tallest page of this recipe is (laid out off screen, once per
+   * recipe, scale and width) and keep the step area that tall, so the buttons below it
+   * stay where they are as you step between short and long pages.
+   */
+  _reserveTallestPage(r) {
+    const card = this.shadowRoot.querySelector("ha-card");
+    const content = card && card.querySelector(".content");
+    if (!content || !content.clientWidth) return;
+    const key = `${r.id}|${this._scale()}|${this._config.text_size || ""}|${content.clientWidth}`;
+    if (this._measuredKey === key) return;
+    this._measuredKey = key;
+    const { pages } = pagesFor(r);
+    const saved = [this._stepOverride, this._pageKey, this._resetScroll, this._minFor, this._contentMin];
+    const probe = document.createElement("div");
+    probe.className = "content";
+    probe.style.cssText = `position:absolute;left:-9999px;top:0;visibility:hidden;width:${content.clientWidth}px;`;
+    card.append(probe);
+    let tallest = 0;
+    try {
+      for (let i = 0; i < pages.length; i += 1) {
+        this._stepOverride = i;
+        const { html } = HassRecipesCookCard.prototype._cookBody.call(this);
+        const tpl = document.createElement("template");
+        tpl.innerHTML = html;
+        const inner = tpl.content.querySelector(".content");
+        probe.innerHTML = inner ? inner.innerHTML : "";
+        tallest = Math.max(tallest, probe.offsetHeight);
+      }
+    } finally {
+      [this._stepOverride, this._pageKey, this._resetScroll, this._minFor, this._contentMin] = saved;
+      this._stepOverride = null;
+      probe.remove();
+    }
+    const cap = Number(this._config.content_height ?? 480);
+    const tall = Math.ceil(cap > 0 ? Math.min(tallest, cap) : tallest);
+    if (tall > (this._contentMin || 0)) {
+      this._contentMin = tall;
+      content.style.minHeight = `${tall}px`;
+    }
   }
   _scale() {
     if (this._follows()) return this._srvScale > 0 ? this._srvScale : this._recipe?.default_scale || 1;
@@ -800,6 +852,17 @@ class HassRecipesCookCard extends RecipesBase {
     const n = Math.min(this._step(), pages.length - 1);
     const st = pages[n];
     const num = hasIngs ? n : n + 1; // step number among the real steps
+    const pageKey = `${r.id}:${n}`;
+    if (this._pageKey !== pageKey) {
+      this._resetScroll = true; // a new page starts at its top
+      this._pageKey = pageKey;
+    }
+    // Keep the step area as tall as the tallest page seen so far, so the buttons and
+    // everything below do not move when you step between short and long pages.
+    if (this._minFor !== r.id) {
+      this._minFor = r.id;
+      this._contentMin = 0;
+    }
     const k = this._scale();
     const mode = this._config.units === "original" ? "original" : "grams";
     const progress = loadProgress(r.id);
@@ -890,7 +953,9 @@ class HassRecipesCookCard extends RecipesBase {
       }${stepDone ? " ✓" : ""}${!ingredientsPage && k !== 1 ? ` · ${formatNumber(k)}×` : ""}</span></div>
       <div class="body">
         <div class="progress"><i style="width:${((n + 1) / pages.length) * 100}%"></i></div>
-        <div class="content scroll" style="${this._scrollRegion(Number(this._config.content_height ?? 480))}">
+        <div class="content scroll" style="${this._scrollRegion(Number(this._config.content_height ?? 480))}${
+          !this._fixedHeight() && this._contentMin ? `min-height:${this._contentMin}px;` : ""
+        }">
           ${section ? `<div class="section">${esc(section)}</div>` : ""}
           ${body}
           ${ings ? `<div class="ings">${ings}</div>` : ""}
@@ -906,6 +971,7 @@ class HassRecipesCookCard extends RecipesBase {
       </div>`;
     const wire = () => {
       const root = this.shadowRoot;
+      if (!this._fixedHeight()) requestAnimationFrame(() => this._reserveTallestPage(r));
       const finish = () => {
         // starting over clears this recipe's ticks, as the panel does when every step is done
         saveProgress(r.id, { ing: new Set(), steps: new Set() });
