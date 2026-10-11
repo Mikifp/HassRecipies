@@ -100,7 +100,9 @@ const STYLE = `
   main { max-width: 1200px; margin: 0 auto; padding: 16px; }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   input, textarea, select { font: inherit; color: inherit; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 6px; padding: 8px 10px; width: 100%; }
-  textarea { resize: vertical; max-width: 100%; }
+  textarea { resize: none; max-width: 100%; }
+  /* text boxes grow with what is typed (see _autosize), so there is nothing to drag */
+  textarea[data-autosize] { overflow: hidden; min-height: 2.6em; }
   .toolbar input { flex: 1; min-width: 180px; width: auto; }
   button.btn { font: inherit; cursor: pointer; border: 0; border-radius: 6px; padding: 8px 14px; background: var(--primary-color); color: var(--text-primary-color, #fff); }
   button.btn.secondary { background: transparent; color: var(--primary-text-color); border: 1px solid var(--divider-color); }
@@ -398,6 +400,8 @@ class HassRecipesPanel extends HTMLElement {
         e.returnValue = "";
       }
     };
+    this._onResize = () => this._autosizeAll();
+    window.addEventListener("resize", this._onResize);
     window.addEventListener("beforeunload", this._onUnload);
     window.addEventListener("keydown", this._onKey);
     window.addEventListener("popstate", this._onPop);
@@ -408,6 +412,7 @@ class HassRecipesPanel extends HTMLElement {
     window.removeEventListener("keydown", this._onKey);
     window.removeEventListener("popstate", this._onPop);
     window.removeEventListener("beforeunload", this._onUnload);
+    window.removeEventListener("resize", this._onResize);
     document.removeEventListener("visibilitychange", this._onVisible);
     this._releaseWake();
     if (this._unsubTimers) {
@@ -865,6 +870,7 @@ class HassRecipesPanel extends HTMLElement {
       <main>${this._notice ? `<div class="notice">✓ ${esc(this._notice)}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main>`;
     this._timerSig = "";
     this._bind();
+    this._autosizeAll();
     this._renderTimers();
     this._syncWake();
     if (this._scrollToCurrent) {
@@ -2068,7 +2074,7 @@ class HassRecipesPanel extends HTMLElement {
         }
         num += 1;
         return `<div class="step" data-n="${n}" data-section="0">${head(`Step ${num}`)}
-          <textarea data-f="text" rows="3" placeholder="What to do…">${esc(st.text)}</textarea>
+          <textarea data-f="text" data-autosize rows="2" placeholder="What to do…">${esc(st.text)}</textarea>
           <div class="timer-field"><label class="lbl">Timers (optional)</label>
             ${st.timers
               .map(
@@ -2091,7 +2097,7 @@ class HassRecipesPanel extends HTMLElement {
         <h2>${this._view.id ? "Edit recipe" : "New recipe"}</h2>
         <form id="form" data-id="${esc(this._view.id || "")}">
           <div class="field"><label class="lbl">Name</label><input name="name" required value="${f("name")}"></div>
-          <div class="field"><label class="lbl">Description</label><textarea name="description" rows="2">${f("description")}</textarea></div>
+          <div class="field"><label class="lbl">Description</label><textarea name="description" data-autosize rows="2">${f("description")}</textarea></div>
           <div class="field"><label class="lbl">Photo</label>
             <div class="img-field">
               ${d.image ? `<img class="img-preview" src="${f("image")}" alt="">` : ""}
@@ -2139,7 +2145,7 @@ class HassRecipesPanel extends HTMLElement {
               <button type="button" class="btn secondary" data-step-act="add-section">+ Add section</button>
             </div>
           </div>
-          <div class="field"><label class="lbl">Notes</label><textarea name="notes" rows="3">${f("notes")}</textarea></div>
+          <div class="field"><label class="lbl">Notes</label><textarea name="notes" data-autosize rows="2">${f("notes")}</textarea></div>
           <div class="field"><label class="lbl">Source URL</label><input name="source_url" value="${f("source_url")}"></div>
           <div class="actions">
             <button class="btn" type="submit">Save</button>
@@ -2147,6 +2153,20 @@ class HassRecipesPanel extends HTMLElement {
           </div>
         </form>
       </div>`;
+  }
+
+  /** Make a text box exactly as tall as its text. */
+  _autosize(el) {
+    if (!el || !el.isConnected) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }
+  _autosizeAll() {
+    const boxes = this.shadowRoot.querySelectorAll("textarea[data-autosize]");
+    if (!boxes.length) return;
+    boxes.forEach((t) => this._autosize(t));
+    // fonts and the final width settle a moment after the render
+    requestAnimationFrame(() => this.shadowRoot.querySelectorAll("textarea[data-autosize]").forEach((t) => this._autosize(t)));
   }
 
   /** Typing in an ingredient row: keep the step chips' labels in step. */
@@ -2241,7 +2261,7 @@ class HassRecipesPanel extends HTMLElement {
         <h2>Import from URL</h2>
         <p class="muted">Paste one URL to review it before saving, or several (one per line, up to 25) to import them all at once.</p>
         <form id="import">
-          <div class="field"><textarea name="urls" rows="4" required placeholder="https://…" autofocus></textarea></div>
+          <div class="field"><textarea name="urls" data-autosize rows="3" required placeholder="https://…" autofocus></textarea></div>
           <div class="actions">
             <button class="btn" type="submit" id="import-btn">Import</button>
             <button class="btn secondary" type="button" data-act="cancel">Cancel</button>
@@ -2385,6 +2405,7 @@ class HassRecipesPanel extends HTMLElement {
       form.addEventListener("submit", (e) => this._save(e, form));
       form.addEventListener("input", (e) => {
         this._formDirty = true;
+        if (e.target.matches && e.target.matches("textarea[data-autosize]")) this._autosize(e.target);
         if (e.target.matches && e.target.matches("[name=yield_amount],[name=yield_unit],[name=default_scale]")) {
           const el = this.shadowRoot.getElementById("yield-preview");
           if (el) {
