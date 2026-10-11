@@ -169,7 +169,7 @@ actions:
 ```bash
 docker compose up                         # Home Assistant on http://localhost:8123 with the integration mounted
 python -m pytest tests                    # back end
-node --test tests/js/                     # front-end helpers and translations
+node --test tests/js/*.test.mjs                     # front-end helpers and translations
 ```
 
 CI runs both test suites, a syntax check of the front-end, hassfest and the HACS validation on every pull request.

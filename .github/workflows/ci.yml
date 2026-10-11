@@ -26,7 +26,7 @@ jobs:
       - name: Syntax check the front-end
         run: for f in custom_components/hass_recipes/frontend/*.js; do node --check "$f"; done
       - name: Unit tests
-        run: node --test tests/js/
+        run: node --test tests/js/*.test.mjs
 
   hassfest:
     runs-on: ubuntu-latest
