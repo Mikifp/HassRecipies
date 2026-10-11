@@ -1045,12 +1045,36 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
     const l = this._config.layout;
     return l === "vertical" || l === "horizontal" ? l : "app";
   }
+  /** A card narrower than this (a phone) is too small for the list beside the recipe. */
+  _isNarrow() {
+    const width = this.clientWidth || this.getBoundingClientRect().width;
+    return width ? width < 560 : window.innerWidth < 600;
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    this._wasNarrow = this._isNarrow();
+    this._resizeWatcher = new ResizeObserver(() => {
+      const narrow = this._isNarrow();
+      if (narrow !== this._wasNarrow) {
+        this._wasNarrow = narrow;
+        if (this._layout() === "horizontal") this._render(); // side by side <-> the mini app
+      }
+    });
+    this._resizeWatcher.observe(this);
+  }
+  disconnectedCallback() {
+    if (this._resizeWatcher) this._resizeWatcher.disconnect();
+    super.disconnectedCallback();
+  }
   /** "both" shows recipe and list together; otherwise one screen at a time: "cook" or "list". */
   _screen() {
     // show: "list" or "steps" pins the card to one part; anything else follows `layout`
     if (this._config.show === "list") return "list";
     if (this._config.show === "steps") return "cook";
-    if (this._layout() !== "app") return "both";
+    // Horizontal needs width: on a phone it becomes the mini app, with a Recipes button
+    // to go back to the browser. Vertical stays as it is.
+    const layout = this._layout();
+    if (layout === "vertical" || (layout === "horizontal" && !this._isNarrow())) return "both";
     if (!this._recipe) return "list"; // nothing chosen yet, or the chosen recipe was deleted
     return this._view || "cook";
   }

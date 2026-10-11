@@ -109,7 +109,7 @@ The **kitchen** card is a small app made of the list and cook cards. It opens on
 
 **Sizing.** In a sections dashboard the cards follow `grid_options` (resize them in the dashboard editor, or set `columns` / `rows`): a card with a set height fills it, and the recipe list and the step text scroll inside it. Without a set height the list stops at `list_height` pixels and the step text at `content_height` (default 480, 0 for no limit) and scrolls beyond that.
 
-Set `layout` to show the recipe and the list at the same time: `layout: vertical` puts the recipe above the list, `layout: horizontal` puts the list beside the recipe (it stacks on its own when the card is narrow). The default, `app`, is the mini app described above.
+Set `layout` to show the recipe and the list at the same time: `layout: vertical` puts the recipe above the list, `layout: horizontal` puts the list beside the recipe; on a phone-width card (under about 560 px) it becomes the mini app instead, with a **Recipes** button to go back to the browser. The default, `app`, is the mini app described above.
 
 To use only part of the card, set `show: list` (just the recipe list, which still picks the recipe the other cards follow) or `show: steps` (just the ingredients and steps, no list and no back button). Long lists scroll inside the card: `list_height` sets the height in pixels (default 360 for the list card and 320 for the kitchen card, 0 for no scrolling), and `limit` how many recipes are loaded into it (default 20).
 
