@@ -420,7 +420,7 @@ class HassRecipesListCard extends RecipesBase {
   }
   async _load() {
     try {
-      this._recipes = (await this._hass.callWS({ type: "hass_recipes/list" })).recipes;
+      this._recipes = (await this._hass.callWS({ type: "hass_recipes/summaries" })).recipes;
       this._error = "";
     } catch (err) {
       this._error = err.message || "Could not load recipes";
@@ -605,7 +605,7 @@ class HassRecipesCookCard extends RecipesBase {
     };
     window.addEventListener("hass-recipes-progress", this._onProgress);
     await this._load();
-    for (const ev of ["recipe_updated", "recipe_deleted"]) {
+    for (const ev of ["recipe_added", "recipe_updated", "recipe_deleted"]) {
       this._sub(() => this._hass.connection.subscribeEvents(() => this._load(), `hass_recipes_${ev}`));
     }
     // the shared cooking state: recipe, page and scale move together on every card and voice command
@@ -627,6 +627,10 @@ class HassRecipesCookCard extends RecipesBase {
   /** A card without `recipe:` follows the shared cooking state; one that names a recipe keeps its own. */
   _follows() {
     return !String(this._config.recipe || "").trim();
+  }
+  /** Does this card show the recipe browser (so it needs the list of recipes)? */
+  _wantsList() {
+    return false;
   }
   _step() {
     if (this._stepOverride != null) return this._stepOverride; // while measuring the other pages
@@ -679,17 +683,29 @@ class HassRecipesCookCard extends RecipesBase {
   }
   async _load() {
     try {
-      const res = await this._hass.callWS({ type: "hass_recipes/list" });
-      const recipes = res.recipes;
-      this._all = recipes;
-      this._chosen = res.cooking_recipe_id;
-      this._srvStep = res.cooking_step || 0;
-      this._srvScale = res.cooking_scale || 1;
       const named = String(this._config.recipe || "").trim();
-      const want = named.toLowerCase();
-      this._recipe = named
-        ? recipes.find((r) => r.id === named) || recipes.find((r) => r.name.trim().toLowerCase() === want) || null
-        : recipes.find((r) => r.id === this._chosen) || null;
+      // Only what is needed: the shared state with the one chosen recipe, or (for a card
+      // that names its recipe) the summaries to find it by name, then that recipe.
+      // The browser list (kitchen card) is the summaries, without anybody's steps.
+      let summaries = null;
+      if (this._wantsList() || named) {
+        summaries = await this._hass.callWS({ type: "hass_recipes/summaries" });
+        this._all = summaries.recipes;
+      }
+      if (named) {
+        const want = named.toLowerCase();
+        const hit =
+          summaries.recipes.find((r) => r.id === named) ||
+          summaries.recipes.find((r) => r.name.trim().toLowerCase() === want);
+        this._chosen = summaries.cooking_recipe_id;
+        this._recipe = hit ? await this._hass.callWS({ type: "hass_recipes/get", recipe_id: hit.id }) : null;
+      } else {
+        const state = await this._hass.callWS({ type: "hass_recipes/cooking" });
+        this._chosen = state.recipe_id;
+        this._srvStep = state.step || 0;
+        this._srvScale = state.scale || 1;
+        this._recipe = state.recipe || null;
+      }
       this._error = this._recipe
         ? ""
         : named
@@ -1032,6 +1048,9 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
   static getStubConfig() {
     return { limit: 20 };
   }
+  _wantsList() {
+    return this._config.show !== "steps";
+  }
   setConfig(config) {
     // always follows the shared cooking recipe (the one chosen here and in the Recipes panel)
     this._query = this._query || "";
@@ -1075,7 +1094,7 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
     // to go back to the browser. Vertical stays as it is.
     const layout = this._layout();
     if (layout === "vertical" || (layout === "horizontal" && !this._isNarrow())) return "both";
-    if (!this._recipe) return "list"; // nothing chosen yet, or the chosen recipe was deleted
+    if (!this._recipe && !this._picking) return "list"; // nothing chosen yet, or the chosen recipe was deleted
     return this._view || "cook";
   }
   _cookBody() {
@@ -1183,17 +1202,19 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
     const pick = async (id) => {
       this._chosen = id;
       this._view = "cook";
-      const chosen = (this._all || []).find((r) => r.id === id);
-      if (chosen) {
-        this._recipe = chosen;
-        this._srvStep = 0;
-        this._srvScale = chosen.default_scale || 1;
-      }
+      this._recipe = null; // the browser has summaries; the steps arrive with the full recipe
+      this._picking = true; // show "loading", not the browser again, until it has arrived
+      this._error = "";
+      this._srvStep = 0;
       this._render();
       try {
         await this._hass.callWS({ type: "hass_recipes/set_cooking", recipe_id: id });
+        await this._load();
       } catch (err) {
         this._error = err.message;
+      } finally {
+        this._picking = false;
+        this._render();
       }
     };
     for (const row of root.querySelectorAll("[data-pick]")) {
@@ -1384,7 +1405,7 @@ class HassRecipesCardEditor extends HTMLElement {
   }
   async _loadOptions() {
     try {
-      const { recipes } = await this._hass.callWS({ type: "hass_recipes/list" });
+      const { recipes } = await this._hass.callWS({ type: "hass_recipes/summaries" });
       const uniq = (key) => [...new Set(recipes.flatMap((r) => r[key] || []))].sort((a, b) => a.localeCompare(b));
       this._options = {
         recipes: recipes.map((r) => ({ value: r.id, label: r.name })),
