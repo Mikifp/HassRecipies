@@ -159,7 +159,8 @@
           "speaker_sound": "Sound on speakers",
           "tts_entity": "Text-to-speech engine",
           "alarm_repeat": "Repeat until stopped",
-          "alarm_minutes": "Stop automatically after"
+          "alarm_minutes": "Stop automatically after",
+          "edit_access": "Who can change recipes"
         },
         "data_description": {
           "notify_service": "Optional. A notify service, for example your phone, called when a timer finishes.",
@@ -167,7 +168,8 @@
           "speaker_sound": "A short chime, the timer's name spoken aloud, or both.",
           "tts_entity": "Used for spoken messages. Leave empty to use the first available engine.",
           "alarm_repeat": "Keep sounding the alert until you dismiss the timer in the panel (or call the stop_timer_alarm service).",
-          "alarm_minutes": "A safety limit so the alert cannot ring for ever when nobody is home."
+          "alarm_minutes": "A safety limit so the alert cannot ring for ever when nobody is home.",
+          "edit_access": "Everyone can read and cook either way. Choose administrators only to stop other users from creating, editing, importing or deleting recipes and from changing the meal plan."
         }
       }
     }
@@ -208,6 +210,20 @@
       "meal_plan": {
         "name": "Meal plan"
       }
+    }
+  },
+  "selector": {
+    "edit_access": {
+      "options": {
+        "everyone": "Everyone",
+        "admins": "Administrators only"
+      }
+    }
+  },
+  "issues": {
+    "cards_resource_not_registered": {
+      "title": "The Recipes dashboard cards could not be added",
+      "description": "The Recipes cards are normally added to your dashboard resources automatically, but this is not possible here (dashboard resources mode: {mode}). Add this resource yourself, as a JavaScript module, under Settings > Dashboards > ⋮ > Resources, or in the `resources:` list of your YAML dashboards: `{url}`. The cards are not available until then."
     }
   }
 }

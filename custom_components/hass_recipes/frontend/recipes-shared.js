@@ -125,8 +125,15 @@ export const isHeader = (t) => /^#{1,6}\s/.test(String(t));
 
 export const headerText = (t) => String(t).replace(/^#{1,6}\s*/, "").trim();
 
-export const splitSub = (t) => {
+/** "200 g butter || 180 g oil // room temperature" -> ["200 g butter || 180 g oil", "room temperature"]. */
+export const splitComment = (t) => {
   const s = String(t);
+  const i = s.indexOf(" // ");
+  return i < 0 ? [s.trim(), ""] : [s.slice(0, i).trim(), s.slice(i + 4).trim()];
+};
+
+export const splitSub = (t) => {
+  const s = splitComment(t)[0];
   const i = s.indexOf(" || ");
   return i < 0 ? [s.trim(), ""] : [s.slice(0, i).trim(), s.slice(i + 4).trim()];
 };
@@ -135,11 +142,15 @@ export const joinSub = (text, sub) => (sub.trim() ? `${text.trim()} || ${sub.tri
 
 /** "200 g butter || 180 g oil || 3 dl cream" -> { main, alts: [...] } (any number of alternatives). */
 export const splitSubs = (t) => {
-  const parts = String(t).split(" || ").map((x) => x.trim());
-  return { main: parts[0], alts: parts.slice(1).filter(Boolean) };
+  const [body, comment] = splitComment(t);
+  const parts = body.split(" || ").map((x) => x.trim());
+  return { main: parts[0], alts: parts.slice(1).filter(Boolean), comment };
 };
 
-export const joinSubs = (text, alts) => [text.trim(), ...alts.map((a) => a.trim()).filter(Boolean)].join(" || ");
+export const joinSubs = (text, alts, comment = "") => {
+  const line = [text.trim(), ...alts.map((a) => a.trim()).filter(Boolean)].join(" || ");
+  return comment.trim() ? `${line} // ${comment.trim().replace(/\s+/g, " ")}` : line;
+};
 
 export const clock = (sec) => {
   sec = Math.max(0, Math.ceil(sec));
@@ -228,3 +239,117 @@ export const lengthText = (sec) => {
   return [h ? `${h} h` : "", m ? `${m} min` : "", s ? `${s} sec` : ""].filter(Boolean).join(" ") || "0 sec";
 };
 
+// ---- ingredient mentions in step text ----
+// An ingredient a step uses is usually named in the step ("Smelt smør ..."). These helpers find
+// where, so the text can show the ingredient as a chip. Nothing is stored: the text stays plain.
+// words that describe an amount rather than the food
+const UNITS = new Set(
+  `gram g gr kg kilo kilogram kilogrammer mg milligram ml milliliter cl centiliter dl deciliter l liter
+   tsk tsp teske teskeer tesked teskefuld spsk tbsp spiseske spiseskeer spiseskefuld spiseskefulde dessertske dessertskeer
+   stk stykke stykker fed knivspids knsp nip dåse dåser ds pose poser pakke pakker pk bundt bdt håndfuld
+   skive skiver stang stænger stilk stilke kvist kviste blad blade dryp drys klat glas
+   kop kopper cup cups oz ounce ounces lb lbs pound pounds gallon quart pint pinch pinches clove cloves can cans
+   slice slices piece pieces dash knob scoop sprig sprigs bunch handful stick sticks head heads`
+    .split(/\s+/)
+);
+const NUMERIC = /^[\d¼-¾⅐-⅞¹²³⁰-⁹₀-₉⁄/.,\-–\s]+/u;
+
+// words that end the food part of a line: "280 gram sukker jeg brugte halv brun farin"
+const STOP = new Set("jeg til svarer eller or men som der kan også at for med uden evt ca".split(" "));
+const JOIN = new Set(["og", "and", "&"]);
+
+/**
+ * The food words of an ingredient line, best first: units, amounts and trailing remarks are left
+ * out, and the last word of "røde løg" comes first because that is the noun. A line that names
+ * two foods ("salt og peber") comes back with the whole phrase first and `compound` set.
+ */
+export const foodWords = (text) => {
+  const body = String(text).replace(NUMERIC, "").split(/[;(]/)[0].split(",")[0];
+  const words = [];
+  const seq = [];
+  for (const raw of body.split(/\s+/)) {
+    const w = raw.replace(/[.:]+$/, "");
+    if (!w) continue;
+    if (STOP.has(w.toLowerCase())) break;
+    if (JOIN.has(w.toLowerCase())) {
+      if (seq.length) seq.push(w);
+      continue;
+    }
+    // a capital after the food ("vand Kogende") starts a remark
+    if (words.length && /^\p{Lu}/u.test(w)) break;
+    if (/^\p{L}[\p{L}'’-]+$/u.test(w) && !UNITS.has(w.toLowerCase())) {
+      words.push(w);
+      seq.push(w);
+    }
+  }
+  while (seq.length && JOIN.has(seq[seq.length - 1].toLowerCase())) seq.pop();
+  // "tørrede", "hakkede": describing words that follow the noun
+  const heads = words.filter((w) => !/ede$/i.test(w));
+  const out = (heads.length ? heads : words)
+    .slice()
+    .reverse()
+    // "kidney-bønner" is also found as "bønner"
+    .flatMap((w) => (w.includes("-") ? [w, ...w.split("-").filter((p) => p.length >= 3)] : [w]))
+    .slice(0, 4);
+  const compound = seq.some((w) => JOIN.has(w.toLowerCase()));
+  if (compound) {
+    out.unshift(seq.join(" "));
+    out.compound = true;
+  }
+  return out;
+};
+
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Where each ingredient in `items` ([{ key, text }]) is named in `text`: [{ key, start, len }].
+ * Every mention of the first food word that is found counts, and inflected forms
+ * (smør / smørret, æg / æggene); "salt og peber" is that phrase or each food on its own.
+ */
+export const detectChips = (text, items) => {
+  const chips = [];
+  const taken = (a, b) => chips.some((c) => a < c.start + c.len && b > c.start);
+  for (const { key, text: line } of items) {
+    const words = foodWords(line);
+    const find = (word) => {
+      const re = new RegExp(`(?<![\\p{L}])${escRe(word).replace(/ /g, "\\s+")}\\p{L}{0,4}(?![\\p{L}])`, "giu");
+      const found = [];
+      let m;
+      while ((m = re.exec(text))) {
+        if (!taken(m.index, m.index + m[0].length)) found.push({ key, start: m.index, len: m[0].length });
+      }
+      return found;
+    };
+    if (words.compound) {
+      const whole = find(words[0]);
+      if (whole.length) {
+        chips.push(...whole);
+        continue;
+      }
+      for (const word of words.slice(1)) chips.push(...find(word));
+      continue;
+    }
+    for (const word of words) {
+      const found = find(word);
+      if (found.length) {
+        chips.push(...found);
+        break;
+      }
+    }
+  }
+  return chips.sort((x, y) => x.start - y.start);
+};
+
+/** Step text as HTML with a chip in place of every mention: { html, placed: Set of keys }. */
+export const stepTextHtml = (text, items, chipHtml) => {
+  const chips = detectChips(String(text), items);
+  let html = "";
+  let at = 0;
+  for (const c of chips) {
+    if (c.start < at) continue;
+    html += esc(text.slice(at, c.start));
+    html += chipHtml(c.key, text.slice(c.start, c.start + c.len));
+    at = c.start + c.len;
+  }
+  return { html: html + esc(text.slice(at)), placed: new Set(chips.map((c) => c.key)) };
+};

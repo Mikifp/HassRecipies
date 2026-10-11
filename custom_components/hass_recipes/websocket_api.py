@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 from typing import Any
 
 from aiohttp import ClientError, ClientTimeout
@@ -12,6 +13,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
+from .access import can_edit
 from .const import DOMAIN, SIGNAL_TIMERS
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .images import MAX_IMAGE_BYTES, image_url
@@ -59,6 +61,34 @@ _RECIPE_FIELDS = {
 }
 
 
+
+_DENIED = "Only administrators can change recipes (see the integration's options)."
+
+
+def _edits(func):
+    """Refuse the command unless the user may change recipes."""
+
+    @functools.wraps(func)
+    def wrapper(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+        if not can_edit(hass, connection.user):
+            connection.send_error(msg["id"], "unauthorized", _DENIED)
+            return
+        return func(hass, connection, msg)
+
+    return wrapper
+
+
+def _edits_async(func):
+    @functools.wraps(func)
+    async def wrapper(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+        if not can_edit(hass, connection.user):
+            connection.send_error(msg["id"], "unauthorized", _DENIED)
+            return
+        return await func(hass, connection, msg)
+
+    return wrapper
+
+
 def _store(hass: HomeAssistant) -> RecipeStore:
     return hass.data[DOMAIN]
 
@@ -69,6 +99,12 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
     for command in (
         ws_list,
         ws_get,
+        ws_summaries,
+        ws_cooking,
+        ws_trash,
+        ws_restore,
+        ws_purge,
+        ws_plan_copy,
         ws_set_cooking_recipe,
         ws_set_cooking,
         ws_timer_snooze,
@@ -109,8 +145,63 @@ def ws_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
             "cooking_recipe_id": store.cooking_recipe_id,
             "cooking_step": store.cooking_step,
             "cooking_scale": store.cooking_scale,
+            "can_edit": can_edit(hass, connection.user),
         },
     )
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/summaries"})
+@callback
+def ws_summaries(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The recipes without their steps: what a list or a search needs."""
+    store = _store(hass)
+    connection.send_result(
+        msg["id"],
+        {
+            "recipes": store.summaries(),
+            "cookbooks": store.cookbooks(),
+            "cooking_recipe_id": store.cooking_recipe_id,
+            "can_edit": can_edit(hass, connection.user),
+        },
+    )
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/cooking"})
+@callback
+def ws_cooking(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The shared cooking state and the one recipe it points at, in full."""
+    store = _store(hass)
+    state = store.cooking_state()
+    connection.send_result(msg["id"], {**state, "recipe": store.get(state["recipe_id"] or "")})
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/trash"})
+@callback
+def ws_trash(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    connection.send_result(msg["id"], {"recipes": _store(hass).trash()})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/restore", vol.Required("recipe_id"): str}
+)
+@_edits
+@callback
+def ws_restore(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    recipe = _store(hass).restore(msg["recipe_id"])
+    if recipe is None:
+        connection.send_error(msg["id"], "not_found", "That recipe is not in the trash any more")
+        return
+    connection.send_result(msg["id"], {"id": recipe["id"], "name": recipe["name"]})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/purge", vol.Optional("recipe_id"): str}
+)
+@_edits
+@callback
+def ws_purge(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Empty the trash, or remove one recipe from it for good."""
+    connection.send_result(msg["id"], {"removed": _store(hass).purge_trash(msg.get("recipe_id"))})
 
 
 @websocket_api.websocket_command(
@@ -174,6 +265,7 @@ def ws_set_cooking(
     {vol.Required("type"): f"{DOMAIN}/create", **_RECIPE_FIELDS}
 )
 @callback
+@_edits
 def ws_create(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     connection.send_result(msg["id"], _store(hass).create(msg))
 
@@ -182,6 +274,7 @@ def ws_create(hass: HomeAssistant, connection: websocket_api.ActiveConnection, m
     {vol.Required("type"): f"{DOMAIN}/update", vol.Required("recipe_id"): str, **_RECIPE_FIELDS}
 )
 @callback
+@_edits
 def ws_update(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     recipe = _store(hass).update(msg["recipe_id"], msg)
     if recipe is None:
@@ -194,6 +287,7 @@ def ws_update(hass: HomeAssistant, connection: websocket_api.ActiveConnection, m
     {vol.Required("type"): f"{DOMAIN}/delete", vol.Required("recipe_id"): str}
 )
 @callback
+@_edits
 def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     if not _store(hass).delete(msg["recipe_id"]):
         connection.send_error(msg["id"], "not_found", "Recipe not found")
@@ -213,6 +307,9 @@ def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, m
 async def ws_import_url(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
+    if msg["save"] and not can_edit(hass, connection.user):
+        connection.send_error(msg["id"], "unauthorized", _DENIED)
+        return
     try:
         data = await async_import_url(async_get_clientsession(hass), msg["url"])
     except RecipeImportError as err:
@@ -232,6 +329,7 @@ _MAX_BULK = 25
     }
 )
 @websocket_api.async_response
+@_edits_async
 async def ws_import_urls(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -272,6 +370,7 @@ _IDS = vol.All([str], vol.Length(min=1, max=1000))
     }
 )
 @callback
+@_edits
 def ws_bulk_update(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -283,6 +382,7 @@ def ws_bulk_update(
     {vol.Required("type"): f"{DOMAIN}/bulk_delete", vol.Required("recipe_ids"): _IDS}
 )
 @callback
+@_edits
 def ws_bulk_delete(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -302,6 +402,7 @@ _COOKBOOK_FIELDS = {
     {vol.Required("type"): f"{DOMAIN}/cookbook_create", **_COOKBOOK_FIELDS}
 )
 @callback
+@_edits
 def ws_cookbook_create(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -316,6 +417,7 @@ def ws_cookbook_create(
     }
 )
 @callback
+@_edits
 def ws_cookbook_update(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -330,6 +432,7 @@ def ws_cookbook_update(
     {vol.Required("type"): f"{DOMAIN}/cookbook_delete", vol.Required("cookbook_id"): str}
 )
 @callback
+@_edits
 def ws_cookbook_delete(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
@@ -446,6 +549,7 @@ def ws_plan_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection
     }
 )
 @callback
+@_edits
 def ws_plan_add(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     try:
         entry = _plan(hass).add(
@@ -475,6 +579,7 @@ def ws_plan_add(hass: HomeAssistant, connection: websocket_api.ActiveConnection,
     }
 )
 @callback
+@_edits
 def ws_plan_update(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     fields = {k: v for k, v in msg.items() if k not in ("id", "type", "entry_id")}
     try:
@@ -492,6 +597,7 @@ def ws_plan_update(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
     {vol.Required("type"): f"{DOMAIN}/plan_delete", vol.Required("entry_id"): str}
 )
 @callback
+@_edits
 def ws_plan_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     if not _plan(hass).delete(msg["entry_id"]):
         connection.send_error(msg["id"], "not_found", "Meal not found")
@@ -508,6 +614,7 @@ def ws_plan_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
     }
 )
 @callback
+@_edits
 def ws_plan_clear(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     try:
         removed = _plan(hass).clear(msg["start"], msg.get("end"), msg.get("slot"))
@@ -515,6 +622,27 @@ def ws_plan_clear(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
         _plan_error(connection, msg["id"], err)
         return
     connection.send_result(msg["id"], {"removed": removed})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/plan_copy",
+        vol.Required("source"): _DAY,
+        vol.Required("target"): _DAY,
+        vol.Optional("days", default=7): vol.All(int, vol.Range(min=1, max=62)),
+        vol.Optional("replace", default=False): bool,
+    }
+)
+@_edits
+@callback
+def ws_plan_copy(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Copy a run of days to another start date (e.g. last week onto this week)."""
+    try:
+        result = _plan(hass).copy(msg["source"], msg["target"], msg["days"], replace=msg["replace"])
+    except MealPlanError as err:
+        _plan_error(connection, msg["id"], err)
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command(

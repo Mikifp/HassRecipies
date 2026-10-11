@@ -89,16 +89,16 @@ _alias("l", "litro", "litros", "litri")
 _alias(
     "tsp",
     # da / no / sv / fi / nl / de / es / it / fr
-    "tsk", "teske", "teskefuld", "teskefulde", "tesked", "teskedar", "ts", "teskje", "tl", "theelepel", "theelepels",
+    "tsk", "teske", "teskeer", "teskefuld", "teskefulde", "tesked", "teskedar", "ts", "teskje", "tl", "theelepel", "theelepels",
     "teelöffel", "teeloeffel", "cucharadita", "cucharaditas", "cdta", "cucchiaino", "cucchiaini", "càc", "cac",
 )
 _alias(
     "tbsp",
-    "spsk", "spiseske", "spiseskefuld", "spiseskefulde", "msk", "matsked", "matskedar", "ss", "spiseskje", "rkl", "el",
+    "spsk", "spiseske", "spiseskeer", "spiseskefuld", "spiseskefulde", "msk", "matsked", "matskedar", "ss", "spiseskje", "rkl", "el",
     "eetlepel", "eetlepels", "esslöffel", "essloeffel", "cucharada", "cucharadas", "cda", "cucchiaio", "cucchiai",
     "cs", "càs", "cas",
 )
-_alias("dsp", "dsk", "dessertske", "dessertskefuld", "dessertsked", "dessertskje", "dessertspoon", "dessertspoons")
+_alias("dsp", "dsk", "dessertske", "dessertskeer", "dessertskefuld", "dessertsked", "dessertskje", "dessertspoon", "dessertspoons")
 _alias("krm", "krm", "kryddmått")
 _alias("cup", "kop", "kopper", "kopp", "koppar", "kopje", "kopjes", "tasse", "tassen", "taza", "tazas", "tazza", "tazze")
 _alias("pinch", "knsp", "knivspids", "knivsspids", "prise", "prisen", "messerspitze", "messerspitzen", "klype", "pizca", "pizcas", "pizzico", "pizzichi", "snufje", "snufjes", "mespunt", "pincée", "pincee", "pincées", "ripaus")
@@ -319,12 +319,19 @@ def _round(value: float | None) -> float | None:
 
 
 SUBSTITUTE_SEP = " || "
+COMMENT_SEP = " // "
 _HEADER = re.compile(r"^#{1,6}\s+")
 
 
 def is_header(line: str) -> bool:
     """Lines starting with '## ' are section headings, not ingredients."""
     return bool(_HEADER.match(line.strip()))
+
+
+def split_comment(line: str) -> tuple[str, str]:
+    """``200 g butter // room temperature`` -> (``200 g butter``, ``room temperature``)."""
+    body, _, comment = line.partition(COMMENT_SEP.rstrip())
+    return body.strip(), comment.strip()
 
 
 def parse_ingredient(line: str) -> dict[str, Any]:
@@ -334,17 +341,21 @@ def parse_ingredient(line: str) -> dict[str, Any]:
     ``## Dough`` is a section heading, and ``200 g butter || 180 g coconut oil``
     carries a substitute with its own amount; ``200 g butter || 180 g oil || 3 dl cream``
     carries several. They are parsed into ``substitutes`` (``substitute`` is the first).
+    A trailing `` // text`` is the cook's own note on the ingredient, kept as ``comment``.
     """
     if is_header(line):
         title = _HEADER.sub("", line.strip()).strip()
         return {**_empty(title), "header": True}
+    line, comment = split_comment(line)
     if SUBSTITUTE_SEP in line:
         main, *alternatives = (part.strip() for part in line.split(SUBSTITUTE_SEP))
         result = _parse_line(main)
         result["substitutes"] = [_parse_line(alt) for alt in alternatives if alt]
         result["substitute"] = result["substitutes"][0] if result["substitutes"] else None
-        return result
-    return _parse_line(line)
+    else:
+        result = _parse_line(line)
+    result["comment"] = comment
+    return result
 
 
 def _empty(line: str) -> dict[str, Any]:
@@ -363,6 +374,7 @@ def _empty(line: str) -> dict[str, Any]:
         "header": False,
         "substitute": None,
         "substitutes": [],
+        "comment": "",
     }
 
 
@@ -382,6 +394,7 @@ def _parse_line(line: str) -> dict[str, Any]:
         "header": False,
         "substitute": None,
         "substitutes": [],
+        "comment": "",
     }
     text = _expand_fractions(line.strip())
     m = _QTY.match(text)

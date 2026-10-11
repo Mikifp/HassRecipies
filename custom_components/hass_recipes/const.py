@@ -46,3 +46,8 @@ MEALPLAN_STORAGE_KEY = f"{DOMAIN}.mealplan"
 SERVICE_PLAN_MEAL = "plan_meal"
 SERVICE_CLEAR_MEAL_PLAN = "clear_meal_plan"
 SERVICE_PLAN_TO_SHOPPING_LIST = "add_plan_to_shopping_list"
+
+CONF_EDIT_ACCESS = "edit_access"
+EDIT_EVERYONE = "everyone"
+EDIT_ADMINS = "admins"
+ISSUE_CARDS_RESOURCE = "cards_resource_not_registered"

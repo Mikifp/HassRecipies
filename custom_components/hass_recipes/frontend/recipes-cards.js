@@ -16,6 +16,7 @@ const {
   isHeader,
   headerText,
   splitSubs,
+  stepTextHtml,
   timerSpecs,
   clock,
   ingParts,
@@ -95,6 +96,9 @@ const I18N = {
     ed_list_height: "List height (px, 0 for no scrolling)",
     ed_content_height: "Step height (px, 0 for no scrolling)",
     ed_keep_awake: "Keep the screen awake while cooking",
+    ed_section_buttons: "Buttons to jump between sections",
+    section_prev: "Previous section",
+    section_next: "Next section",
     ed_swipe: "Swipe left and right to change step",
     ed_text_size: "Text size",
     help_recipe: "Leave empty to follow the recipe chosen with the Dashboard button in the Recipes panel.",
@@ -179,6 +183,9 @@ const I18N = {
     ed_list_height: "Listehøjde (px, 0 for ingen rulning)",
     ed_content_height: "Trinhøjde (px, 0 for ingen rulning)",
     ed_keep_awake: "Hold skærmen tændt under madlavning",
+    ed_section_buttons: "Knapper til at skifte mellem sektioner",
+    section_prev: "Forrige sektion",
+    section_next: "Næste sektion",
     ed_swipe: "Stryg til siden for at skifte trin",
     ed_text_size: "Tekststørrelse",
     help_recipe: "Lad stå tom for at følge opskriften valgt med Dashboard-knappen i Opskrifter.",
@@ -213,6 +220,30 @@ const pagesFor = (r) => {
   const hasIngs = (r.ingredients || []).some((t) => !isHeader(t));
   const pages = hasIngs ? [{ page: "ingredients", i: -1, text: "", ingredients: [], timer: null }, ...real] : real;
   return { all, real, pages, hasIngs };
+};
+
+/** Pages where a section begins: [{ page, title }]; empty unless the recipe has two or more. */
+const sectionStarts = (all, pages) => {
+  const starts = [];
+  const pageOf = new Map(pages.map((p, idx) => [p.i, idx]));
+  let lastTitle = null;
+  let section = false;
+  for (const s of all) {
+    if (s.section) {
+      lastTitle = s.text;
+      section = true;
+      continue;
+    }
+    const idx = pageOf.get(s.i);
+    if (idx === undefined) continue;
+    if (section) {
+      starts.push({ page: idx, title: lastTitle });
+      section = false;
+    }
+  }
+  // what comes before the first heading is a place to go back to as well
+  if (starts.length && starts[0].page > 0) starts.unshift({ page: 0, title: "" });
+  return starts.length >= 2 ? starts : [];
 };
 
 /* ---- ticks and done steps: the record the panel keeps, so both agree --------- */
@@ -420,7 +451,7 @@ class HassRecipesListCard extends RecipesBase {
   }
   async _load() {
     try {
-      this._recipes = (await this._hass.callWS({ type: "hass_recipes/list" })).recipes;
+      this._recipes = (await this._hass.callWS({ type: "hass_recipes/summaries" })).recipes;
       this._error = "";
     } catch (err) {
       this._error = err.message || "Could not load recipes";
@@ -605,7 +636,7 @@ class HassRecipesCookCard extends RecipesBase {
     };
     window.addEventListener("hass-recipes-progress", this._onProgress);
     await this._load();
-    for (const ev of ["recipe_updated", "recipe_deleted"]) {
+    for (const ev of ["recipe_added", "recipe_updated", "recipe_deleted"]) {
       this._sub(() => this._hass.connection.subscribeEvents(() => this._load(), `hass_recipes_${ev}`));
     }
     // the shared cooking state: recipe, page and scale move together on every card and voice command
@@ -627,6 +658,10 @@ class HassRecipesCookCard extends RecipesBase {
   /** A card without `recipe:` follows the shared cooking state; one that names a recipe keeps its own. */
   _follows() {
     return !String(this._config.recipe || "").trim();
+  }
+  /** Does this card show the recipe browser (so it needs the list of recipes)? */
+  _wantsList() {
+    return false;
   }
   _step() {
     if (this._stepOverride != null) return this._stepOverride; // while measuring the other pages
@@ -679,17 +714,29 @@ class HassRecipesCookCard extends RecipesBase {
   }
   async _load() {
     try {
-      const res = await this._hass.callWS({ type: "hass_recipes/list" });
-      const recipes = res.recipes;
-      this._all = recipes;
-      this._chosen = res.cooking_recipe_id;
-      this._srvStep = res.cooking_step || 0;
-      this._srvScale = res.cooking_scale || 1;
       const named = String(this._config.recipe || "").trim();
-      const want = named.toLowerCase();
-      this._recipe = named
-        ? recipes.find((r) => r.id === named) || recipes.find((r) => r.name.trim().toLowerCase() === want) || null
-        : recipes.find((r) => r.id === this._chosen) || null;
+      // Only what is needed: the shared state with the one chosen recipe, or (for a card
+      // that names its recipe) the summaries to find it by name, then that recipe.
+      // The browser list (kitchen card) is the summaries, without anybody's steps.
+      let summaries = null;
+      if (this._wantsList() || named) {
+        summaries = await this._hass.callWS({ type: "hass_recipes/summaries" });
+        this._all = summaries.recipes;
+      }
+      if (named) {
+        const want = named.toLowerCase();
+        const hit =
+          summaries.recipes.find((r) => r.id === named) ||
+          summaries.recipes.find((r) => r.name.trim().toLowerCase() === want);
+        this._chosen = summaries.cooking_recipe_id;
+        this._recipe = hit ? await this._hass.callWS({ type: "hass_recipes/get", recipe_id: hit.id }) : null;
+      } else {
+        const state = await this._hass.callWS({ type: "hass_recipes/cooking" });
+        this._chosen = state.recipe_id;
+        this._srvStep = state.step || 0;
+        this._srvScale = state.scale || 1;
+        this._recipe = state.recipe || null;
+      }
       this._error = this._recipe
         ? ""
         : named
@@ -867,6 +914,7 @@ class HassRecipesCookCard extends RecipesBase {
     const mode = this._config.units === "original" ? "original" : "grams";
     const progress = loadProgress(r.id);
     const partsOf = (i) => ingParts((r.parsed_ingredients || [])[i], splitSubs(r.ingredients[i] ?? "").main, k, mode);
+    const commentOf = (i) => splitSubs(r.ingredients[i] ?? "").comment;
     // "or 180 g coconut oil" lines for every alternative of an ingredient
     const altsOf = (i) => {
       const p = (r.parsed_ingredients || [])[i] || {};
@@ -878,12 +926,16 @@ class HassRecipesCookCard extends RecipesBase {
     };
     let section = "";
     for (const x of all.slice(0, Math.max(st.i, 0))) if (x.section) section = x.text;
-    const ings = st.ingredients
-      .filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]))
-      .map((i) => {
-        const a = partsOf(i);
-        return `<span class="ing">${a.qty ? `${esc(a.qty)} ` : ""}${esc(a.food)}</span>`;
-      })
+    const chipOf = (i) => {
+      const a = partsOf(i);
+      return `<span class="ing">${a.qty ? `${esc(a.qty)} ` : ""}${esc(a.food)}</span>`;
+    };
+    // ingredients the step names become chips in its text; the others stay in the row under it
+    const linked = st.ingredients.filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]));
+    const named = stepTextHtml(st.text || "", linked.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main })), chipOf);
+    const ings = linked
+      .filter((i) => !named.placed.has(i))
+      .map(chipOf)
       .join("");
     const ingredientsPage = st.page === "ingredients";
     const stepDone = !ingredientsPage && progress.steps.has(st.i);
@@ -896,12 +948,12 @@ class HassRecipesCookCard extends RecipesBase {
             return `<label class="irow${on ? " on" : ""}"><input type="checkbox" data-ing="${i}" ${on ? "checked" : ""}>
               <span class="itext">${a.qty ? `<span class="q">${esc(a.qty)}</span> ` : ""}<b>${esc(a.food)}</b>${
                 a.note ? `<span class="muted">, ${esc(a.note)}</span>` : ""
-              }${a.sub ? ` <span class="muted sub">${esc(a.sub)}</span>` : ""}${altsOf(i)
+              }${a.sub ? ` <span class="muted sub">${esc(a.sub)}</span>` : ""}${commentOf(i) ? `<span class="muted cmt">${esc(commentOf(i))}</span>` : ""}${altsOf(i)
                 .map((alt) => `<span class="muted alt">${esc(this._t("or"))} ${esc(alt)}</span>`)
                 .join("")}</span></label>`;
           })
           .join("")}</div>`
-      : `<div class="text${stepDone ? " done" : ""}" data-done-toggle="${st.i}">${esc(st.text)}</div>
+      : `<div class="text${stepDone ? " done" : ""}" data-done-toggle="${st.i}">${named.html}</div>
          <button class="btn donebtn${stepDone ? " p" : ""}" data-done="${st.i}"><ha-icon icon="mdi:${stepDone ? "check-circle" : "check-circle-outline"}"></ha-icon>${esc(
            this._t(stepDone ? "is_done" : "mark_done")
          )}</button>`;
@@ -916,6 +968,18 @@ class HassRecipesCookCard extends RecipesBase {
       })
       .join("");
     const last = n === pages.length - 1;
+    // jumping between sections (an option): the start of this section first, then the one before
+    const sections = this._config.section_buttons ? sectionStarts(all, pages) : [];
+    let secPrev = null;
+    let secNext = null;
+    if (sections.length) {
+      let at = 0;
+      sections.forEach((s, i) => {
+        if (s.page <= n) at = i;
+      });
+      secPrev = sections[at].page < n ? sections[at] : sections[at - 1] || null;
+      secNext = sections[at + 1] || null;
+    }
     const html = `
       <style>
         .body { padding: 4px 16px 16px; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; touch-action: pan-y; }
@@ -927,6 +991,7 @@ class HassRecipesCookCard extends RecipesBase {
         .text.done { opacity: .55; text-decoration: line-through; }
         .donebtn { margin-bottom: 12px; }
         .ings { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .text .ing { font-size: .9em; padding: 1px 8px; margin: 0 1px; white-space: nowrap; }
         .ing { font-size: calc(13px * var(--hr-fs, 1)); padding: 3px 10px; border-radius: 8px; background: color-mix(in srgb, var(--primary-color) 10%, transparent); border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent); }
         .scale { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
         .scale .step { width: 30px; height: 30px; padding: 0; border: 1px solid var(--divider-color); border-radius: 8px; background: none; color: inherit; font-size: 18px; line-height: 1; }
@@ -945,6 +1010,11 @@ class HassRecipesCookCard extends RecipesBase {
         .actions { margin-top: auto; padding-top: 10px; flex: none; }
         .timer-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
         .irow .alt { display: block; font-size: 12px; }
+        .irow .cmt { display: block; font-size: 12px; font-style: italic; }
+        .secnav { display: flex; gap: 8px; margin-top: 4px; }
+        .secnav .btn { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: calc(13px * var(--hr-fs, 1)); }
+        .secnav .btn span { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+        .secnav .btn small { font-size: 11px; opacity: .75; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .nav { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
         .nav .next { margin-left: auto; }
       </style>
@@ -963,6 +1033,18 @@ class HassRecipesCookCard extends RecipesBase {
         ${this._timersHtml()}
         <div class="actions">
           ${timerButtons ? `<div class="timer-btns">${timerButtons}</div>` : ""}
+          ${
+            sections.length
+              ? `<div class="secnav">
+                  <button class="btn" id="secprev" ${secPrev ? "" : "disabled"} title="${esc(secPrev ? secPrev.title : "")}"><ha-icon icon="mdi:chevron-double-left"></ha-icon><span>${esc(
+                    this._t("section_prev")
+                  )}${secPrev && secPrev.title ? `<small>${esc(secPrev.title)}</small>` : ""}</span></button>
+                  <button class="btn" id="secnext" ${secNext ? "" : "disabled"} title="${esc(secNext ? secNext.title : "")}"><span>${esc(
+                    this._t("section_next")
+                  )}${secNext && secNext.title ? `<small>${esc(secNext.title)}</small>` : ""}</span><ha-icon icon="mdi:chevron-double-right"></ha-icon></button>
+                </div>`
+              : ""
+          }
           <div class="nav">
             <button class="btn" id="prev" ${n === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-left"></ha-icon>${esc(this._t("back"))}</button>
             <button class="btn p next" id="next">${esc(this._t(last ? "start_over" : "next"))}<ha-icon icon="mdi:${last ? "restart" : "arrow-right"}"></ha-icon></button>
@@ -977,6 +1059,10 @@ class HassRecipesCookCard extends RecipesBase {
         saveProgress(r.id, { ing: new Set(), steps: new Set() });
         this._goto(0, pages.length);
       };
+      const secPrevBtn = root.getElementById("secprev");
+      if (secPrevBtn) secPrevBtn.onclick = () => secPrev && this._goto(secPrev.page, pages.length);
+      const secNextBtn = root.getElementById("secnext");
+      if (secNextBtn) secNextBtn.onclick = () => secNext && this._goto(secNext.page, pages.length);
       root.getElementById("prev").onclick = () => this._goto(n - 1, pages.length);
       root.getElementById("next").onclick = () => (last ? finish() : this._goto(n + 1, pages.length));
       for (const btn of root.querySelectorAll("[data-timer-key]")) {
@@ -1032,6 +1118,9 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
   static getStubConfig() {
     return { limit: 20 };
   }
+  _wantsList() {
+    return this._config.show !== "steps";
+  }
   setConfig(config) {
     // always follows the shared cooking recipe (the one chosen here and in the Recipes panel)
     this._query = this._query || "";
@@ -1075,7 +1164,7 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
     // to go back to the browser. Vertical stays as it is.
     const layout = this._layout();
     if (layout === "vertical" || (layout === "horizontal" && !this._isNarrow())) return "both";
-    if (!this._recipe) return "list"; // nothing chosen yet, or the chosen recipe was deleted
+    if (!this._recipe && !this._picking) return "list"; // nothing chosen yet, or the chosen recipe was deleted
     return this._view || "cook";
   }
   _cookBody() {
@@ -1183,17 +1272,19 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
     const pick = async (id) => {
       this._chosen = id;
       this._view = "cook";
-      const chosen = (this._all || []).find((r) => r.id === id);
-      if (chosen) {
-        this._recipe = chosen;
-        this._srvStep = 0;
-        this._srvScale = chosen.default_scale || 1;
-      }
+      this._recipe = null; // the browser has summaries; the steps arrive with the full recipe
+      this._picking = true; // show "loading", not the browser again, until it has arrived
+      this._error = "";
+      this._srvStep = 0;
       this._render();
       try {
         await this._hass.callWS({ type: "hass_recipes/set_cooking", recipe_id: id });
+        await this._load();
       } catch (err) {
         this._error = err.message;
+      } finally {
+        this._picking = false;
+        this._render();
       }
     };
     for (const row of root.querySelectorAll("[data-pick]")) {
@@ -1384,7 +1475,7 @@ class HassRecipesCardEditor extends HTMLElement {
   }
   async _loadOptions() {
     try {
-      const { recipes } = await this._hass.callWS({ type: "hass_recipes/list" });
+      const { recipes } = await this._hass.callWS({ type: "hass_recipes/summaries" });
       const uniq = (key) => [...new Set(recipes.flatMap((r) => r[key] || []))].sort((a, b) => a.localeCompare(b));
       this._options = {
         recipes: recipes.map((r) => ({ value: r.id, label: r.name })),
@@ -1418,6 +1509,7 @@ class HassRecipesCardEditor extends HTMLElement {
         { value: "xlarge", label: t("opt_size_xlarge") },
       ]),
       { name: "swipe", selector: { boolean: {} } },
+      { name: "section_buttons", selector: { boolean: {} } },
       { name: "keep_awake", selector: { boolean: {} } },
       units,
     ];

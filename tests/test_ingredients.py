@@ -196,3 +196,26 @@ def test_no_substitutes_and_blank_ones():
     assert parse("2 eggs || ")["substitutes"] == []
     assert parse("## Dough")["substitutes"] == []
     assert [s["food"] for s in parse("1 butter ||  || 1 oil")["substitutes"]] == ["oil"]
+
+
+def test_ingredient_note_is_kept_apart_from_the_food():
+    plain = parse("200 g butter")
+    noted = parse("200 g butter // room temperature")
+    assert noted["comment"] == "room temperature"
+    assert noted["food"] == plain["food"] == "butter"
+    assert noted["grams"] == plain["grams"] == 200
+    assert plain["comment"] == ""
+
+
+def test_ingredient_note_after_substitutes():
+    r = parse("200 g butter || 180 g coconut oil // soft")
+    assert r["comment"] == "soft"
+    assert r["substitutes"][0]["food"] == "coconut oil"
+
+
+def test_danish_spoon_plurals_are_units():
+    for line in ("2 teskeer bagepulver", "1 ¹/₂ spiseskeer hvidvinseddike", "2 dessertskeer sukker"):
+        r = parse(line)
+        assert r["unit"] is not None, line
+        assert r["quantity"] is not None
+    assert parse("2 teskeer bagepulver")["food"] == "bagepulver"

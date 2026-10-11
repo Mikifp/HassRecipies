@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
@@ -23,6 +24,7 @@ from .const import (
     DEFAULT_SNOOZE_SECONDS,
     DOMAIN,
     FRONTEND_URL,
+    ISSUE_CARDS_RESOURCE,
     PANEL_ELEMENT,
     PANEL_URL_PATH,
     PLATFORMS,
@@ -44,7 +46,7 @@ from .http_api import (
 )
 from .images import ImageStore, id_from_url
 from .localize import words
-from .lovelace_resource import async_ensure_resource, async_remove_resource
+from .lovelace_resource import async_ensure_resource, async_remove_resource, resource_mode
 from .intents import async_install_sentences, async_remove_intents, async_setup_intents
 from .scraper import RecipeImportError, async_import_url
 from .mealplan import SLOTS, MealPlan, MealPlanError
@@ -62,7 +64,6 @@ type RecipesConfigEntry = ConfigEntry[RecipeStore]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-FRONTEND_FILES = ("recipes-shared.js", "recipes-i18n.js", "recipes-panel.js", CARDS_JS)
 ASSETS_VERSION_KEY = f"{DOMAIN}_assets_version"
 
 
@@ -76,8 +77,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     carries a version that changes whenever any of them does.
     """
     frontend_dir = Path(__file__).parent / "frontend"
+    # one version for every front-end file: whichever changed last
     version = await hass.async_add_executor_job(
-        lambda: max(int((frontend_dir / name).stat().st_mtime) for name in FRONTEND_FILES)
+        lambda: max(int(p.stat().st_mtime) for p in frontend_dir.glob("*.js"))
     )
     hass.data[ASSETS_VERSION_KEY] = version
     await hass.http.async_register_static_paths(
@@ -93,6 +95,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
     await store.async_load()
     entry.runtime_data = store
     hass.data[DOMAIN] = store
+    hass.data[f"{DOMAIN}_entry"] = entry  # who may edit is an option, read when a command arrives
 
     plan = MealPlan(hass, store)
     await plan.async_load()
@@ -138,10 +141,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
     # builds a dashboard. At start-up Lovelace may not be ready yet, so retry when it is.
     cards_path = f"{FRONTEND_URL}/{CARDS_JS}"
 
-    async def _register_cards(_event: Event | None = None) -> None:
-        await async_ensure_resource(hass, cards_path, version)
+    def _report_cards(registered: bool) -> None:
+        """Tell the user, in Repairs, when the cards could not be added as a resource."""
+        if registered:
+            ir.async_delete_issue(hass, DOMAIN, ISSUE_CARDS_RESOURCE)
+            return
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            ISSUE_CARDS_RESOURCE,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_CARDS_RESOURCE,
+            translation_placeholders={"url": f"{cards_path}?v={version}", "mode": resource_mode(hass)},
+        )
 
-    if not await async_ensure_resource(hass, cards_path, version):
+    async def _register_cards(_event: Event | None = None) -> None:
+        _report_cards(await async_ensure_resource(hass, cards_path, version))
+
+    if await async_ensure_resource(hass, cards_path, version):
+        _report_cards(True)
+    else:
+        # Lovelace may simply not be ready yet: look again once Home Assistant has started
         entry.async_on_unload(hass.bus.async_listen_once("homeassistant_started", _register_cards))
     await panel_custom.async_register_panel(
         hass,
@@ -327,6 +348,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> 
     hass.data.pop(DOMAIN, None)
     hass.data.pop(f"{DOMAIN}_timers", None)
     hass.data.pop(f"{DOMAIN}_plan", None)
+    hass.data.pop(f"{DOMAIN}_entry", None)
     hass.data.pop(f"{DOMAIN}_images", None)
     return True
 
@@ -334,3 +356,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> 
 async def async_remove_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> None:
     """The integration was deleted: take its dashboard resource with it."""
     await async_remove_resource(hass, f"{FRONTEND_URL}/{CARDS_JS}")
+    ir.async_delete_issue(hass, DOMAIN, ISSUE_CARDS_RESOURCE)

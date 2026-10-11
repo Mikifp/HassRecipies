@@ -111,7 +111,7 @@ def _number(language: str | None, value: float) -> str:
 
 def spoken_ingredient(line: str, scale: float, language: str | None = None) -> str:
     """One ingredient as it is read out, scaled."""
-    parsed = parse_ingredient(line.partition(" || ")[0])
+    parsed = parse_ingredient(line)
     quantity = parsed.get("quantity")
     if quantity is None:
         return parsed.get("food") or line
