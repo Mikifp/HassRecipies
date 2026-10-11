@@ -307,10 +307,20 @@ class RecipesBase extends HTMLElement {
     window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
   }
   _paint(body) {
+    // The ha-card element is created once and only its content is replaced. Recreating it
+    // on every paint made the card collapse for a frame (it renders asynchronously), which
+    // is what made the page jump when stepping through a recipe.
+    let card = this.shadowRoot.querySelector("ha-card");
+    if (!card) {
+      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card></ha-card>`;
+      card = this.shadowRoot.querySelector("ha-card");
+    }
     // repaints (timer ticks, selections) must not throw scrolled areas back to the top
-    const tops = [...this.shadowRoot.querySelectorAll(".scroll")].map((s) => s.scrollTop);
-    const fs = TEXT_SIZES[this._config?.text_size] || 1;
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card style="--hr-fs:${fs}">${body}</ha-card>`;
+    // (a new step does start at the top)
+    const tops = this._resetScroll ? [] : [...card.querySelectorAll(".scroll")].map((s) => s.scrollTop);
+    this._resetScroll = false;
+    card.style.setProperty("--hr-fs", String(TEXT_SIZES[this._config?.text_size] || 1));
+    card.innerHTML = body;
     // restored once the repainted card has been laid out (before the next paint, so no flicker)
     if (tops.some((t) => t)) {
       requestAnimationFrame(() => {
@@ -619,7 +629,49 @@ class HassRecipesCookCard extends RecipesBase {
     return !String(this._config.recipe || "").trim();
   }
   _step() {
+    if (this._stepOverride != null) return this._stepOverride; // while measuring the other pages
     return this._follows() ? this._srvStep || 0 : this._localStep || 0;
+  }
+  /**
+   * Work out how tall the tallest page of this recipe is (laid out off screen, once per
+   * recipe, scale and width) and keep the step area that tall, so the buttons below it
+   * stay where they are as you step between short and long pages.
+   */
+  _reserveTallestPage(r) {
+    const card = this.shadowRoot.querySelector("ha-card");
+    const content = card && card.querySelector(".content");
+    if (!content || !content.clientWidth) return;
+    const key = `${r.id}|${this._scale()}|${this._config.text_size || ""}|${content.clientWidth}`;
+    if (this._measuredKey === key) return;
+    this._measuredKey = key;
+    const { pages } = pagesFor(r);
+    const saved = [this._stepOverride, this._pageKey, this._resetScroll, this._minFor, this._contentMin];
+    const probe = document.createElement("div");
+    probe.className = "content";
+    probe.style.cssText = `position:absolute;left:-9999px;top:0;visibility:hidden;width:${content.clientWidth}px;`;
+    card.append(probe);
+    let tallest = 0;
+    try {
+      for (let i = 0; i < pages.length; i += 1) {
+        this._stepOverride = i;
+        const { html } = HassRecipesCookCard.prototype._cookBody.call(this);
+        const tpl = document.createElement("template");
+        tpl.innerHTML = html;
+        const inner = tpl.content.querySelector(".content");
+        probe.innerHTML = inner ? inner.innerHTML : "";
+        tallest = Math.max(tallest, probe.offsetHeight);
+      }
+    } finally {
+      [this._stepOverride, this._pageKey, this._resetScroll, this._minFor, this._contentMin] = saved;
+      this._stepOverride = null;
+      probe.remove();
+    }
+    const cap = Number(this._config.content_height ?? 480);
+    const tall = Math.ceil(cap > 0 ? Math.min(tallest, cap) : tallest);
+    if (tall > (this._contentMin || 0)) {
+      this._contentMin = tall;
+      content.style.minHeight = `${tall}px`;
+    }
   }
   _scale() {
     if (this._follows()) return this._srvScale > 0 ? this._srvScale : this._recipe?.default_scale || 1;
@@ -800,6 +852,17 @@ class HassRecipesCookCard extends RecipesBase {
     const n = Math.min(this._step(), pages.length - 1);
     const st = pages[n];
     const num = hasIngs ? n : n + 1; // step number among the real steps
+    const pageKey = `${r.id}:${n}`;
+    if (this._pageKey !== pageKey) {
+      this._resetScroll = true; // a new page starts at its top
+      this._pageKey = pageKey;
+    }
+    // Keep the step area as tall as the tallest page seen so far, so the buttons and
+    // everything below do not move when you step between short and long pages.
+    if (this._minFor !== r.id) {
+      this._minFor = r.id;
+      this._contentMin = 0;
+    }
     const k = this._scale();
     const mode = this._config.units === "original" ? "original" : "grams";
     const progress = loadProgress(r.id);
@@ -879,7 +942,8 @@ class HassRecipesCookCard extends RecipesBase {
         .irow.on .itext { opacity: .55; text-decoration: line-through; }
         .irow .q { font-variant-numeric: tabular-nums; }
         .irow .sub { font-size: 12px; }
-        .timer-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+        .actions { margin-top: auto; padding-top: 10px; flex: none; }
+        .timer-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
         .irow .alt { display: block; font-size: 12px; }
         .nav { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
         .nav .next { margin-left: auto; }
@@ -889,20 +953,25 @@ class HassRecipesCookCard extends RecipesBase {
       }${stepDone ? " ✓" : ""}${!ingredientsPage && k !== 1 ? ` · ${formatNumber(k)}×` : ""}</span></div>
       <div class="body">
         <div class="progress"><i style="width:${((n + 1) / pages.length) * 100}%"></i></div>
-        <div class="content scroll" style="${this._scrollRegion(Number(this._config.content_height ?? 480))}">
+        <div class="content scroll" style="${this._scrollRegion(Number(this._config.content_height ?? 480))}${
+          !this._fixedHeight() && this._contentMin ? `min-height:${this._contentMin}px;` : ""
+        }">
           ${section ? `<div class="section">${esc(section)}</div>` : ""}
           ${body}
           ${ings ? `<div class="ings">${ings}</div>` : ""}
         </div>
-        ${timerButtons ? `<div class="timer-btns">${timerButtons}</div>` : ""}
-        <div class="nav">
-          <button class="btn" id="prev" ${n === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-left"></ha-icon>${esc(this._t("back"))}</button>
-          <button class="btn p next" id="next">${esc(this._t(last ? "start_over" : "next"))}<ha-icon icon="mdi:${last ? "restart" : "arrow-right"}"></ha-icon></button>
-        </div>
         ${this._timersHtml()}
+        <div class="actions">
+          ${timerButtons ? `<div class="timer-btns">${timerButtons}</div>` : ""}
+          <div class="nav">
+            <button class="btn" id="prev" ${n === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-left"></ha-icon>${esc(this._t("back"))}</button>
+            <button class="btn p next" id="next">${esc(this._t(last ? "start_over" : "next"))}<ha-icon icon="mdi:${last ? "restart" : "arrow-right"}"></ha-icon></button>
+          </div>
+        </div>
       </div>`;
     const wire = () => {
       const root = this.shadowRoot;
+      if (!this._fixedHeight()) requestAnimationFrame(() => this._reserveTallestPage(r));
       const finish = () => {
         // starting over clears this recipe's ticks, as the panel does when every step is done
         saveProgress(r.id, { ing: new Set(), steps: new Set() });
@@ -976,12 +1045,36 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
     const l = this._config.layout;
     return l === "vertical" || l === "horizontal" ? l : "app";
   }
+  /** A card narrower than this (a phone) is too small for the list beside the recipe. */
+  _isNarrow() {
+    const width = this.clientWidth || this.getBoundingClientRect().width;
+    return width ? width < 560 : window.innerWidth < 600;
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    this._wasNarrow = this._isNarrow();
+    this._resizeWatcher = new ResizeObserver(() => {
+      const narrow = this._isNarrow();
+      if (narrow !== this._wasNarrow) {
+        this._wasNarrow = narrow;
+        if (this._layout() === "horizontal") this._render(); // side by side <-> the mini app
+      }
+    });
+    this._resizeWatcher.observe(this);
+  }
+  disconnectedCallback() {
+    if (this._resizeWatcher) this._resizeWatcher.disconnect();
+    super.disconnectedCallback();
+  }
   /** "both" shows recipe and list together; otherwise one screen at a time: "cook" or "list". */
   _screen() {
     // show: "list" or "steps" pins the card to one part; anything else follows `layout`
     if (this._config.show === "list") return "list";
     if (this._config.show === "steps") return "cook";
-    if (this._layout() !== "app") return "both";
+    // Horizontal needs width: on a phone it becomes the mini app, with a Recipes button
+    // to go back to the browser. Vertical stays as it is.
+    const layout = this._layout();
+    if (layout === "vertical" || (layout === "horizontal" && !this._isNarrow())) return "both";
     if (!this._recipe) return "list"; // nothing chosen yet, or the chosen recipe was deleted
     return this._view || "cook";
   }
@@ -994,8 +1087,14 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
     if (this._layout() !== "horizontal") {
       return `<style>
           .vpart { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-          .vpart.cp { flex: 3 1 auto; }
-          .vpart.lp { flex: 2 1 auto; }
+          ${
+            // a card with a set height: the recipe is only as tall as its content needs (it
+            // shrinks, scrolling, when short of room) and the list takes whatever is left;
+            // otherwise each takes what it needs
+            this._fixedHeight()
+              ? ".vpart.cp { flex: 0 1 auto; } .vpart.lp { flex: 1 1 0; min-height: 140px; }"
+              : ".vpart.cp, .vpart.lp { flex: 0 0 auto; }"
+          }
         </style><div class="vpart cp">${top}${body}</div><div class="vpart lp">${after}</div>`;
     }
     return `<style>
@@ -1004,7 +1103,7 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
         .split .side { border-right: 1px solid var(--divider-color); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
         .split .main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
         @container (max-width: 560px) {
-          .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); }
+          .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
           .split .side { border-right: 0; border-bottom: 1px solid var(--divider-color); order: 2; }
         }
       </style>
