@@ -27,6 +27,7 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Check off steps (and ingredients) while cooking; checks are remembered per recipe for two days, a finished timer completes its step, and finishing every step resets the checks
 - In the editor, drag the ⠿ handle to reorder ingredients and steps (↑ ↓ buttons on touch screens), and use **+ Step here** between steps to insert a step or section anywhere
 - **New editor (beta)**: a toggle in the recipe editor switches to section cards, where each section holds its ingredients and its steps together. Ingredients a step uses appear as chips inside the step text (type `@` to add one); drag ingredients and steps between sections. It edits the same data as the classic form, so you can switch back and forth
+- Steps show the ingredients they name as chips right in the text, with the amount scaled to what you are making, in the recipe page, cook mode and the dashboard cards; ingredients a step uses but does not name stay in the row below it
 - Unsaved-changes prompt when you leave the editor
 - Yield: say what the ingredients make ("8 pancakes") and the multiplier the recipe opens at (2× = 16 pancakes); type the number you want and everything scales. `makes:` works in the shopping-list service too
 - Scale a recipe (½×–4× or any multiplier); linked ingredients scale too

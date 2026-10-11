@@ -59,3 +59,27 @@ test("ingredient notes", () => {
   assert.equal(s.joinSubs("200 g butter", ["180 g oil"]), "200 g butter || 180 g oil");
   assert.deepEqual(s.splitSub("200 g butter // soft"), ["200 g butter", ""]);
 });
+
+test("ingredients named in a step become chips", () => {
+  const items = [
+    { key: 0, text: "175 gram smør" },
+    { key: 1, text: "2 stk røde løg" },
+    { key: 2, text: "salt og peber" },
+  ];
+  const chip = (key, word) => `[${key}:${word}]`;
+  const out = s.stepTextHtml("Smelt smørret og hak løg. Smag til med salt og peber.", items, chip);
+  assert.equal(out.html, "Smelt [0:smørret] og hak [1:løg]. Smag til med [2:salt og peber].");
+  assert.deepEqual([...out.placed].sort(), [0, 1, 2]);
+});
+
+test("an ingredient the step does not name is not placed", () => {
+  const out = s.stepTextHtml("Rør sammen.", [{ key: 3, text: "1 dl mælk" }], () => "?");
+  assert.equal(out.html, "Rør sammen.");
+  assert.equal(out.placed.size, 0);
+});
+
+test("the food word is the noun, without units or remarks", () => {
+  assert.equal(s.foodWords("1 ¹/₂ kilogram kartofler")[0], "kartofler");
+  assert.equal(s.foodWords("2 stk røde løg")[0], "løg");
+  assert.equal(s.foodWords("280 gram sukker jeg brugte halv brun farin")[0], "sukker");
+});

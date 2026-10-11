@@ -138,6 +138,7 @@ const STYLE = `
   .ing-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 3px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; background: color-mix(in srgb, var(--primary-color) 9%, transparent); border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent); }
   .ing-chip .q { color: var(--secondary-text-color); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .ing-chip b { font-weight: 500; }
+  .step-text .ing-chip, .cook .cook-text .ing-chip, .cstep .cstep-text .ing-chip { display: inline-flex; padding: 0 8px; margin: 0 1px; font-size: .9em; vertical-align: baseline; }
   .timer-btn { margin-top: 10px; }
   .step { border: 1px solid var(--divider-color); border-radius: 8px; padding: 10px; margin-bottom: 12px; }
   .step-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }

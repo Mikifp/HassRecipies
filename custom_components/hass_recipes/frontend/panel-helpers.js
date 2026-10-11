@@ -26,7 +26,10 @@ const {
   fmtYield,
   SCALES,
   scaleBasis,
-  roundAmount, lengthText
+  roundAmount, lengthText,
+  foodWords,
+  detectChips,
+  stepTextHtml
 } = await import(`./recipes-shared.js${__v ? `?v=${__v}` : ""}`);
 // Panel translations (Danish): the templates stay English and are translated where they land.
 const { observeTranslations, translate: translateText } = await import(`./recipes-i18n.js${__v ? `?v=${__v}` : ""}`);
@@ -112,6 +115,9 @@ export default {
   toInt,
   TODO_KEY,
   ingredientHtml,
+  foodWords,
+  detectChips,
+  stepTextHtml,
   ingredientChipHtml,
   PROGRESS_KEY,
   HANDLED_KEY,

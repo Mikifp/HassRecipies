@@ -1,6 +1,6 @@
 /* Recipes panel: recipe methods. Mixed into the panel class by recipes-panel.js. */
 export default function (h) {
-  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml } = h;
+  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml, splitSubs, stepTextHtml } = h;
   return {
     // ---- shopping list (HA to-do entities) ----
     _todoEntities() {
@@ -93,6 +93,18 @@ export default function (h) {
         .join("")}</ul>`;
     },
 
+    /** A step's text with the ingredients it names as chips, and chips for the ones it does not name. */
+    _stepTextParts(r, s, k) {
+      const idx = s.ingredients.filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]));
+      const items = idx.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main }));
+      const { html, placed } = stepTextHtml(s.text, items, (i) => ingredientChipHtml(r, i, k, this._units));
+      const links = idx
+        .filter((i) => !placed.has(i))
+        .map((i) => ingredientChipHtml(r, i, k, this._units))
+        .join("");
+      return { html, links };
+    },
+
     _stepsHtml(r, k) {
       let num = 0;
       return r.instructions
@@ -101,13 +113,10 @@ export default function (h) {
           if (s.section) return `<div class="step-section">${esc(s.text)}</div>`;
           num += 1;
           const done = this._doneSteps.has(n);
-          const links = s.ingredients
-            .filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]))
-            .map((i) => ingredientChipHtml(r, i, k, this._units))
-            .join("");
+          const { html: textHtml, links } = this._stepTextParts(r, s, k);
           return `<div class="step-item ${done ? "done" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}" tabindex="0" title="${done ? "Mark as not done" : "Tap to mark as done"}">
             <span class="step-num">${done ? "✓" : num}</span>
-            <div class="step-body"><div class="step-text">${esc(s.text)}</div>
+            <div class="step-body"><div class="step-text">${textHtml}</div>
               ${links ? `<div class="step-ings">${links}</div>` : ""}
               ${this._timerButtonsHtml(r, s, n, num, "secondary")}
             </div></div>`;
@@ -148,10 +157,7 @@ export default function (h) {
       // The heading this step sits under, if any.
       let section = "";
       for (const x of r.instructions.map(normStep).slice(0, st.i)) if (x.section) section = x.text;
-      const links = st.ingredients
-        .filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]))
-        .map((i) => ingredientChipHtml(r, i, k, this._units))
-        .join("");
+      const { html: textHtml, links } = this._stepTextParts(r, st, k);
       const running = this._timerRunning(`${r.id}:${st.i}`);
       const last = n === steps.length - 1;
       const done = this._doneSteps.has(st.i);
@@ -160,7 +166,7 @@ export default function (h) {
           <div class="muted">${esc(r.name)}${k !== 1 ? ` · ×${esc(formatNumber(k))}` : ""} · Step ${n + 1} of ${steps.length}</div>
           <div class="cook-progress"><div style="width:${((n + 1) / steps.length) * 100}%"></div></div>
           ${section ? `<div class="cook-section">${esc(section)}</div>` : ""}
-          <div class="cook-text" data-step-toggle="${st.i}" style="${done ? "opacity:.55;text-decoration:line-through" : ""}" title="Tap to mark as done">${esc(st.text)}</div>
+          <div class="cook-text" data-step-toggle="${st.i}" style="${done ? "opacity:.55;text-decoration:line-through" : ""}" title="Tap to mark as done">${textHtml}</div>
           ${links ? `<div class="step-ings">${links}</div>` : ""}
           ${this._timerButtonsHtml(r, st, st.i, n + 1)}
           <label class="cook-done"><input type="checkbox" data-step-done="${st.i}" ${done ? "checked" : ""}> Mark this step as done</label>
@@ -212,14 +218,11 @@ export default function (h) {
           if (st.section) return `<h3 class="csection">${esc(st.text)}</h3>`;
           num += 1;
           const done = this._doneSteps.has(n);
-          const links = st.ingredients
-            .filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]))
-            .map((i) => ingredientChipHtml(r, i, k, this._units))
-            .join("");
+          const { html: textHtml, links } = this._stepTextParts(r, st, k);
           const running = this._timerRunning(`${r.id}:${n}`);
           return `<div class="cstep ${done ? "done" : ""} ${n === firstOpen ? "current" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}" tabindex="0">
             <div class="cstep-head"><span>Step ${num}</span><span class="tick">${done ? "✓" : ""}</span></div>
-            <div class="cstep-text">${esc(st.text)}</div>
+            <div class="cstep-text">${textHtml}</div>
             ${links ? `<div class="step-ings">${links}</div>` : ""}
             ${this._timerButtonsHtml(r, st, n, num)}
           </div>`;

@@ -10,70 +10,12 @@ export default function (h) {
   const icon = (n) => `<ha-icon icon="mdi:${n}"></ha-icon>`;
   const norm = (t) => String(t ?? "").trim().toLowerCase();
 
-  // words that describe an amount rather than the food
-  const UNITS = new Set(
-    `gram g gr kg kilo kilogram kilogrammer mg milligram ml milliliter cl centiliter dl deciliter l liter
-     tsk tsp teske teskeer tesked teskefuld spsk tbsp spiseske spiseskeer spiseskefuld spiseskefulde dessertske dessertskeer
-     stk stykke stykker fed knivspids knsp nip dåse dåser ds pose poser pakke pakker pk bundt bdt håndfuld
-     skive skiver stang stænger stilk stilke kvist kviste blad blade dryp drys klat glas
-     kop kopper cup cups oz ounce ounces lb lbs pound pounds gallon quart pint pinch pinches clove cloves can cans
-     slice slices piece pieces dash knob scoop sprig sprigs bunch handful stick sticks head heads`
-      .split(/\s+/)
-  );
-  const NUMERIC = /^[\d¼-¾⅐-⅞¹²³⁰-⁹₀-₉⁄/.,\-–\s]+/u;
-
-  // words that end the food part of a line: "280 gram sukker jeg brugte halv brun farin"
-  const STOP = new Set("jeg til svarer eller or men som der kan også at for med uden evt ca".split(" "));
-  const JOIN = new Set(["og", "and", "&"]);
-
-  /**
-   * The food words of an ingredient line, best first: units, amounts and trailing remarks are left
-   * out, and the last word of "røde løg" comes first because that is the noun. A line that names
-   * two foods ("salt og peber") comes back with the whole phrase first and `compound` set.
-   */
-  const foodWords = (text) => {
-    const body = String(text).replace(NUMERIC, "").split(/[;(]/)[0].split(",")[0];
-    const words = [];
-    const seq = [];
-    for (const raw of body.split(/\s+/)) {
-      const w = raw.replace(/[.:]+$/, "");
-      if (!w) continue;
-      if (STOP.has(w.toLowerCase())) break;
-      if (JOIN.has(w.toLowerCase())) {
-        if (seq.length) seq.push(w);
-        continue;
-      }
-      // a capital after the food ("vand Kogende") starts a remark
-      if (words.length && /^\p{Lu}/u.test(w)) break;
-      if (/^\p{L}[\p{L}'’-]+$/u.test(w) && !UNITS.has(w.toLowerCase())) {
-        words.push(w);
-        seq.push(w);
-      }
-    }
-    while (seq.length && JOIN.has(seq[seq.length - 1].toLowerCase())) seq.pop();
-    // "tørrede", "hakkede": describing words that follow the noun
-    const heads = words.filter((w) => !/ede$/i.test(w));
-    const out = (heads.length ? heads : words)
-      .slice()
-      .reverse()
-      // "kidney-bønner" is also found as "bønner"
-      .flatMap((w) => (w.includes("-") ? [w, ...w.split("-").filter((p) => p.length >= 3)] : [w]))
-      .slice(0, 4);
-    const compound = seq.some((w) => JOIN.has(w.toLowerCase()));
-    if (compound) {
-      out.unshift(seq.join(" "));
-      out.compound = true;
-    }
-    return out;
-  };
-
+  const { foodWords, detectChips } = h;
   /** What gets typed into the step text when an ingredient is picked. */
   const pickWord = (row) => foodWords(row.text)[0] || String(row.text).trim();
 
   /** A chip shows the ingredient exactly as it is written in the ingredient list. */
   const chipLabel = (row) => String(row.text).trim();
-
-  const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   return {
     // ---- mode ----
@@ -175,44 +117,10 @@ export default function (h) {
     },
 
     // ---- text with ingredient chips ----
-    /** Where each linked ingredient is named in the step text, found by its food word. */
+    /** Where each linked ingredient is named in the step text. */
     _neDetectChips(step, rowsByUid) {
-      const chips = [];
-      const taken = (a, b) => chips.some((c) => a < c.start + c.len && b > c.start);
-      for (const uid of step.ingredients || []) {
-        const row = rowsByUid.get(uid);
-        if (!row) continue;
-        // the first food word that is in the text: every mention of it is the ingredient.
-        // "salt og peber" is that phrase, or else each of the two foods wherever it is named.
-        const words = foodWords(row.text);
-        const find = (word) => {
-          // inflected forms count too: smør / smørret, æg / æggene
-          const re = new RegExp(`(?<![\\p{L}])${escRe(word).replace(/ /g, "\\s+")}\\p{L}{0,4}(?![\\p{L}])`, "giu");
-          const found = [];
-          let m;
-          while ((m = re.exec(step.text))) {
-            if (!taken(m.index, m.index + m[0].length)) found.push({ uid, start: m.index, len: m[0].length });
-          }
-          return found;
-        };
-        if (words.compound) {
-          const whole = find(words[0]);
-          if (whole.length) {
-            chips.push(...whole);
-            continue;
-          }
-          for (const word of words.slice(1)) chips.push(...find(word));
-          continue;
-        }
-        for (const word of words) {
-          const found = find(word);
-          if (found.length) {
-            chips.push(...found);
-            break;
-          }
-        }
-      }
-      return chips.sort((a, b) => a.start - b.start);
+      const items = (step.ingredients || []).filter((u) => rowsByUid.has(u)).map((u) => ({ key: u, text: rowsByUid.get(u).text }));
+      return detectChips(step.text, items).map((c) => ({ uid: c.key, start: c.start, len: c.len }));
     },
 
     _neChipHtml(row, word) {

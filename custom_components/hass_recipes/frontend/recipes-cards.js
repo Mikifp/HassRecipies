@@ -16,6 +16,7 @@ const {
   isHeader,
   headerText,
   splitSubs,
+  stepTextHtml,
   timerSpecs,
   clock,
   ingParts,
@@ -895,12 +896,16 @@ class HassRecipesCookCard extends RecipesBase {
     };
     let section = "";
     for (const x of all.slice(0, Math.max(st.i, 0))) if (x.section) section = x.text;
-    const ings = st.ingredients
-      .filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]))
-      .map((i) => {
-        const a = partsOf(i);
-        return `<span class="ing">${a.qty ? `${esc(a.qty)} ` : ""}${esc(a.food)}</span>`;
-      })
+    const chipOf = (i) => {
+      const a = partsOf(i);
+      return `<span class="ing">${a.qty ? `${esc(a.qty)} ` : ""}${esc(a.food)}</span>`;
+    };
+    // ingredients the step names become chips in its text; the others stay in the row under it
+    const linked = st.ingredients.filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]));
+    const named = stepTextHtml(st.text || "", linked.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main })), chipOf);
+    const ings = linked
+      .filter((i) => !named.placed.has(i))
+      .map(chipOf)
       .join("");
     const ingredientsPage = st.page === "ingredients";
     const stepDone = !ingredientsPage && progress.steps.has(st.i);
@@ -918,7 +923,7 @@ class HassRecipesCookCard extends RecipesBase {
                 .join("")}</span></label>`;
           })
           .join("")}</div>`
-      : `<div class="text${stepDone ? " done" : ""}" data-done-toggle="${st.i}">${esc(st.text)}</div>
+      : `<div class="text${stepDone ? " done" : ""}" data-done-toggle="${st.i}">${named.html}</div>
          <button class="btn donebtn${stepDone ? " p" : ""}" data-done="${st.i}"><ha-icon icon="mdi:${stepDone ? "check-circle" : "check-circle-outline"}"></ha-icon>${esc(
            this._t(stepDone ? "is_done" : "mark_done")
          )}</button>`;
@@ -944,6 +949,7 @@ class HassRecipesCookCard extends RecipesBase {
         .text.done { opacity: .55; text-decoration: line-through; }
         .donebtn { margin-bottom: 12px; }
         .ings { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .text .ing { font-size: .9em; padding: 1px 8px; margin: 0 1px; white-space: nowrap; }
         .ing { font-size: calc(13px * var(--hr-fs, 1)); padding: 3px 10px; border-radius: 8px; background: color-mix(in srgb, var(--primary-color) 10%, transparent); border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent); }
         .scale { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
         .scale .step { width: 30px; height: 30px; padding: 0; border: 1px solid var(--divider-color); border-radius: 8px; background: none; color: inherit; font-size: 18px; line-height: 1; }
