@@ -25,7 +25,9 @@ export default function (h) {
       .replace(NUMERIC, "")
       .split(/[\s,.;:()/]+/)
       .filter((w) => /^\p{L}[\p{L}'’-]+$/u.test(w) && !UNITS.has(w.toLowerCase()))
-      .slice(0, 3);
+      // "kidney-bønner" is also found as "bønner"
+      .flatMap((w) => (w.includes("-") ? [w, ...w.split("-").filter((p) => p.length >= 3)] : [w]))
+      .slice(0, 4);
 
   /** What gets typed into the step text when an ingredient is picked. */
   const pickWord = (row) => foodWords(row.text)[0] || String(row.text).trim();
@@ -150,18 +152,17 @@ export default function (h) {
       for (const uid of step.ingredients || []) {
         const row = rowsByUid.get(uid);
         if (!row) continue;
+        // the first food word that is in the text: every mention of it is the ingredient
         for (const word of foodWords(row.text)) {
-          const re = new RegExp(`(?<![\\p{L}])${escRe(word)}(?![\\p{L}])`, "giu");
+          // inflected forms count too: smør / smørret, æg / æggene
+          const re = new RegExp(`(?<![\\p{L}])${escRe(word)}\\p{L}{0,4}(?![\\p{L}])`, "giu");
+          const found = [];
           let m;
-          let hit = null;
           while ((m = re.exec(step.text))) {
-            if (!taken(m.index, m.index + m[0].length)) {
-              hit = m;
-              break;
-            }
+            if (!taken(m.index, m.index + m[0].length)) found.push({ uid, start: m.index, len: m[0].length });
           }
-          if (hit) {
-            chips.push({ uid, start: hit.index, len: hit[0].length });
+          if (found.length) {
+            chips.push(...found);
             break;
           }
         }
