@@ -98,6 +98,10 @@ export default function (h) {
         const el = form.elements[key];
         if (el) this._form[key] = el.value;
       }
+      if (this._neOn()) {
+        this._syncEditor();
+        return;
+      }
       this._form.rows = [...form.querySelectorAll(".ing-row")].map((el) => ({
         uid: el.dataset.uid,
         header: el.dataset.header === "1",
@@ -223,9 +227,11 @@ export default function (h) {
         .join("");
       return `
         <div class="panel">
-          <h2>${this._view.id ? "Edit recipe" : "New recipe"}</h2>
+          <h2 class="form-title">${this._view.id ? "Edit recipe" : "New recipe"}
+            <button type="button" class="btn secondary" data-act="editor-toggle">${this._neOn() ? "Classic editor" : "New editor (beta)"}</button></h2>
           <form id="form" data-id="${esc(this._view.id || "")}">
             <div class="field"><label class="lbl">Name</label><input name="name" required value="${f("name")}"></div>
+            ${this._neOn() ? `<details class="ne-meta" ${this._neMetaOpen || !this._view.id ? "open" : ""}><summary>Details: photo, times, servings, tags</summary>` : ""}
             <div class="field"><label class="lbl">Description</label><textarea name="description" data-autosize rows="2">${f("description")}</textarea></div>
             <div class="field"><label class="lbl">Photo</label>
               <div class="img-field">
@@ -259,7 +265,7 @@ export default function (h) {
               ${this._multiHtml("tools", "Tools", "tool", d.tools)}
               ${this._multiHtml("tags", "Tags", "tag", d.tags)}
             </div>
-            <div class="field"><label class="lbl">Ingredients</label>
+            ${this._neOn() ? `</details>${this._newEditorHtml()}` : `<div class="field"><label class="lbl">Ingredients</label>
               <div id="rows">${d.rows.map((row) => this._rowHtml(row)).join("")}</div>
               <div class="actions" style="margin-top:8px">
                 <button type="button" class="btn secondary" data-row-act="add">+ Add ingredient</button>
@@ -273,7 +279,7 @@ export default function (h) {
                 <button type="button" class="btn secondary" data-step-act="add">+ Add step</button>
                 <button type="button" class="btn secondary" data-step-act="add-section">+ Add section</button>
               </div>
-            </div>
+            </div>`}
             <div class="field"><label class="lbl">Notes</label><textarea name="notes" data-autosize rows="2">${f("notes")}</textarea></div>
             <div class="field"><label class="lbl">Source URL</label><input name="source_url" value="${f("source_url")}"></div>
             <div class="actions">

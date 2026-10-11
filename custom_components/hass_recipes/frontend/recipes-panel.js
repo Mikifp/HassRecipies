@@ -11,7 +11,7 @@ const __v = new URL(import.meta.url).searchParams.get("v");
 const load = (name) => import(`./${name}.js${__v ? `?v=${__v}` : ""}`);
 const helpers = (await load("panel-helpers")).default;
 const { esc, isHeader, clock, scaleBasis, observeTranslations, T, state, isoDate, addDays, mondayOf } = helpers;
-const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-form"].map(load));
+const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-form", "panel-editor"].map(load));
 
 const STYLE = `
   :host { display: block; height: 100%; overflow: auto; container-type: inline-size; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
@@ -147,6 +147,51 @@ const STYLE = `
   .ing-row.dragging, .step.dragging { opacity: .4; }
   .drop-before { box-shadow: 0 -3px 0 var(--primary-color); }
   .drop-after { box-shadow: 0 3px 0 var(--primary-color); }
+  .form-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .form-title .btn { font-size: 13px; padding: 4px 10px; font-weight: 400; }
+  .ne-meta { margin-bottom: 16px; }
+  .ne-meta summary { cursor: pointer; color: var(--secondary-text-color); padding: 6px 0; }
+  .ne-card { background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: var(--ha-card-border-radius, 12px); margin: 0 0 14px; position: relative; }
+  .ne-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
+  .ne-title { flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; font-weight: 500; padding: 6px 4px; }
+  .ne-title:focus { outline: 2px solid var(--primary-color); border-radius: 6px; }
+  .ne-count { font-size: 12px; color: var(--secondary-text-color); white-space: nowrap; }
+  .ne-body { border-top: 1px solid var(--divider-color); padding: 6px 12px 12px; }
+  .ne-sub { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--secondary-text-color); margin: 12px 0 6px; }
+  .ne-icon, .ne-handle { background: none; border: 0; color: var(--secondary-text-color); cursor: pointer; padding: 4px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; font: inherit; }
+  .ne-icon:hover { background: var(--secondary-background-color); }
+  .ne-handle { cursor: grab; }
+  .ne-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+  .ne-row .ne-qty { flex: 2 1 160px; width: auto; min-width: 0; }
+  .ne-row .ne-note { flex: 1 1 110px; width: auto; min-width: 0; font-size: 14px; }
+  .ne-sub-row { display: flex; gap: 6px; align-items: center; flex: 1 0 100%; padding-left: 34px; }
+  .ne-sub-row input { font-size: 14px; font-style: italic; }
+  .ne-step { display: flex; gap: 6px; align-items: flex-start; border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 6px 8px 4px; margin-bottom: 8px; background: var(--card-background-color); }
+  .ne-step:focus-within { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
+  .ne-n { width: 22px; height: 22px; border-radius: 50%; background: var(--secondary-background-color); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; margin-top: 3px; flex: none; color: var(--secondary-text-color); }
+  .ne-main { flex: 1; min-width: 0; position: relative; }
+  .ne-text { outline: none; line-height: 1.9; min-height: 1.9em; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ne-text:empty::before { content: attr(data-ph); color: var(--secondary-text-color); }
+  .ne-chip { display: inline-block; background: color-mix(in srgb, var(--primary-color) 16%, transparent); color: var(--primary-color); border-radius: 6px; padding: 0 6px; line-height: 1.55; font-size: .92em; margin: 0 1px; white-space: nowrap; user-select: all; }
+  .ne-extra { user-select: none; display: inline-flex; align-items: center; gap: 2px; margin: 2px 4px 2px 0; }
+  .ne-extra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; display: inline-flex; --mdc-icon-size: 14px; }
+  .ne-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+  .ne-timer { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--secondary-text-color); background: var(--secondary-background-color); border-radius: 8px; padding: 2px 6px; flex-wrap: wrap; }
+  .ne-timer input { width: 52px; padding: 3px 6px; font-size: 13px; }
+  .ne-timer input.ne-tl { width: 130px; }
+  .ne-pick { position: absolute; left: 0; right: 0; z-index: 5; margin-top: 2px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.2); max-height: 220px; overflow: auto; }
+  .ne-pick button { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; padding: 8px 12px; cursor: pointer; }
+  .ne-pick button.on, .ne-pick button:hover { background: color-mix(in srgb, var(--primary-color) 14%, transparent); }
+  .ne-add { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; background: none; border: 1px dashed var(--divider-color); border-radius: 10px; color: var(--primary-color); padding: 8px; cursor: pointer; font: inherit; margin-top: 2px; }
+  .ne-add:hover { background: color-mix(in srgb, var(--primary-color) 8%, transparent); }
+  .ne-add-section { margin-top: 0; }
+  .ne-pop { position: absolute; z-index: 20; min-width: 190px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.25); padding: 4px 0; }
+  .ne-pop button { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; padding: 8px 14px; cursor: pointer; }
+  .ne-pop button:hover { background: var(--secondary-background-color); }
+  .ne-pop button.danger { color: var(--error-color, #db4437); }
+  .ne-dragging { opacity: .4; }
+  .ne-drop { outline: 2px dashed var(--primary-color); border-radius: 8px; }
+  @media (pointer: coarse) { .ne-handle { display: none; } }
   .insert-bar { display: flex; gap: 4px; justify-content: center; opacity: .35; margin: -6px 0 2px; transition: opacity .15s; }
   .insert-bar:hover, .insert-bar:focus-within { opacity: 1; }
   @media (pointer: coarse) { .drag-handle { display: none; } .insert-bar { opacity: .8; } }
@@ -603,6 +648,7 @@ class HassRecipesPanel extends HTMLElement {
       const cur = this.shadowRoot.querySelector(".cstep.current");
       if (cur) cur.scrollIntoView({ block: "center", behavior: "smooth" });
     }
+    if (this._neFocus) this._neApplyFocus();
     if (this._focusStep != null) {
       const el = this.shadowRoot.querySelector(`.step[data-n="${this._focusStep}"] [data-f=text]`);
       if (el) el.focus();
@@ -751,6 +797,11 @@ class HassRecipesPanel extends HTMLElement {
       this._bindMulti(root);
       form.addEventListener("submit", (e) => this._save(e, form));
       this._bindFormDrag(form);
+      if (this._neOn()) {
+        this._bindEditor(form);
+        const meta = form.querySelector(".ne-meta");
+        if (meta) meta.addEventListener("toggle", () => (this._neMetaOpen = meta.open));
+      }
       form.addEventListener("input", (e) => {
         this._formDirty = true;
         if (e.target.matches && e.target.matches("textarea[data-autosize]")) this._autosize(e.target);
@@ -861,6 +912,9 @@ class HassRecipesPanel extends HTMLElement {
         this._doneSteps = new Set();
         this._saveProgress();
         this._render();
+        break;
+      case "editor-toggle":
+        this._neToggle();
         break;
       case "data":
         this._dataMsg = null;

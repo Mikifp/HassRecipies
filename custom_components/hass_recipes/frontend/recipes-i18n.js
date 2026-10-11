@@ -56,6 +56,28 @@ const da = {
     Cook: "Lav mad",
     Shop: "Køb ind",
     Dashboard: "Dashboard",
+    "New editor (beta)": "Ny editor (beta)",
+    "Classic editor": "Klassisk editor",
+    "Details: photo, times, servings, tags": "Detaljer: foto, tider, portioner, tags",
+    "Section title (optional)": "Sektionens titel (valgfri)",
+    "New section": "Ny sektion",
+    "Add ingredient": "Tilføj ingrediens",
+    "Add step": "Tilføj trin",
+    "Add section": "Tilføj sektion",
+    Steps: "Trin",
+    "Ingredient, e.g. 200 g butter": "Ingrediens, fx 200 g smør",
+    Note: "Note",
+    "Describe what to do. Type @ to add an ingredient.": "Beskriv hvad der skal ske. Skriv @ for at tilføje en ingrediens.",
+    "Add substitute": "Tilføj erstatning",
+    "Delete ingredient": "Slet ingrediens",
+    "Delete step": "Slet trin",
+    "Delete section": "Slet sektion",
+    "Add timer": "Tilføj timer",
+    "Insert step above": "Indsæt trin over",
+    "Insert step below": "Indsæt trin under",
+    Link: "Knyt",
+    "New ingredient": "Ny ingrediens",
+    "Delete this section and everything in it?": "Slet denne sektion og alt i den?",
     "Drag to reorder": "Træk for at ændre rækkefølge",
     "+ Step here": "+ Trin her",
     "+ Section here": "+ Sektion her",
@@ -223,6 +245,7 @@ const da = {
   patterns: [
     [/\bStep (\d+) of (\d+)\b/g, "Trin $1 af $2"],
     [/^Step (\d+)$/, "Trin $1"],
+    [/^(\d+) ingredients · (\d+) steps$/, "$1 ingredienser · $2 trin"],
     [/^(\d+) selected$/, "$1 valgt"],
     [/^Select all (\d+) shown$/, "Vælg alle $1 viste"],
     [/^Add (\d+) item\(s\)$/, "Tilføj $1 vare(r)"],
@@ -279,7 +302,9 @@ const translateTree = (root, language) => {
   if (!tableFor(language)) return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) =>
-      node.parentElement && SKIP.has(node.parentElement.tagName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+      node.parentElement && (SKIP.has(node.parentElement.tagName) || node.parentElement.closest("[contenteditable=true]"))
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT,
   });
   const nodes = [];
   for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);

@@ -26,6 +26,7 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Cook mode shows the whole recipe at once (ingredients beside step cards, current step highlighted, screen kept awake); "One step at a time" switches to a focused view
 - Check off steps (and ingredients) while cooking; checks are remembered per recipe for two days, a finished timer completes its step, and finishing every step resets the checks
 - In the editor, drag the ⠿ handle to reorder ingredients and steps (↑ ↓ buttons on touch screens), and use **+ Step here** between steps to insert a step or section anywhere
+- **New editor (beta)**: a toggle in the recipe editor switches to section cards, where each section holds its ingredients and its steps together. Ingredients a step uses appear as chips inside the step text (type `@` to add one); drag ingredients and steps between sections. It edits the same data as the classic form, so you can switch back and forth
 - Unsaved-changes prompt when you leave the editor
 - Yield: say what the ingredients make ("8 pancakes") and the multiplier the recipe opens at (2× = 16 pancakes); type the number you want and everything scales. `makes:` works in the shopping-list service too
 - Scale a recipe (½×–4× or any multiplier); linked ingredients scale too
@@ -172,7 +173,7 @@ node --test tests/js/                     # front-end helpers and translations
 CI runs both test suites, a syntax check of the front-end, hassfest and the HACS validation on every pull request.
 
 - `custom_components/hass_recipes/` – integration (store, websocket API, scraper, config flow, diagnostics, repairs)
-- `custom_components/hass_recipes/frontend/` – dependency-free front-end, no build step: `recipes-panel.js` is the panel shell, split into `panel-*.js` modules (browse, recipe, form, plan, progress, timers, data); `recipes-cards.js` the dashboard cards; `recipes-shared.js` and `recipes-i18n.js` are used by both
+- `custom_components/hass_recipes/frontend/` – dependency-free front-end, no build step: `recipes-panel.js` is the panel shell, split into `panel-*.js` modules (browse, recipe, form, editor, plan, progress, timers, data); `recipes-cards.js` the dashboard cards; `recipes-shared.js` and `recipes-i18n.js` are used by both
 - `custom_components/hass_recipes/brand/` – icon and logo
 - `tests/` – back-end tests, and `tests/js/` front-end tests
 
