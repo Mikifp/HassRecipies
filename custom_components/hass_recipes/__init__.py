@@ -64,7 +64,6 @@ type RecipesConfigEntry = ConfigEntry[RecipeStore]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-FRONTEND_FILES = ("recipes-shared.js", "recipes-i18n.js", "recipes-panel.js", CARDS_JS)
 ASSETS_VERSION_KEY = f"{DOMAIN}_assets_version"
 
 
@@ -78,8 +77,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     carries a version that changes whenever any of them does.
     """
     frontend_dir = Path(__file__).parent / "frontend"
+    # one version for every front-end file: whichever changed last
     version = await hass.async_add_executor_job(
-        lambda: max(int((frontend_dir / name).stat().st_mtime) for name in FRONTEND_FILES)
+        lambda: max(int(p.stat().st_mtime) for p in frontend_dir.glob("*.js"))
     )
     hass.data[ASSETS_VERSION_KEY] = version
     await hass.http.async_register_static_paths(
