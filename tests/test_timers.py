@@ -74,6 +74,7 @@ class FakeHass:
         self.services = FakeServices(fail)
         self.bus = types.SimpleNamespace(async_fire=lambda *a, **k: None)
         self.states = types.SimpleNamespace(async_entity_ids=lambda d: ["tts.cloud"])
+        self.config = types.SimpleNamespace(language="en")
         self.listeners = []
 
     def async_create_task(self, coro):
@@ -277,3 +278,23 @@ def test_snooze_leaves_running_timers_alone():
 
     _run(BASE, scenario)
     assert state["count"] == 0
+
+
+def test_the_spoken_alert_follows_the_configured_language():
+    spoken = {}
+
+    async def scenario(hass, mgr, timer):
+        hass.config.language = "da"
+        await mgr.async_play_alarm("Pandekager \u00b7 trin 2")
+        spoken["da"] = [c for c in hass.services.calls if c[0] == "tts"][-1][2]["message"]
+        hass.config.language = "de"
+        await mgr.async_play_alarm("Pfannkuchen \u00b7 Schritt 2")
+        spoken["de"] = [c for c in hass.services.calls if c[0] == "tts"][-1][2]["message"]
+        hass.config.language = "xx"  # unknown: English
+        await mgr.async_play_alarm("Pancakes")
+        spoken["xx"] = [c for c in hass.services.calls if c[0] == "tts"][-1][2]["message"]
+
+    _run({**BASE, "speaker_sound": "speech"}, scenario)
+    assert spoken["da"] == "Timer f\u00e6rdig. Pandekager, trin 2"
+    assert spoken["de"] == "Timer abgelaufen. Pfannkuchen, Schritt 2"
+    assert spoken["xx"] == "Timer finished. Pancakes"

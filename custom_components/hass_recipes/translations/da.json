@@ -171,5 +171,43 @@
         }
       }
     }
+  },
+  "device": {
+    "timers": {
+      "name": "Opskrift-timere"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cooking": {
+        "name": "Madlavning"
+      }
+    },
+    "select": {
+      "cooking_recipe": {
+        "name": "Opskrift under tilberedning"
+      }
+    },
+    "binary_sensor": {
+      "timer_alarm": {
+        "name": "Timeralarm"
+      }
+    },
+    "button": {
+      "stop_timer_alarm": {
+        "name": "Stop timeralarm"
+      },
+      "next_step": {
+        "name": "Næste trin"
+      },
+      "previous_step": {
+        "name": "Forrige trin"
+      }
+    },
+    "calendar": {
+      "meal_plan": {
+        "name": "Madplan"
+      }
+    }
   }
 }

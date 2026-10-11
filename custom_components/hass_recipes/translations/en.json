@@ -171,5 +171,43 @@
         }
       }
     }
+  },
+  "device": {
+    "timers": {
+      "name": "Recipe timers"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cooking": {
+        "name": "Cooking"
+      }
+    },
+    "select": {
+      "cooking_recipe": {
+        "name": "Cooking recipe"
+      }
+    },
+    "binary_sensor": {
+      "timer_alarm": {
+        "name": "Timer alarm"
+      }
+    },
+    "button": {
+      "stop_timer_alarm": {
+        "name": "Stop timer alarm"
+      },
+      "next_step": {
+        "name": "Next step"
+      },
+      "previous_step": {
+        "name": "Previous step"
+      }
+    },
+    "calendar": {
+      "meal_plan": {
+        "name": "Meal plan"
+      }
+    }
   }
 }

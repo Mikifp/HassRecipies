@@ -195,7 +195,9 @@ class _CookingIntent(intent.IntentHandler):
                 return t["no_step_timer"]
             manager = hass.data[f"{DOMAIN}_timers"]
             steps = [p for p in pages if p["kind"] == "step"]
-            specs = step_timer_specs(recipe["id"], recipe["name"], steps.index(page) + 1, page["index"], page["timers"])
+            specs = step_timer_specs(
+                recipe["id"], recipe["name"], steps.index(page) + 1, page["index"], page["timers"], language
+            )
             running = {x["key"] for x in manager.timers.values() if not x["done"]}
             fresh = [spec for spec in specs if spec[0] not in running]
             if not fresh:

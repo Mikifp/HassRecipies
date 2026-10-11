@@ -10,7 +10,7 @@ from .timers import TimerManager
 
 DEVICE_INFO = DeviceInfo(
     identifiers={(DOMAIN, "timers")},
-    name="Recipe timers",
+    translation_key="timers",  # "Recipe timers" in translations/<language>.json
     entry_type=DeviceEntryType.SERVICE,
 )
 

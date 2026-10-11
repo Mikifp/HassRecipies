@@ -20,7 +20,8 @@ async def async_setup_entry(
 
 class TimerAlarmSensor(BinarySensorEntity):
     _attr_should_poll = False
-    _attr_name = "Timer alarm"
+    _attr_has_entity_name = True
+    _attr_translation_key = "timer_alarm"
     _attr_icon = "mdi:bell-ring"
     _attr_unique_id = f"{DOMAIN}_timer_alarm"
     _attr_device_info = DEVICE_INFO

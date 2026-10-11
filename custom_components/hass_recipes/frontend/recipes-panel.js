@@ -28,6 +28,11 @@ const {
   scaleBasis,
   roundAmount, lengthText
 } = await import(`./recipes-shared.js${__v ? `?v=${__v}` : ""}`);
+// Panel translations (Danish): the templates stay English and are translated where they land.
+const { observeTranslations, translate: translateText } = await import(`./recipes-i18n.js${__v ? `?v=${__v}` : ""}`);
+let UI_LANGUAGE = "en";
+/** A message built in code (confirm, prompt) in the user's language. */
+const T = (text) => translateText(UI_LANGUAGE, text);
 
 // ---- dates for the meal plan (local time, ISO yyyy-mm-dd) ----
 const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -384,6 +389,8 @@ class HassRecipesPanel extends HTMLElement {
   }
 
   connectedCallback() {
+    // translate whatever is rendered into the panel, and keep doing so as it re-renders
+    this._stopI18n = observeTranslations(this.shadowRoot, () => UI_LANGUAGE);
     this._interval = setInterval(() => this._tick(), 1000);
     this._onKey = (e) => {
       if (this._view.name !== "cook" || !this._cookFocus || /INPUT|TEXTAREA|SELECT/.test(e.composedPath()[0]?.tagName || "")) return;
@@ -408,6 +415,10 @@ class HassRecipesPanel extends HTMLElement {
     document.addEventListener("visibilitychange", this._onVisible);
   }
   disconnectedCallback() {
+    if (this._stopI18n) {
+      this._stopI18n();
+      this._stopI18n = null;
+    }
     clearInterval(this._interval);
     window.removeEventListener("keydown", this._onKey);
     window.removeEventListener("popstate", this._onPop);
@@ -525,6 +536,7 @@ class HassRecipesPanel extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
+    UI_LANGUAGE = (hass && (hass.language || (hass.locale && hass.locale.language))) || "en";
     if (first) {
       this._load();
       this._subscribeTimers();
@@ -711,7 +723,7 @@ class HassRecipesPanel extends HTMLElement {
 
   // ---- unsaved-changes guard ----
   _confirmDiscard() {
-    return confirm("Discard your unsaved changes?");
+    return confirm(T("Discard your unsaved changes?"));
   }
 
   // ---- history ----
@@ -1615,7 +1627,7 @@ class HassRecipesPanel extends HTMLElement {
 
   /** One start button per timer of a step. `n` is the step's index, `num` its number among the steps. */
   _timerButtonsHtml(r, st, n, num, extra = "") {
-    return timerSpecs(r, n, num, st.timers || [])
+    return timerSpecs(r, n, num, st.timers || [], UI_LANGUAGE)
       .map((sp) => {
         const running = this._timerRunning(sp.key);
         const what = sp.name ? ` (${esc(sp.name)})` : "";
@@ -1760,16 +1772,16 @@ class HassRecipesPanel extends HTMLElement {
     const mode = this._units;
     const w = window.open("", "_blank");
     if (!w) {
-      this._error = "The browser blocked the print window. Allow pop-ups for this site and try again.";
+      this._error = T("The browser blocked the print window. Allow pop-ups for this site and try again.");
       this._render();
       return;
     }
     const meta = [
-      r.prep_time && `Prep ${minutes(r.prep_time)}`,
-      r.cook_time && `Cook ${minutes(r.cook_time)}`,
-      r.total_time && `Total ${minutes(r.total_time)}`,
-      r.yield_amount && `Makes ${fmtYield(r.yield_amount * k)} ${esc(r.yield_unit || "")}`.trim(),
-      this._servingsLabel(r),
+      r.prep_time && `${T("Prep")} ${T(minutes(r.prep_time))}`,
+      r.cook_time && `${T("Cook")} ${T(minutes(r.cook_time))}`,
+      r.total_time && `${T("Total")} ${T(minutes(r.total_time))}`,
+      r.yield_amount && `${T("Makes")} ${fmtYield(r.yield_amount * k)} ${esc(r.yield_unit || "")}`.trim(),
+      T(this._servingsLabel(r)),
     ].filter(Boolean);
     let num = 0;
     const steps = r.instructions
@@ -1777,13 +1789,13 @@ class HassRecipesPanel extends HTMLElement {
       .map((st) => {
         if (st.section) return `<h3>${esc(st.text)}</h3>`;
         num += 1;
-        return `<p class="step"><span class="n">${num}.</span> ${esc(st.text)}${st.timers.length ? ` <span class="timer">(${esc(st.timers.map((t) => duration(t.seconds) + (t.label ? ` ${t.label}` : "")).join(", "))})</span>` : ""}</p>`;
+        return `<p class="step"><span class="n">${num}.</span> ${esc(st.text)}${st.timers.length ? ` <span class="timer">(${esc(st.timers.map((t) => T(duration(t.seconds)) + (t.label ? ` ${t.label}` : "")).join(", "))})</span>` : ""}</p>`;
       })
       .join("");
     const ings = r.ingredients
       .map((raw, i) => (isHeader(raw) ? `</ul><h3>${esc(headerText(raw))}</h3><ul>` : `<li>${esc(ingredientPlain(r, i, k, mode))}</li>`))
       .join("");
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(r.name)}</title>
+    w.document.write(`<!doctype html><html lang="${esc(UI_LANGUAGE)}"><head><meta charset="utf-8"><title>${esc(r.name)}</title>
       <style>
         body { font: 16px/1.5 Georgia, serif; max-width: 760px; margin: 24px auto; padding: 0 16px; color: #000; }
         h1 { margin: 0 0 4px; } .meta { color: #555; margin-bottom: 16px; }
@@ -1797,12 +1809,12 @@ class HassRecipesPanel extends HTMLElement {
       <h1>${esc(r.name)}</h1>
       <div class="meta">${meta.join(" · ")}</div>
       ${r.description ? `<p>${esc(r.description)}</p>` : ""}
-      <h2>Ingredients</h2>
+      <h2>${T("Ingredients")}</h2>
       <ul>${ings}</ul>
-      <h2>Instructions</h2>
+      <h2>${T("Instructions")}</h2>
       ${steps}
-      ${r.notes ? `<h2>Notes</h2><p>${esc(r.notes)}</p>` : ""}
-      ${r.source_url ? `<p class="meta">Source: ${esc(r.source_url)}</p>` : ""}
+      ${r.notes ? `<h2>${T("Notes")}</h2><p>${esc(r.notes)}</p>` : ""}
+      ${r.source_url ? `<p class="meta">${T("Source:")} ${esc(r.source_url)}</p>` : ""}
       </body></html>`);
     w.document.close();
     w.focus();
@@ -2592,7 +2604,7 @@ class HassRecipesPanel extends HTMLElement {
         await this._cookbookAction(act);
         break;
       case "delete": {
-        if (!confirm("Delete this recipe?")) return;
+        if (!confirm(T("Delete this recipe?"))) return;
         try {
           await this._ws({ type: "hass_recipes/delete", recipe_id: id });
           await this._load();
@@ -2630,14 +2642,14 @@ class HassRecipesPanel extends HTMLElement {
   async _cookbookAction(act) {
     try {
       if (act === "cookbook-save") {
-        const name = (prompt("Name for this cookbook:") || "").trim();
+        const name = (prompt(T("Name for this cookbook:")) || "").trim();
         if (!name) return;
         const cb = await this._ws({ type: "hass_recipes/cookbook_create", name, ...this._currentFilters() });
         this._cookbookId = cb.id;
       } else if (act === "cookbook-update") {
         await this._ws({ type: "hass_recipes/cookbook_update", cookbook_id: this._cookbookId, ...this._currentFilters() });
       } else if (act === "cookbook-delete") {
-        if (!confirm("Delete this cookbook? The recipes are kept.")) return;
+        if (!confirm(T("Delete this cookbook? The recipes are kept."))) return;
         await this._ws({ type: "hass_recipes/cookbook_delete", cookbook_id: this._cookbookId });
         this._cookbookId = null;
       }
@@ -2658,7 +2670,7 @@ class HassRecipesPanel extends HTMLElement {
       const ids = [...this._picked];
       try {
         if (act === "delete") {
-          if (!confirm(`Delete ${ids.length} recipe(s)? This cannot be undone.`)) return;
+          if (!confirm(T(`Delete ${ids.length} recipe(s)? This cannot be undone.`))) return;
           await this._ws({ type: "hass_recipes/bulk_delete", recipe_ids: ids });
           this._picked = new Set();
         } else {

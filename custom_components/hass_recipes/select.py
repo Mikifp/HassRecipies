@@ -30,7 +30,8 @@ async def async_setup_entry(
 
 class CookingRecipeSelect(SelectEntity):
     _attr_should_poll = False
-    _attr_name = "Cooking recipe"
+    _attr_has_entity_name = True
+    _attr_translation_key = "cooking_recipe"
     _attr_icon = "mdi:chef-hat"
     _attr_unique_id = f"{DOMAIN}_cooking_recipe"
     _attr_device_info = DEVICE_INFO

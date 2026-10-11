@@ -905,7 +905,7 @@ class HassRecipesCookCard extends RecipesBase {
          <button class="btn donebtn${stepDone ? " p" : ""}" data-done="${st.i}"><ha-icon icon="mdi:${stepDone ? "check-circle" : "check-circle-outline"}"></ha-icon>${esc(
            this._t(stepDone ? "is_done" : "mark_done")
          )}</button>`;
-    const specs = timerSpecs(r, st.i, num, st.timers || []);
+    const specs = timerSpecs(r, st.i, num, st.timers || [], this._hass && this._hass.language);
     const timerButtons = specs
       .map((sp) => {
         const running = (this._timers || []).find((t) => t.key === sp.key && !t.done);

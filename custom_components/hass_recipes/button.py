@@ -17,14 +17,15 @@ async def async_setup_entry(
     async_add_entities(
         [
             StopAlarmButton(get_manager(hass)),
-            StepButton(hass.data[DOMAIN], 1, "Next step", "mdi:skip-next", "next_step"),
-            StepButton(hass.data[DOMAIN], -1, "Previous step", "mdi:skip-previous", "previous_step"),
+            StepButton(hass.data[DOMAIN], 1, "mdi:skip-next", "next_step"),
+            StepButton(hass.data[DOMAIN], -1, "mdi:skip-previous", "previous_step"),
         ]
     )
 
 
 class StopAlarmButton(ButtonEntity):
-    _attr_name = "Stop timer alarm"
+    _attr_has_entity_name = True
+    _attr_translation_key = "stop_timer_alarm"
     _attr_icon = "mdi:bell-off"
     _attr_unique_id = f"{DOMAIN}_stop_timer_alarm"
     _attr_device_info = DEVICE_INFO
@@ -39,10 +40,12 @@ class StopAlarmButton(ButtonEntity):
 class StepButton(ButtonEntity):
     """Move the cooking recipe on (or back) a page, for automations and dashboards."""
 
-    def __init__(self, store, delta: int, name: str, icon: str, key: str) -> None:
+    _attr_has_entity_name = True
+
+    def __init__(self, store, delta: int, icon: str, key: str) -> None:
         self._store = store
         self._delta = delta
-        self._attr_name = name
+        self._attr_translation_key = key
         self._attr_icon = icon
         self._attr_unique_id = f"{DOMAIN}_{key}"
         self._attr_device_info = DEVICE_INFO

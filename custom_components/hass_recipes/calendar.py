@@ -16,6 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, EVENT_MEAL_PLAN_CHANGED
 from .entity import DEVICE_INFO
+from .localize import slot_name
 from .mealplan import MealPlan
 
 # slot -> (start, length in minutes)
@@ -33,7 +34,7 @@ async def async_setup_entry(
     async_add_entities([MealPlanCalendar(hass.data[f"{DOMAIN}_plan"])])
 
 
-def _event(entry: dict) -> CalendarEvent:
+def _event(entry: dict, language: str | None = None) -> CalendarEvent:
     start_time, minutes = SLOT_TIMES[entry["slot"]]
     start = dt_util.as_local(datetime.combine(date.fromisoformat(entry["date"]), start_time, dt_util.get_default_time_zone()))
     summary = entry["title"]
@@ -42,7 +43,7 @@ def _event(entry: dict) -> CalendarEvent:
         end=start + timedelta(minutes=minutes),
         summary=summary,
         description=" · ".join(
-            part for part in (entry["slot"].capitalize(), entry.get("note") or "") if part
+            part for part in (slot_name(language, entry["slot"]), entry.get("note") or "") if part
         ),
         uid=entry["id"],
     )
@@ -50,7 +51,8 @@ def _event(entry: dict) -> CalendarEvent:
 
 class MealPlanCalendar(CalendarEntity):
     _attr_should_poll = False
-    _attr_name = "Meal plan"
+    _attr_has_entity_name = True
+    _attr_translation_key = "meal_plan"
     _attr_icon = "mdi:silverware-fork-knife"
     _attr_unique_id = f"{DOMAIN}_meal_plan"
     _attr_device_info = DEVICE_INFO
@@ -64,7 +66,7 @@ class MealPlanCalendar(CalendarEntity):
         now = dt_util.now()
         today = now.date()
         for entry in self._plan.list(today, today + timedelta(days=60)):
-            event = _event(entry)
+            event = _event(entry, self.hass.config.language)
             if event.end > now:
                 return event
         return None
@@ -74,7 +76,7 @@ class MealPlanCalendar(CalendarEntity):
     ) -> list[CalendarEvent]:
         first = dt_util.as_local(start_date).date() - timedelta(days=1)
         last = dt_util.as_local(end_date).date()
-        events = [_event(e) for e in self._plan.list(first, last)]
+        events = [_event(e, hass.config.language) for e in self._plan.list(first, last)]
         return [e for e in events if e.end > start_date and e.start < end_date]
 
     async def async_added_to_hass(self) -> None:

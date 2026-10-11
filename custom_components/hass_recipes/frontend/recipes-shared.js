@@ -92,13 +92,32 @@ export const normStep = (s) => {
  * Key, label and length for each timer of a step. The first timer keeps the key
  * `<recipe>:<step>` that single timers always had; later ones add `:<n>`.
  */
-export const timerSpecs = (recipe, stepIndex, stepNumber, timers) =>
-  timers.map((t, n) => ({
+/** The words timer labels are made of ("Roast · step 2 · timer 2"), in the user's language. */
+const LABEL_WORDS = {
+  en: { step: "step", timer: "timer" },
+  da: { step: "trin", timer: "timer" },
+  de: { step: "Schritt", timer: "Timer" },
+  sv: { step: "steg", timer: "timer" },
+  nb: { step: "trinn", timer: "timer" },
+  nl: { step: "stap", timer: "timer" },
+  fr: { step: "étape", timer: "minuteur" },
+  es: { step: "paso", timer: "temporizador" },
+  it: { step: "passo", timer: "timer" },
+};
+export const labelWords = (language) => {
+  const code = String(language || "en").toLowerCase().split("-")[0];
+  return LABEL_WORDS[{ no: "nb", nn: "nb" }[code] || code] || LABEL_WORDS.en;
+};
+
+export const timerSpecs = (recipe, stepIndex, stepNumber, timers, language) => {
+  const w = labelWords(language);
+  return timers.map((t, n) => ({
     key: `${recipe.id}:${stepIndex}${n ? `:${n}` : ""}`,
-    label: `${recipe.name} · step ${stepNumber}${t.label ? ` · ${t.label}` : timers.length > 1 ? ` · timer ${n + 1}` : ""}`,
+    label: `${recipe.name} · ${w.step} ${stepNumber}${t.label ? ` · ${t.label}` : timers.length > 1 ? ` · ${w.timer} ${n + 1}` : ""}`,
     seconds: t.seconds,
     name: t.label,
   }));
+};
 
 // Stored as plain strings: "## Dough" is a section heading, "200 g butter || 180 g oil"
 // carries a substitute with its own amount.

@@ -54,6 +54,12 @@ Open **⇅ Backup & migrate** on the recipe list.
 - **Categories, tools and tags** open a checklist of the values already in use, as in Mealie: tick the ones that apply, type to filter, and press Enter or **＋ Create** to add a new one. Typing an existing value in another case reuses its spelling. The bulk-edit bar suggests the same values.
 - **Migrate from a running Mealie** reads every recipe through Mealie's API using an API token (Mealie → profile → API tokens). Needs a Home Assistant administrator. The token is not stored. Step-to-ingredient links are preserved, and photos are downloaded and stored locally, so Mealie can be shut down afterwards. File imports (Mealie zips, Paprika) bring their photos too, and exports embed uploaded photos.
 
+## Languages
+
+The interface follows the language Home Assistant is set to. **English** and **Danish** are complete: the panel, the dashboard cards and their editors, entity and device names, services and settings, Assist sentences and answers, and the timer alert (spoken and notification). Timer labels ("Pancakes · trin 2"), the meal names in the calendar and the spoken alert are also available in German, Swedish, Norwegian, Dutch, French, Spanish and Italian, and ingredient units are understood in all of those languages. Anything without a translation stays English.
+
+To add a language: the panel's strings are in `frontend/recipes-i18n.js` (one table per language), the cards' in `frontend/recipes-cards.js`, entity and service names in `translations/<language>.json`, voice sentences in `sentences/<language>.yaml` and the answers in `intents.py`, and the words the integration builds in `localize.py`.
+
 ## Home Assistant integration
 
 **Shopping list** – the recipe page has a 🛒 button that adds the (scaled, unit-converted) ingredients to any HA to-do list, skipping items already on it. The same thing is available to automations and voice:
