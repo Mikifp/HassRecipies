@@ -156,6 +156,47 @@ class MealPlan:
             self._changed(None)
         return len(doomed)
 
+    def copy(self, source: str | date, target: str | date, days: int = 7, replace: bool = False) -> dict[str, int]:
+        """Copy ``days`` days from ``source`` onto the days starting at ``target``.
+
+        Meals already on the target days are kept unless ``replace`` is set; a meal
+        that is already there (same slot, recipe or title) is not added twice.
+        """
+        first, to = parse_date(source), parse_date(target)
+        if days < 1 or days > 62:
+            raise MealPlanError("Copy between 1 and 62 days at a time")
+        offset = (to - first).days
+        if offset == 0:
+            raise MealPlanError("The source and the target are the same days")
+        removed = 0
+        if replace:
+            removed = self.clear(to, to + timedelta(days=days - 1))
+        existing = {
+            (e["date"], e["slot"], e.get("recipe_id") or e["title"].casefold())
+            for e in self._entries.values()
+        }
+        added = 0
+        for entry in self.list(first, first + timedelta(days=days - 1)):
+            day = (parse_date(entry["date"]) + timedelta(days=offset)).isoformat()
+            ident = (day, entry["slot"], entry.get("recipe_id") or entry["title"].casefold())
+            if ident in existing:
+                continue
+            existing.add(ident)
+            new = {
+                "id": uuid.uuid4().hex,
+                "date": day,
+                "slot": entry["slot"],
+                "recipe_id": entry.get("recipe_id") if entry.get("recipe_exists") else None,
+                "title": entry["title"],
+                "scale": entry.get("scale"),
+                "note": entry.get("note", ""),
+            }
+            self._entries[new["id"]] = new
+            added += 1
+        if added or removed:
+            self._changed(None)
+        return {"added": added, "removed": removed}
+
     def detach_recipe(self, recipe_id: str) -> int:
         """A recipe was deleted: keep its entries as plain titles."""
         touched = 0

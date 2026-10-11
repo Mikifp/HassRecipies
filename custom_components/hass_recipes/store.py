@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 import uuid
 
@@ -43,6 +43,8 @@ EDITABLE_FIELDS = (
 
 
 MAX_TIMER_SECONDS = 7 * 86400
+TRASH_DAYS = 30  # how long a deleted recipe can be restored
+TRASH_MAX = 50
 
 
 def normalize_timers(step: dict[str, Any]) -> list[dict[str, Any]]:
@@ -166,11 +168,13 @@ class RecipeStore:
         self._cooking_id: str | None = None  # recipe shown by the dashboard cook cards
         self._cooking_step = 0  # page within it (see cooking_pages)
         self._cooking_scale = 1.0  # multiplier, shared by every card and voice answer
+        self._trash: list[dict[str, Any]] = []  # deleted recipes, newest first (see TRASH_*)
 
     async def async_load(self) -> None:
         data = await self._store.async_load()
         self._recipes = (data or {}).get("recipes", {})
         self._cookbooks = (data or {}).get("cookbooks", {})
+        self._trash = self._pruned_trash((data or {}).get("trash", []))
         cooking = (data or {}).get("cooking_recipe_id")
         self._cooking_id = cooking if cooking in self._recipes else None
         self._cooking_step = int((data or {}).get("cooking_step") or 0) if self._cooking_id else 0
@@ -186,9 +190,56 @@ class RecipeStore:
                 "cooking_recipe_id": self._cooking_id,
                 "cooking_step": self._cooking_step,
                 "cooking_scale": self._cooking_scale,
+                "trash": self._trash,
             },
             1,
         )
+
+    # ---- trash: a deleted recipe can be brought back for a while ----
+    @staticmethod
+    def _pruned_trash(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        cutoff = (datetime.now(UTC) - timedelta(days=TRASH_DAYS)).isoformat()
+        fresh = [i for i in items if isinstance(i, dict) and i.get("recipe") and i.get("deleted_at", "") >= cutoff]
+        return fresh[:TRASH_MAX]
+
+    def _to_trash(self, recipe: dict[str, Any]) -> None:
+        entry = {"recipe": recipe, "deleted_at": datetime.now(UTC).isoformat()}
+        self._trash = self._pruned_trash([entry, *[t for t in self._trash if t["recipe"]["id"] != recipe["id"]]])
+
+    def trash(self) -> list[dict[str, Any]]:
+        """Deleted recipes as short summaries, newest first."""
+        return [
+            {
+                "id": t["recipe"]["id"],
+                "name": t["recipe"].get("name", ""),
+                "image": t["recipe"].get("image", ""),
+                "deleted_at": t["deleted_at"],
+            }
+            for t in self._trash
+        ]
+
+    def restore(self, recipe_id: str) -> dict[str, Any] | None:
+        """Bring a deleted recipe back (it keeps its id unless that id is taken again)."""
+        entry = next((t for t in self._trash if t["recipe"]["id"] == recipe_id), None)
+        if entry is None:
+            return None
+        self._trash = [t for t in self._trash if t is not entry]
+        recipe = entry["recipe"]
+        if recipe["id"] in self._recipes:
+            recipe = {**recipe, "id": uuid.uuid4().hex}
+        _normalize_steps(recipe)
+        self._recipes[recipe["id"]] = recipe
+        self._save()
+        self._fire(EVENT_RECIPE_ADDED, recipe)
+        return recipe
+
+    def purge_trash(self, recipe_id: str | None = None) -> int:
+        """Delete for good: one recipe, or everything in the trash."""
+        before = len(self._trash)
+        self._trash = [] if recipe_id is None else [t for t in self._trash if t["recipe"]["id"] != recipe_id]
+        if len(self._trash) != before:
+            self._save()
+        return before - len(self._trash)
 
     @property
     def cooking_recipe_id(self) -> str | None:
@@ -272,6 +323,19 @@ class RecipeStore:
     def list(self) -> list[dict[str, Any]]:
         return sorted(self._recipes.values(), key=lambda r: r["name"].casefold())
 
+    def summaries(self) -> list[dict[str, Any]]:
+        """Everything a browser needs to list and search recipes, without the steps.
+
+        A card that only shows a list does not need every recipe's instructions and
+        parsed ingredients each time something changes.
+        """
+        keys = (
+            "id", "name", "description", "image", "categories", "tags", "tools", "servings",
+            "prep_time", "cook_time", "total_time", "default_scale", "yield_amount", "yield_unit",
+            "created_at", "updated_at", "ingredients",
+        )
+        return [{k: r.get(k) for k in keys} for r in self.list()]
+
     def get(self, recipe_id: str) -> dict[str, Any] | None:
         return self._recipes.get(recipe_id)
 
@@ -323,6 +387,7 @@ class RecipeStore:
             return False
         if recipe_id == self._cooking_id:
             self.set_cooking_recipe(None)
+        self._to_trash(recipe)
         self._save()
         self._fire(EVENT_RECIPE_DELETED, recipe)
         return True
@@ -407,6 +472,7 @@ class RecipeStore:
         for recipe_id in dict.fromkeys(recipe_ids):
             if (recipe := self._recipes.pop(recipe_id, None)) is not None:
                 deleted += 1
+                self._to_trash(recipe)
                 self._fire(EVENT_RECIPE_DELETED, recipe)
         if self._cooking_id not in self._recipes:
             self.set_cooking_recipe(None)

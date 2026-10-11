@@ -159,7 +159,8 @@
           "speaker_sound": "Lyd på højttalere",
           "tts_entity": "Tekst-til-tale-motor",
           "alarm_repeat": "Gentag indtil den stoppes",
-          "alarm_minutes": "Stop automatisk efter"
+          "alarm_minutes": "Stop automatisk efter",
+          "edit_access": "Hvem må ændre opskrifter"
         },
         "data_description": {
           "notify_service": "Valgfri. En notifikationstjeneste, for eksempel din telefon, der kaldes når en timer er færdig.",
@@ -167,7 +168,8 @@
           "speaker_sound": "En kort klokke, timerens navn læst op, eller begge dele.",
           "tts_entity": "Bruges til talte beskeder. Lad stå tom for at bruge den første tilgængelige motor.",
           "alarm_repeat": "Bliv ved med at afspille alarmen, indtil du afviser timeren i panelet (eller kalder tjenesten stop_timer_alarm).",
-          "alarm_minutes": "En sikkerhedsgrænse, så alarmen ikke kan ringe for evigt, når ingen er hjemme."
+          "alarm_minutes": "En sikkerhedsgrænse, så alarmen ikke kan ringe for evigt, når ingen er hjemme.",
+          "edit_access": "Alle kan læse, lave mad og planlægge måltider uanset valget. Vælg kun administratorer for at hindre andre brugere i at oprette, redigere, importere eller slette opskrifter."
         }
       }
     }
@@ -208,6 +210,20 @@
       "meal_plan": {
         "name": "Madplan"
       }
+    }
+  },
+  "selector": {
+    "edit_access": {
+      "options": {
+        "everyone": "Alle",
+        "admins": "Kun administratorer"
+      }
+    }
+  },
+  "issues": {
+    "cards_resource_not_registered": {
+      "title": "Dashboardkortene fra Opskrifter kunne ikke tilføjes",
+      "description": "Kortene fra Opskrifter tilføjes normalt automatisk til dine dashboard-ressourcer, men det er ikke muligt her (ressourcetilstand: {mode}). Tilføj ressourcen selv, som et JavaScript-modul, under Indstillinger > Dashboards > ⋮ > Ressourcer eller i `resources:`-listen i dine YAML-dashboards: `{url}`. Kortene er ikke tilgængelige, før det er gjort."
     }
   }
 }

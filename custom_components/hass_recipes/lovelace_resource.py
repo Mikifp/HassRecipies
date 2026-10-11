@@ -66,6 +66,14 @@ async def async_ensure_resource(hass: HomeAssistant, path: str, version: str | i
         return False
 
 
+def resource_mode(hass: HomeAssistant) -> str:
+    """"storage" (editable), "yaml" (the user has to add it) or "unavailable"."""
+    resources = _collection(hass)
+    if resources is None:
+        return "unavailable"
+    return "storage" if hasattr(resources, "async_create_item") else "yaml"
+
+
 async def async_remove_resource(hass: HomeAssistant, path: str) -> None:
     """Remove the resource (the integration was deleted)."""
     resources = _collection(hass)

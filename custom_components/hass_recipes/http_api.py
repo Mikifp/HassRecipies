@@ -14,6 +14,7 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 
+from .access import can_edit
 from .const import DOMAIN
 from .images import MAX_IMAGE_BYTES, ImageStore, id_from_url, image_url
 from .migrate import MigrationError, parse_upload
@@ -52,6 +53,8 @@ class RecipesImportView(HomeAssistantView):
         store = hass.data.get(DOMAIN)
         if store is None:
             return self.json_message("Recipes is not loaded", 503)
+        if not can_edit(hass, request.get("hass_user")):
+            return self.json_message("Only administrators can change recipes", 403)
         data = await request.read()
         if not data:
             return self.json_message("Empty upload", 400)
@@ -103,6 +106,8 @@ class RecipesUploadImageView(HomeAssistantView):
 
     async def post(self, request: web.Request) -> web.Response:
         hass = request.app[KEY_HASS]
+        if not can_edit(hass, request.get("hass_user")):
+            return self.json_message("Only administrators can change recipes", 403)
         if request.content_length and request.content_length > MAX_IMAGE_BYTES:
             return self.json_message("Image is larger than 10 MB", 413)
         data = await request.read()

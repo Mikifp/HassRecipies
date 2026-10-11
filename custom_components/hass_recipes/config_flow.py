@@ -27,12 +27,15 @@ import voluptuous as vol
 
 from .const import (
     CONF_ALARM_MINUTES,
+    CONF_EDIT_ACCESS,
     CONF_ALARM_REPEAT,
     CONF_NOTIFY_SERVICE,
     CONF_SPEAKER_SOUND,
     CONF_SPEAKERS,
     CONF_TTS_ENTITY,
     DOMAIN,
+    EDIT_ADMINS,
+    EDIT_EVERYONE,
     SOUND_BOTH,
     SOUND_CHIME,
     SOUND_SPEECH,
@@ -101,6 +104,13 @@ class RecipesOptionsFlow(OptionsFlow):
                 vol.Optional(CONF_ALARM_MINUTES, default=5): NumberSelector(
                     NumberSelectorConfig(
                         min=1, max=60, step=1, mode=NumberSelectorMode.BOX, unit_of_measurement="min"
+                    )
+                ),
+                vol.Optional(CONF_EDIT_ACCESS, default=EDIT_EVERYONE): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[EDIT_EVERYONE, EDIT_ADMINS],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        translation_key="edit_access",
                     )
                 ),
             }
