@@ -1,8 +1,25 @@
 /* Recipes panel: plan methods. Mixed into the panel class by recipes-panel.js. */
 export default function (h) {
-  const { esc, minutes, state, isoDate, addDays, mondayOf } = h;
+  const { esc, minutes, state, T, isoDate, addDays, mondayOf } = h;
   return {
     // ---- meal plan ----
+    /** Copy last week's meals onto the week on screen (meals already there are kept). */
+    async _planCopyLastWeek() {
+      const monday = this._planMonday();
+      try {
+        const res = await this._ws({
+          type: "hass_recipes/plan_copy",
+          source: isoDate(addDays(monday, -7)),
+          target: isoDate(monday),
+          days: 7,
+        });
+        this._planLoaded = null;
+        this._flash(res.added ? `Copied ${res.added} meals from last week.` : "Nothing new to copy from last week.");
+      } catch (err) {
+        this._error = err.message || String(err);
+        this._render();
+      }
+    },
     _planMonday() {
       const w = this._view.name === "plan" && this._view.week ? new Date(`${this._view.week}T12:00:00`) : new Date();
       return mondayOf(w);
@@ -124,6 +141,25 @@ export default function (h) {
           scale: scale > 0 ? scale : null,
         });
       });
+      // drag a meal onto another day or meal (not on touch screens: use the + and ✕ there)
+      on("[data-entry]", "dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", e.currentTarget.dataset.entry);
+        e.dataTransfer.effectAllowed = "move";
+        e.currentTarget.classList.add("dragging");
+      });
+      on("[data-entry]", "dragend", (e) => e.currentTarget.classList.remove("dragging"));
+      on("[data-drop-date]", "dragover", (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.add("drop");
+      });
+      on("[data-drop-date]", "dragleave", (e) => e.currentTarget.classList.remove("drop"));
+      on("[data-drop-date]", "drop", (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove("drop");
+        const entry_id = e.dataTransfer.getData("text/plain");
+        const { dropDate: date, dropSlot: slot } = e.currentTarget.dataset;
+        if (entry_id) this._planChange({ type: "hass_recipes/plan_update", entry_id, date, slot });
+      });
       const search = root.getElementById("plan-search");
       if (search) {
         search.addEventListener("input", () => {
@@ -181,13 +217,13 @@ export default function (h) {
               const scaleBox = e.recipe_exists
                 ? `<label class="plan-scale" title="Scale">×<input type="number" min="0.25" step="0.25" value="${e.scale ? esc(e.scale) : ""}" placeholder="1" data-plan-scale="${esc(e.id)}"></label>`
                 : "";
-              return `<div class="plan-entry">${title}
+              return `<div class="plan-entry" draggable="true" data-entry="${esc(e.id)}" title="${esc(T("Drag to another day or meal"))}">${title}
                 <span class="plan-tools">${scaleBox}
                   ${e.recipe_exists ? `<button class="mini" data-plan-cook="${esc(e.id)}" title="Cook this">🍳</button>` : ""}
                   <button class="mini" data-plan-del="${esc(e.id)}" title="Remove">✕</button></span></div>`;
             })
             .join("");
-          return `<div class="plan-slot"><div class="plan-slot-head"><span>${label}</span>
+          return `<div class="plan-slot" data-drop-date="${iso}" data-drop-slot="${slot}"><div class="plan-slot-head"><span>${label}</span>
             <button class="mini" data-plan-add data-date="${iso}" data-slot="${slot}" title="Add to ${label.toLowerCase()}">+</button></div>${items}</div>`;
         }).join("");
         return `<section class="plan-day ${iso === today ? "today" : ""}"><h3>${esc(dayLabel(d))}</h3>${slots}</section>`;
@@ -216,7 +252,9 @@ export default function (h) {
           .plan-day h3 { margin: 0 0 6px; font-size: 14px; font-weight: 500; }
           .plan-slot { border-top: 1px solid var(--divider-color); padding: 4px 0; min-height: 34px; }
           .plan-slot-head { display: flex; justify-content: space-between; align-items: center; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--secondary-text-color); }
-          .plan-entry { display: flex; flex-direction: column; gap: 2px; padding: 3px 0; font-size: 14px; }
+          .plan-entry { display: flex; flex-direction: column; gap: 2px; padding: 3px 0; font-size: 14px; cursor: grab; }
+          .plan-entry.dragging { opacity: .4; }
+          .plan-slot.drop { background: color-mix(in srgb, var(--primary-color) 14%, transparent); border-radius: 6px; }
           .plan-title { color: var(--primary-text-color); text-decoration: none; overflow-wrap: anywhere; }
           a.plan-title { color: var(--primary-color); }
           .plan-tools { display: flex; gap: 4px; align-items: center; }
@@ -236,6 +274,7 @@ export default function (h) {
           <span class="plan-range">${esc(rangeLabel)}</span>
           <button class="btn secondary" data-act="plan-next" title="Next week">›</button>
           <button class="btn secondary" data-act="plan-today">Today</button>
+          <button class="btn secondary" data-act="plan-copy" title="Copy last week's meals onto this week">Copy last week</button>
           <button class="btn" data-act="plan-shop" title="Add the ingredients of this week's recipes to your shopping list">Add week to shopping list</button>
         </div>
         ${pending ? `<div class="plan-banner"><span>Pick a meal for <strong>${esc(pending.name)}</strong>: press + on a day.</span><button class="btn secondary" data-act="plan-cancel-pending">Cancel</button></div>` : ""}

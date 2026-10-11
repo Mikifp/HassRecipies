@@ -250,6 +250,11 @@ const STYLE = `
   .cook details { margin-top: 28px; }
   .cook summary { cursor: pointer; font-size: 1.1rem; }
   .error { color: var(--error-color, #db4437); margin: 8px 0; }
+  main.ro [data-act="new"], main.ro [data-act="edit"], main.ro [data-act="delete"], main.ro [data-act="import"],
+  main.ro [data-act="data"], main.ro [data-act="select"], main.ro [data-act="plan-this"], main.ro [data-act="plan-copy"],
+  main.ro [data-act="cookbook-save"], main.ro [data-act="cookbook-update"], main.ro [data-act="cookbook-delete"],
+  main.ro [data-plan-add], main.ro [data-plan-del], main.ro [data-plan-scale], main.ro .plan-scale { display: none !important; }
+  .notice-btn { margin-left: 10px; background: none; border: 1px solid currentColor; border-radius: 6px; color: inherit; cursor: pointer; padding: 1px 10px; font: inherit; }
   .notice { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--success-color, #43a047) 18%, transparent); border: 1px solid var(--success-color, #43a047); }
   .panel { background: var(--card-background-color); border-radius: 12px; padding: 16px 20px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
 `;
@@ -385,6 +390,7 @@ class HassRecipesPanel extends HTMLElement {
       const res = await this._ws({ type: "hass_recipes/list" });
       this._recipes = res.recipes;
       this._tags = res.tags;
+      this._canEdit = res.can_edit !== false;
       this._cookbooks = res.cookbooks || [];
       this._cookingId = res.cooking_recipe_id || null;
       if (this._cookbookId && !this._cookbooks.some((c) => c.id === this._cookbookId)) this._cookbookId = null;
@@ -506,6 +512,7 @@ class HassRecipesPanel extends HTMLElement {
     }
     if (view.name !== "import") this._bulk = null;
     if (view.name === "edit") this._initForm(view.id);
+    if (view.name === "data" && prev.name !== "data") this._loadTrash();
     if (mode !== "none") {
       const same = prev && prev.name === view.name && prev.id === view.id;
       try {
@@ -572,7 +579,7 @@ class HassRecipesPanel extends HTMLElement {
         </header>
         <div id="timers" class="timers"></div>
       </div>
-      <main>${this._notice ? `<div class="notice">✓ ${esc(this._notice)}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main>`;
+      <main class="${this._canEdit === false ? "ro" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main>`;
     this._timerSig = "";
     this._bind();
     this._autosizeAll();
@@ -913,12 +920,40 @@ class HassRecipesPanel extends HTMLElement {
       case "cookbook-delete":
         await this._cookbookAction(act);
         break;
+      case "notice-action": {
+        const action = this._noticeAction;
+        this._noticeAction = null;
+        this._notice = "";
+        if (action) await action.run();
+        break;
+      }
+      case "trash-restore":
+        await this._restoreFromTrash([id]);
+        break;
+      case "trash-empty":
+        if (!confirm(T("Empty the trash? These recipes cannot be restored afterwards."))) return;
+        try {
+          await this._ws({ type: "hass_recipes/purge" });
+          await this._loadTrash();
+        } catch (err) {
+          this._error = err.message || String(err);
+        }
+        this._render();
+        break;
+      case "plan-copy":
+        await this._planCopyLastWeek();
+        break;
       case "delete": {
         if (!confirm(T("Delete this recipe?"))) return;
         try {
+          const gone = this._recipe(id);
           await this._ws({ type: "hass_recipes/delete", recipe_id: id });
           await this._load();
           this._returnTo({ name: "list" });
+          this._flash(`Deleted “${gone ? gone.name : ""}”.`, {
+            label: "Undo",
+            run: () => this._restoreFromTrash([id]),
+          });
         } catch (err) {
           this._error = err.message;
           this._render();

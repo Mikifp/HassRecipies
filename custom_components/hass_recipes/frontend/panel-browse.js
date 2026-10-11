@@ -342,6 +342,7 @@ export default function (h) {
             if (!confirm(T(`Delete ${ids.length} recipe(s)? This cannot be undone.`))) return;
             await this._ws({ type: "hass_recipes/bulk_delete", recipe_ids: ids });
             this._picked = new Set();
+            this._pendingUndo = ids;
           } else {
             const value = this._bulkValue.trim();
             if (!value) {
@@ -356,6 +357,11 @@ export default function (h) {
           }
           this._error = "";
           await this._load();
+          if (this._pendingUndo) {
+            const ids = this._pendingUndo;
+            this._pendingUndo = null;
+            this._flash(`Deleted ${ids.length} recipe(s).`, { label: "Undo", run: () => this._restoreFromTrash(ids) });
+          }
           return;
         } catch (err) {
           this._error = err.message || String(err);

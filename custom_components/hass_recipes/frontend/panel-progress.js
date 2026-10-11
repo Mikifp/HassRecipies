@@ -63,14 +63,17 @@ export default function (h) {
       this._render();
     },
 
-    _flash(text) {
+    /** A short message at the top; `action` ({label, run}) adds a button such as Undo. */
+    _flash(text, action = null) {
       this._notice = text;
+      this._noticeAction = action;
       clearTimeout(this._noticeTimer);
       if (!["edit", "import"].includes(this._view.name)) this._render();
       this._noticeTimer = setTimeout(() => {
         this._notice = "";
+        this._noticeAction = null;
         if (!["edit", "import"].includes(this._view.name)) this._render();
-      }, 3500);
+      }, action ? 10000 : 3500);
     },
 
     /** A finished timer completes the step it belongs to, on this or another recipe. */

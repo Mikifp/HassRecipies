@@ -3,6 +3,46 @@ export default function (h) {
   const { esc } = h;
   return {
     // ---- export / import / migrate ----
+    /** Deleted recipes that can still be brought back. */
+    async _loadTrash() {
+      try {
+        this._trash = (await this._ws({ type: "hass_recipes/trash" })).recipes;
+      } catch (_) {
+        this._trash = [];
+      }
+      if (this._view.name === "data") this._render();
+    },
+    async _restoreFromTrash(ids) {
+      let restored = 0;
+      for (const recipe_id of ids) {
+        try {
+          await this._ws({ type: "hass_recipes/restore", recipe_id });
+          restored += 1;
+        } catch (err) {
+          this._error = err.message || String(err);
+        }
+      }
+      await this._load();
+      await this._loadTrash();
+      if (restored) this._flash(restored === 1 ? "Recipe restored." : `Restored ${restored} recipes.`);
+    },
+    _trashHtml() {
+      const items = this._trash || [];
+      if (!items.length) return "";
+      const when = (iso) => new Date(iso).toLocaleDateString(this._hass && this._hass.language, { day: "numeric", month: "short" });
+      return `<div class="panel" style="margin-bottom:16px">
+          <h2>Recently deleted</h2>
+          <p class="muted">Deleted recipes stay here for 30 days.</p>
+          ${items
+            .map(
+              (t) => `<div class="trash-row" style="display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--divider-color)">
+                <span style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(t.name || "")} <span class="muted">· ${esc(when(t.deleted_at))}</span></span>
+                <button class="btn secondary" data-act="trash-restore" data-id="${esc(t.id)}">Restore</button></div>`
+            )
+            .join("")}
+          <div class="actions"><button class="btn secondary danger" data-act="trash-empty">Empty trash</button></div>
+        </div>`;
+    },
     _dataHtml() {
       const m = this._dataMsg;
       const msg = m
@@ -11,6 +51,7 @@ export default function (h) {
       return `
         <div class="toolbar"><button class="btn secondary" data-act="back">← Back</button></div>
         ${msg}
+        ${this._trashHtml()}
         <div class="panel" style="margin-bottom:16px">
           <h2>Export</h2>
           <p class="muted">Download every recipe and cookbook, with uploaded photos embedded, as one JSON file. Keep it as a backup, or import it into another Home Assistant.</p>
