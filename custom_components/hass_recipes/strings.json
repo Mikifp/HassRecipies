@@ -169,7 +169,7 @@
           "tts_entity": "Used for spoken messages. Leave empty to use the first available engine.",
           "alarm_repeat": "Keep sounding the alert until you dismiss the timer in the panel (or call the stop_timer_alarm service).",
           "alarm_minutes": "A safety limit so the alert cannot ring for ever when nobody is home.",
-          "edit_access": "Everyone can read, cook and plan meals either way. Choose administrators only to stop other users from creating, editing, importing or deleting recipes."
+          "edit_access": "Everyone can read and cook either way. Choose administrators only to stop other users from creating, editing, importing or deleting recipes and from changing the meal plan."
         }
       }
     }

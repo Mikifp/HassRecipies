@@ -169,7 +169,7 @@
           "tts_entity": "Bruges til talte beskeder. Lad stå tom for at bruge den første tilgængelige motor.",
           "alarm_repeat": "Bliv ved med at afspille alarmen, indtil du afviser timeren i panelet (eller kalder tjenesten stop_timer_alarm).",
           "alarm_minutes": "En sikkerhedsgrænse, så alarmen ikke kan ringe for evigt, når ingen er hjemme.",
-          "edit_access": "Alle kan læse, lave mad og planlægge måltider uanset valget. Vælg kun administratorer for at hindre andre brugere i at oprette, redigere, importere eller slette opskrifter."
+          "edit_access": "Alle kan læse og lave mad uanset valget. Vælg kun administratorer for at hindre andre brugere i at oprette, redigere, importere eller slette opskrifter og i at ændre madplanen."
         }
       }
     }

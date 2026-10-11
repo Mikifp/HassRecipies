@@ -1,3 +1,5 @@
+<p align="center"><img src="custom_components/hass_recipes/brand/icon@2x.png" width="96" alt="Recipes"></p>
+
 # Recipes for Home Assistant
 
 A Mealie-style recipe manager that runs inside Home Assistant as a custom integration with its own sidebar panel.
@@ -12,7 +14,7 @@ A Mealie-style recipe manager that runs inside Home Assistant as a custom integr
 Then go to **Settings → Devices & services → Add integration → Recipes**. The first start installs
 `recipe-scrapers`, so Home Assistant needs internet access and may take a minute.
 
-## Features (v0.1)
+## Features
 - Create, edit, delete recipes (ingredients, steps, tags, times, servings, notes, image URL)
 - Photos: upload from the editor (resized in the browser, stored in `<config>/hass_recipes/images`, included in HA backups) or paste an image URL
 - Layout adapts to the panel's width: on wide screens a filter rail with a card grid and a two-column recipe page; on phones a compact list and an Ingredients / Instructions / Notes tab view with a bottom action bar
@@ -32,6 +34,8 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Categories, tools and tags, with multi-select filters on the list page
 - Cookbooks: save any combination of category/tool/tag filters + search as a named view
 - Bulk actions: select many recipes to add/remove a category, tag or tool, or delete
+- Deleted recipes go to a trash for 30 days: press **Undo** in the notice that follows a delete, or open **⇅ Backup & migrate → Recently deleted** to restore one or empty the trash
+- Choose who may edit: by default everyone who can open the panel can; in **Configure** set **Who can change recipes** to *Administrators only* and everyone else gets a read-only panel: they can browse, cook and use timers, but cannot edit recipes or the meal plan. The same rule is enforced on the server
 - Cook mode: one big step at a time, linked ingredients, step timers, screen kept awake (arrow keys to navigate)
 - Print view (opens a clean printable page at the current scale and units)
 - `hass_recipes.import_recipe` service for automations
@@ -130,7 +134,7 @@ Without `recipe`, the cook card shows the recipe you chose in the Recipes panel 
 
 **Assist.** The integration installs sentences for English and Danish into `custom_sentences/` (and reloads Assist). Say things like "next step", "previous step", "repeat the step", "read the ingredients", "how much time is left" or "start the step timer" (Danish: "næste trin", "gentag trinnet", "læs ingredienserne op", "hvor lang tid er der tilbage"). Ingredients are read at the current scale.
 
-**Meal plan.** Open **Meal plan** in the Recipes panel for a week view: press **+** on a day and meal (breakfast, lunch, dinner, snack) to pick a recipe or type a plain meal such as "Leftovers", set a scale per meal, press the pan to start cooking it, and use **Add week to shopping list** to send that week's ingredients to your to-do list (items already on the list are skipped; amounts are not summed across meals). On a recipe page, **Add to meal plan** lets you pick the day. The plan is also available as:
+**Meal plan.** Open **Meal plan** in the Recipes panel for a week view: press **+** on a day and meal (breakfast, lunch, dinner, snack) to pick a recipe or type a plain meal such as "Leftovers", set a scale per meal, press the pan to start cooking it, and use **Add week to shopping list** to send that week's ingredients to your to-do list (items already on the list are skipped, and the same ingredient across several meals is added up, so 200 g flour in one meal and 500 g in two others becomes one line of 1.2 kg). On a recipe page, **Add to meal plan** lets you pick the day. **Copy last week** repeats last week's meals on this week (meals already there are not added twice), and on a computer you can drag a meal to another day or meal to move it. The plan is also available as:
 
 - `calendar.recipe_timers_meal_plan`: meals show in the calendar dashboard at 07:30 (breakfast), 12:00 (lunch), 15:00 (snack) and 18:00 (dinner), and work with calendar triggers in automations
 - `hass_recipes.plan_meal` (`recipe`, `date`, `slot`, `scale` or `servings`, `note`), `hass_recipes.clear_meal_plan` and `hass_recipes.add_plan_to_shopping_list` (`start`, `days`, `entity_id`)
@@ -151,13 +155,25 @@ actions:
     data: { media_player_entity_id: media_player.kitchen, message: "{{ trigger.event.data.label }} is done" }
 ```
 
-## Layout
-- `custom_components/hass_recipes/` – integration (store, websocket API, scraper, config flow)
-- `custom_components/hass_recipes/frontend/recipes-panel.js` – dependency-free panel (no build step)
-- `tests/` – scraper tests
+## Troubleshooting
 
-## Roadmap ideas
-Meal plan as a `calendar` entity, ingredients → HA todo/shopping list, image upload, servings scaling, ratings.
+- **The dashboard cards do not show up.** The integration registers the cards as a dashboard resource. If it could not (for example because your dashboards are configured in YAML), a **Repair** appears under Settings → System → Repairs with the line to add yourself.
+- **Diagnostics.** Settings → Devices & services → Recipes → ⋮ → *Download diagnostics* gives a file with counts, the language, the card resource state and the options (speaker and notify names are redacted) to attach to an issue.
+
+## Development
+
+```bash
+docker compose up                         # Home Assistant on http://localhost:8123 with the integration mounted
+python -m pytest tests                    # back end
+node --test tests/js/                     # front-end helpers and translations
+```
+
+CI runs both test suites, a syntax check of the front-end, hassfest and the HACS validation on every pull request.
+
+- `custom_components/hass_recipes/` – integration (store, websocket API, scraper, config flow, diagnostics, repairs)
+- `custom_components/hass_recipes/frontend/` – dependency-free front-end, no build step: `recipes-panel.js` is the panel shell, split into `panel-*.js` modules (browse, recipe, form, plan, progress, timers, data); `recipes-cards.js` the dashboard cards; `recipes-shared.js` and `recipes-i18n.js` are used by both
+- `custom_components/hass_recipes/brand/` – icon and logo
+- `tests/` – back-end tests, and `tests/js/` front-end tests
 
 ## License
 
