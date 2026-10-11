@@ -12,22 +12,42 @@ export default function (h) {
 
   // words that describe an amount rather than the food
   const UNITS = new Set(
-    `gram g kg mg ml cl dl l liter tsk tsp teske teskeer tesked spsk tbsp spiseske spiseskeer spiseskefuld dessertske
-     stk stykke stykker fed knivspids nip dåse dåser pose poser pakke pakker bundt håndfuld kop kopper cup cups oz lb
-     pound pinch clove cloves can cans slice slices piece pieces dash knob scoop skive skiver dryp drys stang stænger`
+    `gram g gr kg kilo kilogram kilogrammer mg milligram ml milliliter cl centiliter dl deciliter l liter
+     tsk tsp teske teskeer tesked teskefuld spsk tbsp spiseske spiseskeer spiseskefuld spiseskefulde dessertske dessertskeer
+     stk stykke stykker fed knivspids knsp nip dåse dåser ds pose poser pakke pakker pk bundt bdt håndfuld
+     skive skiver stang stænger stilk stilke kvist kviste blad blade dryp drys klat glas
+     kop kopper cup cups oz ounce ounces lb lbs pound pounds gallon quart pint pinch pinches clove cloves can cans
+     slice slices piece pieces dash knob scoop sprig sprigs bunch handful stick sticks head heads`
       .split(/\s+/)
   );
   const NUMERIC = /^[\d¼-¾⅐-⅞¹²³⁰-⁹₀-₉⁄/.,\-–\s]+/u;
 
-  /** The food words of an ingredient line, in the order they are written (units and amounts left out). */
-  const foodWords = (text) =>
-    String(text)
-      .replace(NUMERIC, "")
-      .split(/[\s,.;:()/]+/)
-      .filter((w) => /^\p{L}[\p{L}'’-]+$/u.test(w) && !UNITS.has(w.toLowerCase()))
+  // words that end the food part of a line: "280 gram sukker jeg brugte halv brun farin"
+  const STOP = new Set("jeg til svarer eller or men som der kan også og and at for med uden evt ca".split(" "));
+
+  /**
+   * The food words of an ingredient line, best first: units, amounts and trailing remarks are left
+   * out, and the last word of "røde løg" comes first because that is the noun.
+   */
+  const foodWords = (text) => {
+    const body = String(text).replace(NUMERIC, "").split(/[;(]/)[0].split(",")[0];
+    const words = [];
+    for (const raw of body.split(/\s+/)) {
+      const w = raw.replace(/[.:]+$/, "");
+      if (!w) continue;
+      if (STOP.has(w.toLowerCase())) break;
+      // a capital after the food ("vand Kogende") starts a remark
+      if (words.length && /^\p{Lu}/u.test(w)) break;
+      if (/^\p{L}[\p{L}'’-]+$/u.test(w) && !UNITS.has(w.toLowerCase())) words.push(w);
+    }
+    // "tørrede", "hakkede": describing words that follow the noun
+    const heads = words.filter((w) => !/ede$/i.test(w));
+    return (heads.length ? heads : words)
+      .reverse()
       // "kidney-bønner" is also found as "bønner"
       .flatMap((w) => (w.includes("-") ? [w, ...w.split("-").filter((p) => p.length >= 3)] : [w]))
       .slice(0, 4);
+  };
 
   /** What gets typed into the step text when an ingredient is picked. */
   const pickWord = (row) => foodWords(row.text)[0] || String(row.text).trim();

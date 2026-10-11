@@ -89,16 +89,16 @@ _alias("l", "litro", "litros", "litri")
 _alias(
     "tsp",
     # da / no / sv / fi / nl / de / es / it / fr
-    "tsk", "teske", "teskefuld", "teskefulde", "tesked", "teskedar", "ts", "teskje", "tl", "theelepel", "theelepels",
+    "tsk", "teske", "teskeer", "teskefuld", "teskefulde", "tesked", "teskedar", "ts", "teskje", "tl", "theelepel", "theelepels",
     "teelöffel", "teeloeffel", "cucharadita", "cucharaditas", "cdta", "cucchiaino", "cucchiaini", "càc", "cac",
 )
 _alias(
     "tbsp",
-    "spsk", "spiseske", "spiseskefuld", "spiseskefulde", "msk", "matsked", "matskedar", "ss", "spiseskje", "rkl", "el",
+    "spsk", "spiseske", "spiseskeer", "spiseskefuld", "spiseskefulde", "msk", "matsked", "matskedar", "ss", "spiseskje", "rkl", "el",
     "eetlepel", "eetlepels", "esslöffel", "essloeffel", "cucharada", "cucharadas", "cda", "cucchiaio", "cucchiai",
     "cs", "càs", "cas",
 )
-_alias("dsp", "dsk", "dessertske", "dessertskefuld", "dessertsked", "dessertskje", "dessertspoon", "dessertspoons")
+_alias("dsp", "dsk", "dessertske", "dessertskeer", "dessertskefuld", "dessertsked", "dessertskje", "dessertspoon", "dessertspoons")
 _alias("krm", "krm", "kryddmått")
 _alias("cup", "kop", "kopper", "kopp", "koppar", "kopje", "kopjes", "tasse", "tassen", "taza", "tazas", "tazza", "tazze")
 _alias("pinch", "knsp", "knivspids", "knivsspids", "prise", "prisen", "messerspitze", "messerspitzen", "klype", "pizca", "pizcas", "pizzico", "pizzichi", "snufje", "snufjes", "mespunt", "pincée", "pincee", "pincées", "ripaus")

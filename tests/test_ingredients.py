@@ -211,3 +211,11 @@ def test_ingredient_note_after_substitutes():
     r = parse("200 g butter || 180 g coconut oil // soft")
     assert r["comment"] == "soft"
     assert r["substitutes"][0]["food"] == "coconut oil"
+
+
+def test_danish_spoon_plurals_are_units():
+    for line in ("2 teskeer bagepulver", "1 ¹/₂ spiseskeer hvidvinseddike", "2 dessertskeer sukker"):
+        r = parse(line)
+        assert r["unit"] is not None, line
+        assert r["quantity"] is not None
+    assert parse("2 teskeer bagepulver")["food"] == "bagepulver"
