@@ -998,9 +998,11 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
       return `<style>
           .vpart { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
           ${
-            // a card with a set height splits it 3:2 between recipe and list; otherwise each takes what it needs
+            // a card with a set height: the recipe is only as tall as its content needs (it
+            // shrinks, scrolling, when short of room) and the list takes whatever is left;
+            // otherwise each takes what it needs
             this._fixedHeight()
-              ? ".vpart.cp { flex: 3 1 0; } .vpart.lp { flex: 2 1 0; }"
+              ? ".vpart.cp { flex: 0 1 auto; } .vpart.lp { flex: 1 1 0; min-height: 140px; }"
               : ".vpart.cp, .vpart.lp { flex: 0 0 auto; }"
           }
         </style><div class="vpart cp">${top}${body}</div><div class="vpart lp">${after}</div>`;
@@ -1011,7 +1013,7 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
         .split .side { border-right: 1px solid var(--divider-color); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
         .split .main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
         @container (max-width: 560px) {
-          .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); }
+          .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
           .split .side { border-right: 0; border-bottom: 1px solid var(--divider-color); order: 2; }
         }
       </style>
