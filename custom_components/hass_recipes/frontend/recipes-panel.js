@@ -142,6 +142,14 @@ const STYLE = `
   .step { border: 1px solid var(--divider-color); border-radius: 8px; padding: 10px; margin-bottom: 12px; }
   .step-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
   .step-head .spacer { flex: 1; }
+  .drag-handle { background: none; border: none; color: var(--secondary-text-color); cursor: grab; font-size: 18px; line-height: 1; padding: 6px 2px; touch-action: none; }
+  .step-head .drag-handle { border: none; padding: 2px 6px 2px 0; }
+  .ing-row.dragging, .step.dragging { opacity: .4; }
+  .drop-before { box-shadow: 0 -3px 0 var(--primary-color); }
+  .drop-after { box-shadow: 0 3px 0 var(--primary-color); }
+  .insert-bar { display: flex; gap: 4px; justify-content: center; opacity: .35; margin: -6px 0 2px; transition: opacity .15s; }
+  .insert-bar:hover, .insert-bar:focus-within { opacity: 1; }
+  @media (pointer: coarse) { .drag-handle { display: none; } .insert-bar { opacity: .8; } }
   .step-head button { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 2px 8px; font: inherit; }
   .step .timer-field { margin: 8px 0; }
   .timer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
@@ -592,6 +600,11 @@ class HassRecipesPanel extends HTMLElement {
       const cur = this.shadowRoot.querySelector(".cstep.current");
       if (cur) cur.scrollIntoView({ block: "center", behavior: "smooth" });
     }
+    if (this._focusStep != null) {
+      const el = this.shadowRoot.querySelector(`.step[data-n="${this._focusStep}"] [data-f=text]`);
+      if (el) el.focus();
+      this._focusStep = null;
+    }
     if (this._focusUid) {
       const [uid, part] = this._focusUid.split(":");
       const found = this.shadowRoot.querySelectorAll(`.ing-row[data-uid="${uid}"] [data-f=${part === "sub" ? "isub" : "itext"}]`);
@@ -734,6 +747,7 @@ class HassRecipesPanel extends HTMLElement {
     if (form) {
       this._bindMulti(root);
       form.addEventListener("submit", (e) => this._save(e, form));
+      this._bindFormDrag(form);
       form.addEventListener("input", (e) => {
         this._formDirty = true;
         if (e.target.matches && e.target.matches("textarea[data-autosize]")) this._autosize(e.target);

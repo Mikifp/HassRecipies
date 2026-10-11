@@ -150,6 +150,7 @@ export default function (h) {
            <button type="button" class="mini link" data-row-act="sub" data-uid="${esc(row.uid)}">+ ${row.subs.length ? "another " : ""}substitute</button>
            <input data-f="icomment" class="ing-comment-input" placeholder="Note, e.g. room temperature" value="${esc(row.comment || "")}">`;
       return `<div class="ing-row ${row.header ? "is-header" : ""}" data-uid="${esc(row.uid)}" data-header="${row.header ? 1 : 0}">
+        <button type="button" class="drag-handle" draggable="true" data-drag="row" title="Drag to reorder" aria-label="Drag to reorder">⠿</button>
         <div class="ing-inputs">${inputs}</div>
         <span class="row-btns">
           <button type="button" data-row-act="up" data-uid="${esc(row.uid)}" title="Move up">↑</button>
@@ -171,16 +172,17 @@ export default function (h) {
       let num = 0;
       const steps = d.steps
         .map((st, n) => {
-          const head = (label) => `<div class="step-head"><strong>${label}</strong><span class="spacer"></span>
+          const head = (label) => `<div class="step-head"><button type="button" class="drag-handle" draggable="true" data-drag="step" title="Drag to reorder" aria-label="Drag to reorder">⠿</button><strong>${label}</strong><span class="spacer"></span>
               <button type="button" data-step-act="up" data-n="${n}" title="Move up">↑</button>
               <button type="button" data-step-act="down" data-n="${n}" title="Move down">↓</button>
               <button type="button" data-step-act="remove" data-n="${n}" title="Remove">✕</button></div>`;
+          const bar = `<div class="insert-bar"><button type="button" class="mini link" data-step-act="insert" data-n="${n}">+ Step here</button><button type="button" class="mini link" data-step-act="insert-section" data-n="${n}">+ Section here</button></div>`;
           if (st.section) {
-            return `<div class="step is-section" data-n="${n}" data-section="1">${head("Section")}
+            return bar + `<div class="step is-section" data-n="${n}" data-section="1">${head("Section")}
               <input data-f="text" placeholder="Section title, e.g. Assembly" value="${esc(st.text)}"></div>`;
           }
           num += 1;
-          return `<div class="step" data-n="${n}" data-section="0">${head(`Step ${num}`)}
+          return bar + `<div class="step" data-n="${n}" data-section="0">${head(`Step ${num}`)}
             <textarea data-f="text" data-autosize rows="2" placeholder="What to do…">${esc(st.text)}</textarea>
             <div class="timer-field"><label class="lbl">Timers (optional)</label>
               ${st.timers
@@ -314,6 +316,62 @@ export default function (h) {
       this._render();
     },
 
+    /** Drag the ⠿ handle of an ingredient row or a step to put it somewhere else (mouse; on touch use ↑ ↓). */
+    _bindFormDrag(form) {
+      let drag = null;
+      const unitOf = (kind) => (kind === "row" ? ".ing-row" : ".step");
+      const clear = () => form.querySelectorAll(".drop-before, .drop-after, .dragging").forEach((el) => el.classList.remove("drop-before", "drop-after", "dragging"));
+      const target = (e) => {
+        if (!drag) return null;
+        const el = e.target.closest && e.target.closest(unitOf(drag.kind));
+        if (!el || el === drag.el) return null;
+        const box = el.getBoundingClientRect();
+        return { el, after: e.clientY > box.top + box.height / 2 };
+      };
+      form.addEventListener("dragstart", (e) => {
+        const h = e.target.closest && e.target.closest("[data-drag]");
+        if (!h) return;
+        const kind = h.dataset.drag;
+        const el = h.closest(unitOf(kind));
+        drag = { kind, el };
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", kind);
+        if (e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(el, 12, 12);
+        el.classList.add("dragging");
+      });
+      form.addEventListener("dragover", (e) => {
+        const t = target(e);
+        if (!t) return;
+        e.preventDefault();
+        form.querySelectorAll(".drop-before, .drop-after").forEach((el) => el.classList.remove("drop-before", "drop-after"));
+        t.el.classList.add(t.after ? "drop-after" : "drop-before");
+      });
+      form.addEventListener("drop", (e) => {
+        const t = target(e);
+        if (!t) return;
+        e.preventDefault();
+        const { kind, el } = drag;
+        drag = null;
+        clear();
+        this._syncForm();
+        const list = kind === "row" ? this._form.rows : this._form.steps;
+        const index = (node) => (kind === "row" ? list.findIndex((r) => r.uid === node.dataset.uid) : Number(node.dataset.n));
+        const from = index(el);
+        let to = index(t.el) + (t.after ? 1 : 0);
+        if (from < 0 || to < 0) return;
+        if (from < to) to -= 1;
+        if (from !== to) {
+          list.splice(to, 0, list.splice(from, 1)[0]);
+          this._formDirty = true;
+          this._render();
+        }
+      });
+      form.addEventListener("dragend", () => {
+        drag = null;
+        clear();
+      });
+    },
+
     /** Pasting several lines into a row creates a row per line. */
     _pasteRows(e, uid) {
       const text = (e.clipboardData || window.clipboardData).getData("text");
@@ -337,6 +395,10 @@ export default function (h) {
       const steps = this._form.steps;
       if (act === "add") steps.push({ text: "", ingredients: [], timers: [], section: false });
       else if (act === "add-section") steps.push({ text: "", ingredients: [], timers: [], section: true });
+      else if (act === "insert" || act === "insert-section") {
+        steps.splice(n, 0, { text: "", ingredients: [], timers: [], section: act === "insert-section" });
+        this._focusStep = n;
+      }
       else if (act === "add-timer" && steps[n]) steps[n].timers.push({ h: "", m: "", s: "", label: "" });
       else if (act === "remove-timer" && steps[n]) steps[n].timers.splice(Number(t), 1);
       else if (act === "remove") steps.splice(n, 1);

@@ -25,6 +25,7 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Substitutes: any ingredient can carry any number of alternatives, each with its own amount (stored as `200 g butter || 180 g coconut oil || 2 dl cream`), converted to grams like the main ingredient
 - Cook mode shows the whole recipe at once (ingredients beside step cards, current step highlighted, screen kept awake); "One step at a time" switches to a focused view
 - Check off steps (and ingredients) while cooking; checks are remembered per recipe for two days, a finished timer completes its step, and finishing every step resets the checks
+- In the editor, drag the ⠿ handle to reorder ingredients and steps (↑ ↓ buttons on touch screens), and use **+ Step here** between steps to insert a step or section anywhere
 - Unsaved-changes prompt when you leave the editor
 - Yield: say what the ingredients make ("8 pancakes") and the multiplier the recipe opens at (2× = 16 pancakes); type the number you want and everything scales. `makes:` works in the shopping-list service too
 - Scale a recipe (½×–4× or any multiplier); linked ingredients scale too
