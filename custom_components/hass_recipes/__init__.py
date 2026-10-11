@@ -43,6 +43,7 @@ from .http_api import (
     RecipesUploadImageView,
 )
 from .images import ImageStore, id_from_url
+from .lovelace_resource import async_ensure_resource, async_remove_resource
 from .intents import async_install_sentences, async_remove_intents, async_setup_intents
 from .scraper import RecipeImportError, async_import_url
 from .mealplan import SLOTS, MealPlan, MealPlanError
@@ -131,6 +132,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
     hass.async_create_task(sweep_images())
 
     version = hass.data[ASSETS_VERSION_KEY]
+
+    # Register the cards as a dashboard resource, which Home Assistant loads before it
+    # builds a dashboard. At start-up Lovelace may not be ready yet, so retry when it is.
+    cards_path = f"{FRONTEND_URL}/{CARDS_JS}"
+
+    async def _register_cards(_event: Event | None = None) -> None:
+        await async_ensure_resource(hass, cards_path, version)
+
+    if not await async_ensure_resource(hass, cards_path, version):
+        entry.async_on_unload(hass.bus.async_listen_once("homeassistant_started", _register_cards))
     await panel_custom.async_register_panel(
         hass,
         webcomponent_name=PANEL_ELEMENT,
@@ -317,3 +328,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> 
     hass.data.pop(f"{DOMAIN}_plan", None)
     hass.data.pop(f"{DOMAIN}_images", None)
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> None:
+    """The integration was deleted: take its dashboard resource with it."""
+    await async_remove_resource(hass, f"{FRONTEND_URL}/{CARDS_JS}")
