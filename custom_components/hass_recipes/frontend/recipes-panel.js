@@ -184,12 +184,15 @@ const STYLE = `
   .cook-done input { width: auto; }
   .ing-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
   .ing-row .ing-inputs { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-  .ing-row.is-header input[data-f=itext] { font-weight: 600; border-left: 4px solid var(--primary-color); }
+  .ing-row.is-header { background: color-mix(in srgb, var(--primary-color) 12%, transparent); border-left: 5px solid var(--primary-color); border-radius: 8px; padding: 8px 8px 8px 10px; margin: 18px 0 10px; }
+  .ing-row.is-header input[data-f=itext] { font-weight: 700; font-size: 1.05rem; background: transparent; }
+  .step.is-section { background: color-mix(in srgb, var(--primary-color) 12%, transparent); border: none; border-left: 5px solid var(--primary-color); margin-top: 18px; }
+  .step.is-section input[data-f=text] { font-weight: 700; font-size: 1.05rem; background: transparent; }
+  .step.is-section .step-head strong { text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: var(--primary-color); }
   .ing-row input[data-f=isub] { font-size: 14px; font-style: italic; }
   .row-btns { display: flex; gap: 4px; }
   .row-btns button, .mini { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 4px 8px; font: inherit; }
   .mini.link { border: 0; text-align: left; padding: 0; color: var(--primary-color); font-size: 13px; }
-  .step.is-section { border-left: 4px solid var(--primary-color); }
   .yield-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
   .yield-row input { width: auto; }
   .scale { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 16px; }
@@ -762,7 +765,7 @@ class HassRecipesPanel extends HTMLElement {
             });
           }
         }
-        if (e.target.matches && e.target.matches("[data-f=itext]")) this._refreshChips();
+        if (e.target.matches && e.target.matches("[data-f=itext], .step.is-section [data-f=text]")) this._refreshChips();
       });
       form.addEventListener("change", () => (this._formDirty = true));
       form.addEventListener("paste", (e) => {

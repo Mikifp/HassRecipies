@@ -119,8 +119,28 @@ export default function (h) {
     },
 
     _stepChips(step, rows) {
-      const all = rows.filter((row) => !row.header && row.text.trim());
+      let all = rows.filter((row) => !row.header && row.text.trim());
       if (!all.length) return `<span class="muted">Add ingredients above to link them to this step.</span>`;
+      // Only the ingredients of the step's own section are offered: the ingredient section
+      // with the same title as the step's section, or the loose ones above the first
+      // ingredient section when the step has none. Without a match, everything is offered.
+      const norm = (t) => String(t).trim().toLowerCase();
+      const sectionOf = new Map();
+      let current = "";
+      let hasSections = false;
+      for (const row of rows) {
+        if (row.header) {
+          current = norm(row.text);
+          hasSections = true;
+        } else sectionOf.set(row.uid, current);
+      }
+      if (hasSections) {
+        let wanted = "";
+        const list = (this._form && this._form.steps) || [];
+        for (const other of list.slice(0, Math.max(list.indexOf(step), 0))) if (other.section) wanted = norm(other.text);
+        const same = all.filter((row) => sectionOf.get(row.uid) === wanted || step.ingredients.includes(row.uid));
+        if (same.length) all = same;
+      }
       // An ingredient linked to another step is not offered again here, unless this step
       // already has it (older recipes may link one ingredient to several steps).
       const taken = new Set();
