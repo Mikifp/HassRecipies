@@ -43,6 +43,7 @@ from .http_api import (
     RecipesUploadImageView,
 )
 from .images import ImageStore, id_from_url
+from .localize import words
 from .lovelace_resource import async_ensure_resource, async_remove_resource
 from .intents import async_install_sentences, async_remove_intents, async_setup_intents
 from .scraper import RecipeImportError, async_import_url
@@ -61,7 +62,7 @@ type RecipesConfigEntry = ConfigEntry[RecipeStore]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-FRONTEND_FILES = ("recipes-shared.js", "recipes-panel.js", CARDS_JS)
+FRONTEND_FILES = ("recipes-shared.js", "recipes-i18n.js", "recipes-panel.js", CARDS_JS)
 ASSETS_VERSION_KEY = f"{DOMAIN}_assets_version"
 
 
@@ -196,7 +197,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
                 "No speakers are configured. Choose them in Settings > Devices & services "
                 "> Recipes > Configure."
             )
-        await timers.async_play_alarm("Test timer", raise_errors=True)
+        await timers.async_play_alarm(words(hass.config.language)["test_timer"], raise_errors=True)
 
     hass.services.async_register(DOMAIN, SERVICE_TEST_TIMER_SOUND, test_timer_sound)
 

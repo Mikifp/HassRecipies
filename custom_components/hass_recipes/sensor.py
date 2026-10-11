@@ -51,6 +51,7 @@ async def async_setup_entry(
 
 class RecipeTimerSensor(SensorEntity):
     _attr_should_poll = False
+    _attr_has_entity_name = True
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_icon = "mdi:timer-sand"
     _attr_device_info = DEVICE_INFO
@@ -98,7 +99,8 @@ class CookingSensor(SensorEntity):
     """The recipe being cooked: its name as the state, where you are as attributes."""
 
     _attr_should_poll = False
-    _attr_name = "Cooking"
+    _attr_has_entity_name = True
+    _attr_translation_key = "cooking"
     _attr_icon = "mdi:chef-hat"
     _attr_unique_id = f"{DOMAIN}_cooking"
     _attr_device_info = DEVICE_INFO

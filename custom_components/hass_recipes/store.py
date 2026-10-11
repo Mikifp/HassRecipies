@@ -18,6 +18,7 @@ from .const import (
     STORAGE_VERSION,
 )
 from .ingredients import is_header, parse_ingredient
+from .localize import step_label
 
 # Fields a client may set on a recipe.
 EDITABLE_FIELDS = (
@@ -98,7 +99,12 @@ def _normalize_steps(recipe: dict[str, Any]) -> None:
 
 
 def step_timer_specs(
-    recipe_id: str, recipe_name: str, step_number: int, step_index: int, timers: list[dict[str, Any]]
+    recipe_id: str,
+    recipe_name: str,
+    step_number: int,
+    step_index: int,
+    timers: list[dict[str, Any]],
+    language: str | None = None,
 ) -> list[tuple[str, str, int]]:
     """(key, label, seconds) for each timer of a step.
 
@@ -108,11 +114,9 @@ def step_timer_specs(
     specs = []
     for n, timer in enumerate(timers):
         key = f"{recipe_id}:{step_index}" + (f":{n}" if n else "")
-        label = f"{recipe_name} · step {step_number}"
-        if timer.get("label"):
-            label += f" · {timer['label']}"
-        elif len(timers) > 1:
-            label += f" · timer {n + 1}"
+        label = step_label(
+            language, recipe_name, step_number, timer.get("label") or "", n + 1 if len(timers) > 1 else 0
+        )
         specs.append((key, label, int(timer["seconds"])))
     return specs
 

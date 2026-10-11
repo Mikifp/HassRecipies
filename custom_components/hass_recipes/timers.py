@@ -22,6 +22,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 
+from .localize import words
 from .const import (
     ALARM_PATH,
     CONF_ALARM_MINUTES,
@@ -226,7 +227,10 @@ class TimerManager:
             await self._hass.services.async_call(
                 "notify",
                 service,
-                {"title": "Timer finished", "message": timer["label"]},
+                {
+                    "title": words(self._hass.config.language)["timer_finished"],
+                    "message": timer["label"],
+                },
                 blocking=True,
             )
         except HomeAssistantError as err:
@@ -319,7 +323,7 @@ class TimerManager:
                 )
                 if not tts:
                     raise HomeAssistantError("No text-to-speech entity is available")
-                text = "Timer finished. " + label.replace(" \u00b7 ", ", ")
+                text = f"{words(self._hass.config.language)['timer_finished']}. " + label.replace(" \u00b7 ", ", ")
                 for speaker in speakers:
                     await self._hass.services.async_call(
                         "tts",
