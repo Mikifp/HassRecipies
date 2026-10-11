@@ -1,6 +1,6 @@
 /* Recipes panel: recipe methods. Mixed into the panel class by recipes-panel.js. */
 export default function (h) {
-  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml, ingredientPlain } = h;
+  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml } = h;
   return {
     // ---- shopping list (HA to-do entities) ----
     _todoEntities() {
@@ -257,60 +257,6 @@ export default function (h) {
       this.scrollTo(0, 0);
     },
 
-    _printRecipe(r) {
-      const k = this._scale;
-      const mode = this._units;
-      const w = window.open("", "_blank");
-      if (!w) {
-        this._error = T("The browser blocked the print window. Allow pop-ups for this site and try again.");
-        this._render();
-        return;
-      }
-      const meta = [
-        r.prep_time && `${T("Prep")} ${T(minutes(r.prep_time))}`,
-        r.cook_time && `${T("Cook")} ${T(minutes(r.cook_time))}`,
-        r.total_time && `${T("Total")} ${T(minutes(r.total_time))}`,
-        r.yield_amount && `${T("Makes")} ${fmtYield(r.yield_amount * k)} ${esc(r.yield_unit || "")}`.trim(),
-        T(this._servingsLabel(r)),
-      ].filter(Boolean);
-      let num = 0;
-      const steps = r.instructions
-        .map(normStep)
-        .map((st) => {
-          if (st.section) return `<h3>${esc(st.text)}</h3>`;
-          num += 1;
-          return `<p class="step"><span class="n">${num}.</span> ${esc(st.text)}${st.timers.length ? ` <span class="timer">(${esc(st.timers.map((t) => T(duration(t.seconds)) + (t.label ? ` ${t.label}` : "")).join(", "))})</span>` : ""}</p>`;
-        })
-        .join("");
-      const ings = r.ingredients
-        .map((raw, i) => (isHeader(raw) ? `</ul><h3>${esc(headerText(raw))}</h3><ul>` : `<li>${esc(ingredientPlain(r, i, k, mode))}</li>`))
-        .join("");
-      w.document.write(`<!doctype html><html lang="${esc(state.language)}"><head><meta charset="utf-8"><title>${esc(r.name)}</title>
-        <style>
-          body { font: 16px/1.5 Georgia, serif; max-width: 760px; margin: 24px auto; padding: 0 16px; color: #000; }
-          h1 { margin: 0 0 4px; } .meta { color: #555; margin-bottom: 16px; }
-          h2 { border-bottom: 1px solid #999; padding-bottom: 2px; margin-top: 24px; }
-          h3 { margin: 16px 0 4px; font-size: 1rem; }
-          ul { padding-left: 20px; margin: 0; } li { margin-bottom: 6px; }
-          .step { margin: 0 0 10px; } .n { font-weight: bold; }
-          .timer { color: #555; font-size: 14px; } img { max-width: 100%; max-height: 260px; }
-          @media print { a { color: inherit; text-decoration: none; } }
-        </style></head><body>
-        <h1>${esc(r.name)}</h1>
-        <div class="meta">${meta.join(" · ")}</div>
-        ${r.description ? `<p>${esc(r.description)}</p>` : ""}
-        <h2>${T("Ingredients")}</h2>
-        <ul>${ings}</ul>
-        <h2>${T("Instructions")}</h2>
-        ${steps}
-        ${r.notes ? `<h2>${T("Notes")}</h2><p>${esc(r.notes)}</p>` : ""}
-        ${r.source_url ? `<p class="meta">${T("Source:")} ${esc(r.source_url)}</p>` : ""}
-        </body></html>`);
-      w.document.close();
-      w.focus();
-      setTimeout(() => w.print(), 300);
-    },
-
     _detailHtml(r) {
       const k = this._scale;
       const base = baseServings(r.servings);
@@ -351,7 +297,6 @@ export default function (h) {
         <div class="bar ${cls}">
           <button class="p" data-act="cook" data-id="${esc(r.id)}">${icon("chef-hat")}Cook</button>
           <button data-act="shop" data-id="${esc(r.id)}">${icon("cart-outline")}Shop</button>
-          <button data-act="print" data-id="${esc(r.id)}">${icon("printer-outline")}Print</button>
           <button data-act="dashboard-recipe" data-id="${esc(r.id)}" class="${this._cookingId === r.id ? "on" : ""}" aria-pressed="${this._cookingId === r.id}" title="${
             this._cookingId === r.id
               ? "Shown on the dashboard cook card. Press to remove."

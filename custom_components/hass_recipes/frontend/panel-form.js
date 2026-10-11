@@ -48,9 +48,9 @@ export default function (h) {
 
     /** Stored ingredient strings -> editor rows (heading / text + substitute). */
     _rowFromString(str) {
-      if (isHeader(str)) return { uid: this._nextUid(), header: true, text: headerText(str), subs: [] };
-      const { main, alts } = splitSubs(str);
-      return { uid: this._nextUid(), header: false, text: main, subs: alts };
+      if (isHeader(str)) return { uid: this._nextUid(), header: true, text: headerText(str), subs: [], comment: "" };
+      const { main, alts, comment } = splitSubs(str);
+      return { uid: this._nextUid(), header: false, text: main, subs: alts, comment };
     },
 
     _initForm(id) {
@@ -103,6 +103,7 @@ export default function (h) {
         header: el.dataset.header === "1",
         text: el.querySelector("[data-f=itext]").value,
         subs: [...el.querySelectorAll("[data-f=isub]")].map((i) => i.value),
+        comment: (el.querySelector("[data-f=icomment]") || { value: "" }).value,
       }));
       this._form.steps = [...form.querySelectorAll(".step")].map((el) => ({
         section: el.dataset.section === "1",
@@ -146,7 +147,8 @@ export default function (h) {
                  <button type="button" class="mini" data-row-act="sub-remove" data-uid="${esc(row.uid)}" data-i="${n}" title="Remove this substitute">✕</button></div>`
              )
              .join("")}
-           <button type="button" class="mini link" data-row-act="sub" data-uid="${esc(row.uid)}">+ ${row.subs.length ? "another " : ""}substitute</button>`;
+           <button type="button" class="mini link" data-row-act="sub" data-uid="${esc(row.uid)}">+ ${row.subs.length ? "another " : ""}substitute</button>
+           <input data-f="icomment" class="ing-comment-input" placeholder="Note, e.g. room temperature" value="${esc(row.comment || "")}">`;
       return `<div class="ing-row ${row.header ? "is-header" : ""}" data-uid="${esc(row.uid)}" data-header="${row.header ? 1 : 0}">
         <div class="ing-inputs">${inputs}</div>
         <span class="row-btns">
@@ -355,7 +357,7 @@ export default function (h) {
         const text = row.text.trim();
         if (!text) continue;
         indexOf.set(row.uid, ingredients.length);
-        ingredients.push(row.header ? `## ${text}` : joinSubs(text, row.subs));
+        ingredients.push(row.header ? `## ${text}` : joinSubs(text, row.subs, row.comment || ""));
       }
       const payload = {
         name: d.name.trim(),

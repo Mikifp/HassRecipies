@@ -156,6 +156,8 @@ const STYLE = `
   .ing-qty { font-variant-numeric: tabular-nums; }
   .ing-note { color: var(--secondary-text-color); }
   .ing-sub { color: var(--secondary-text-color); font-size: 12px; }
+  .ing-comment { display: block; color: var(--secondary-text-color); font-size: 13px; font-style: italic; margin-top: 2px; }
+  .ing-comment-input { margin-top: 4px; width: 100%; }
   .ing-alt { color: var(--secondary-text-color); font-size: 13px; font-style: italic; margin-top: 2px; }
   ul.ingredients li.section { font-weight: 600; font-size: 15px; padding: 14px 0 6px; border-bottom: 2px solid var(--divider-color); letter-spacing: .01em; }
   ul.ingredients li.section:first-child { padding-top: 2px; }
@@ -893,9 +895,6 @@ class HassRecipesPanel extends HTMLElement {
       }
       case "cook-exit":
         this._returnTo({ name: "detail", id: this._view.id });
-        break;
-      case "print":
-        this._printRecipe(this._recipe(id));
         break;
       case "dashboard-recipe":
         try {

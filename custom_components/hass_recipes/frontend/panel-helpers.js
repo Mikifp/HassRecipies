@@ -50,7 +50,7 @@ const TODO_KEY = "hass_recipes_todo";
 
 /** HTML for ingredient `i`: amount + bold food, faded original amount, optional substitute. */
 const ingredientHtml = (r, i, k, mode) => {
-  const { main, alts } = splitSubs(r.ingredients[i] ?? "");
+  const { main, alts, comment } = splitSubs(r.ingredients[i] ?? "");
   const p = (r.parsed_ingredients || [])[i];
   const subs = (p && (p.substitutes || (p.substitute ? [p.substitute] : []))) || [];
   const a = ingParts(p, main, k, mode);
@@ -60,6 +60,7 @@ const ingredientHtml = (r, i, k, mode) => {
     const b = ingParts(subs[n], altText, k, mode);
     html += `<small class="ing-alt">or ${b.qty ? `${esc(b.qty)} ` : ""}<strong>${esc(b.food)}</strong>${b.note ? `, ${esc(b.note)}` : ""}${b.sub ? ` <span class="ing-sub">(${esc(b.sub)})</span>` : ""}</small>`;
   });
+  if (comment) html += `<small class="ing-comment">${esc(comment)}</small>`;
   return html;
 };
 
@@ -68,19 +69,6 @@ const ingredientChipHtml = (r, i, k, mode) => {
   const [main] = splitSub(r.ingredients[i] ?? "");
   const a = ingParts((r.parsed_ingredients || [])[i], main, k, mode);
   return `<span class="ing-chip">${a.qty ? `<span class="q">${esc(a.qty)}</span>` : ""}<b>${esc(a.food)}</b></span>`;
-};
-
-/** Plain-text line including the substitute (used for printing). */
-const ingredientPlain = (r, i, k, mode) => {
-  const { alts } = splitSubs(r.ingredients[i] ?? "");
-  let text = ingredientText(r, i, k, mode);
-  const p = (r.parsed_ingredients || [])[i] || {};
-  const subs = p.substitutes || (p.substitute ? [p.substitute] : []);
-  alts.forEach((altText, n) => {
-    const b = ingParts(subs[n], altText, k, mode);
-    text += ` — or ${b.qty ? `${b.qty} ` : ""}${b.food}`;
-  });
-  return text;
 };
 
 const PROGRESS_KEY = "hass_recipes_progress";
@@ -125,7 +113,6 @@ export default {
   TODO_KEY,
   ingredientHtml,
   ingredientChipHtml,
-  ingredientPlain,
   PROGRESS_KEY,
   HANDLED_KEY,
 };

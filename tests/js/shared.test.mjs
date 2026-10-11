@@ -48,3 +48,14 @@ test("baseServings", () => {
   assert.equal(s.baseServings("4 personer"), 4);
   assert.equal(s.baseServings(""), null);
 });
+
+test("ingredient notes", () => {
+  assert.deepEqual(s.splitSubs("200 g butter || 180 g oil // room temperature"), {
+    main: "200 g butter",
+    alts: ["180 g oil"],
+    comment: "room temperature",
+  });
+  assert.equal(s.joinSubs("200 g butter", [], " room  temperature "), "200 g butter // room temperature");
+  assert.equal(s.joinSubs("200 g butter", ["180 g oil"]), "200 g butter || 180 g oil");
+  assert.deepEqual(s.splitSub("200 g butter // soft"), ["200 g butter", ""]);
+});

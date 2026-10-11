@@ -21,6 +21,7 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Browser-style navigation: every screen has its own address (`/recipes#/recipe/<id>`), so the mouse back button / Alt+← steps back through the app, reloading keeps your place, and recipes can be bookmarked
 - Search by name, tag or ingredient; filter by tag
 - Sections in both ingredients and instructions (`## Dough` in stored ingredients; imported from websites and Mealie where the source has them)
+- Notes on ingredients: each ingredient has a note field ("room temperature", "the organic kind") shown under it in the panel and the cards; it is stored as `200 g butter // room temperature` and never affects scaling or the shopping list
 - Substitutes: any ingredient can carry any number of alternatives, each with its own amount (stored as `200 g butter || 180 g coconut oil || 2 dl cream`), converted to grams like the main ingredient
 - Cook mode shows the whole recipe at once (ingredients beside step cards, current step highlighted, screen kept awake); "One step at a time" switches to a focused view
 - Check off steps (and ingredients) while cooking; checks are remembered per recipe for two days, a finished timer completes its step, and finishing every step resets the checks
@@ -37,7 +38,6 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Deleted recipes go to a trash for 30 days: press **Undo** in the notice that follows a delete, or open **⇅ Backup & migrate → Recently deleted** to restore one or empty the trash
 - Choose who may edit: by default everyone who can open the panel can; in **Configure** set **Who can change recipes** to *Administrators only* and everyone else gets a read-only panel: they can browse, cook and use timers, but cannot edit recipes or the meal plan. The same rule is enforced on the server
 - Cook mode: one big step at a time, linked ingredients, step timers, screen kept awake (arrow keys to navigate)
-- Print view (opens a clean printable page at the current scale and units)
 - `hass_recipes.import_recipe` service for automations
 - Data lives in HA storage (`.storage/hass_recipes.recipes`) so it is included in HA backups
 

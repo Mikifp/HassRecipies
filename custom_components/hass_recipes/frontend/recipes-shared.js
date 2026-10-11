@@ -125,8 +125,15 @@ export const isHeader = (t) => /^#{1,6}\s/.test(String(t));
 
 export const headerText = (t) => String(t).replace(/^#{1,6}\s*/, "").trim();
 
-export const splitSub = (t) => {
+/** "200 g butter || 180 g oil // room temperature" -> ["200 g butter || 180 g oil", "room temperature"]. */
+export const splitComment = (t) => {
   const s = String(t);
+  const i = s.indexOf(" // ");
+  return i < 0 ? [s.trim(), ""] : [s.slice(0, i).trim(), s.slice(i + 4).trim()];
+};
+
+export const splitSub = (t) => {
+  const s = splitComment(t)[0];
   const i = s.indexOf(" || ");
   return i < 0 ? [s.trim(), ""] : [s.slice(0, i).trim(), s.slice(i + 4).trim()];
 };
@@ -135,11 +142,15 @@ export const joinSub = (text, sub) => (sub.trim() ? `${text.trim()} || ${sub.tri
 
 /** "200 g butter || 180 g oil || 3 dl cream" -> { main, alts: [...] } (any number of alternatives). */
 export const splitSubs = (t) => {
-  const parts = String(t).split(" || ").map((x) => x.trim());
-  return { main: parts[0], alts: parts.slice(1).filter(Boolean) };
+  const [body, comment] = splitComment(t);
+  const parts = body.split(" || ").map((x) => x.trim());
+  return { main: parts[0], alts: parts.slice(1).filter(Boolean), comment };
 };
 
-export const joinSubs = (text, alts) => [text.trim(), ...alts.map((a) => a.trim()).filter(Boolean)].join(" || ");
+export const joinSubs = (text, alts, comment = "") => {
+  const line = [text.trim(), ...alts.map((a) => a.trim()).filter(Boolean)].join(" || ");
+  return comment.trim() ? `${line} // ${comment.trim().replace(/\s+/g, " ")}` : line;
+};
 
 export const clock = (sec) => {
   sec = Math.max(0, Math.ceil(sec));

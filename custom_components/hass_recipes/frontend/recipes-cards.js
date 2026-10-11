@@ -883,6 +883,7 @@ class HassRecipesCookCard extends RecipesBase {
     const mode = this._config.units === "original" ? "original" : "grams";
     const progress = loadProgress(r.id);
     const partsOf = (i) => ingParts((r.parsed_ingredients || [])[i], splitSubs(r.ingredients[i] ?? "").main, k, mode);
+    const commentOf = (i) => splitSubs(r.ingredients[i] ?? "").comment;
     // "or 180 g coconut oil" lines for every alternative of an ingredient
     const altsOf = (i) => {
       const p = (r.parsed_ingredients || [])[i] || {};
@@ -912,7 +913,7 @@ class HassRecipesCookCard extends RecipesBase {
             return `<label class="irow${on ? " on" : ""}"><input type="checkbox" data-ing="${i}" ${on ? "checked" : ""}>
               <span class="itext">${a.qty ? `<span class="q">${esc(a.qty)}</span> ` : ""}<b>${esc(a.food)}</b>${
                 a.note ? `<span class="muted">, ${esc(a.note)}</span>` : ""
-              }${a.sub ? ` <span class="muted sub">${esc(a.sub)}</span>` : ""}${altsOf(i)
+              }${a.sub ? ` <span class="muted sub">${esc(a.sub)}</span>` : ""}${commentOf(i) ? `<span class="muted cmt">${esc(commentOf(i))}</span>` : ""}${altsOf(i)
                 .map((alt) => `<span class="muted alt">${esc(this._t("or"))} ${esc(alt)}</span>`)
                 .join("")}</span></label>`;
           })
@@ -961,6 +962,7 @@ class HassRecipesCookCard extends RecipesBase {
         .actions { margin-top: auto; padding-top: 10px; flex: none; }
         .timer-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
         .irow .alt { display: block; font-size: 12px; }
+        .irow .cmt { display: block; font-size: 12px; font-style: italic; }
         .nav { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
         .nav .next { margin-left: auto; }
       </style>

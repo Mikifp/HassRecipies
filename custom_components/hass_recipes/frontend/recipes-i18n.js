@@ -55,8 +55,8 @@ const da = {
     // recipe page
     Cook: "Lav mad",
     Shop: "Køb ind",
-    Print: "Print",
     Dashboard: "Dashboard",
+    "Note, e.g. room temperature": "Note, fx stuetemperatur",
     Edit: "Redigér",
     "Delete recipe": "Slet opskrift",
     "Add to meal plan": "Føj til madplanen",
@@ -216,8 +216,6 @@ const da = {
     "Added to the meal plan.": "Føjet til madplanen.",
     "Dashboard cook card now shows this recipe.": "Dashboardets madlavningskort viser nu denne opskrift.",
     "Dashboard cook card cleared.": "Dashboardets madlavningskort er ryddet.",
-    "The browser blocked the print window. Allow pop-ups for this site and try again.":
-      "Browseren blokerede print-vinduet. Tillad pop-ups for dette site og prøv igen.",
   },
   patterns: [
     [/\bStep (\d+) of (\d+)\b/g, "Trin $1 af $2"],
