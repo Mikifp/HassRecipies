@@ -85,7 +85,7 @@ entities:
   - button.recipe_timers_stop_timer_alarm
 ```
 
-**Dashboard cards.** Three custom cards load automatically on every dashboard (add them from the card picker, or in YAML):
+**Dashboard cards.** The custom cards are registered as a dashboard resource by the integration (Settings → Dashboards → ⋮ → Resources shows `/hass_recipes_static/recipes-cards.js?v=…`, kept up to date on every update), so they are available on every dashboard: add them from the card picker, or in YAML. If your dashboard resources are defined in YAML (`lovelace: resources:`) the integration cannot edit them; add `url: /hass_recipes_static/recipes-cards.js` with `type: module` there yourself. Removing the integration removes the resource.
 
 ```yaml
 type: custom:hass-recipes-list-card      # search and open recipes
