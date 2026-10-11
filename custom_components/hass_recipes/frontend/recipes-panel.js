@@ -100,6 +100,7 @@ const STYLE = `
   main { max-width: 1200px; margin: 0 auto; padding: 16px; }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   input, textarea, select { font: inherit; color: inherit; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 6px; padding: 8px 10px; width: 100%; }
+  textarea { resize: vertical; max-width: 100%; }
   .toolbar input { flex: 1; min-width: 180px; width: auto; }
   button.btn { font: inherit; cursor: pointer; border: 0; border-radius: 6px; padding: 8px 14px; background: var(--primary-color); color: var(--text-primary-color, #fff); }
   button.btn.secondary { background: transparent; color: var(--primary-text-color); border: 1px solid var(--divider-color); }
@@ -2006,8 +2007,16 @@ class HassRecipesPanel extends HTMLElement {
   }
 
   _stepChips(step, rows) {
-    const items = rows.filter((row) => !row.header && row.text.trim());
-    if (!items.length) return `<span class="muted">Add ingredients above to link them to this step.</span>`;
+    const all = rows.filter((row) => !row.header && row.text.trim());
+    if (!all.length) return `<span class="muted">Add ingredients above to link them to this step.</span>`;
+    // An ingredient linked to another step is not offered again here, unless this step
+    // already has it (older recipes may link one ingredient to several steps).
+    const taken = new Set();
+    for (const other of (this._form && this._form.steps) || []) {
+      if (other !== step && !other.section) for (const uid of other.ingredients) taken.add(uid);
+    }
+    const items = all.filter((row) => !taken.has(row.uid) || step.ingredients.includes(row.uid));
+    if (!items.length) return `<span class="muted">Every ingredient is already used in another step.</span>`;
     return items
       .map(
         (row) =>
@@ -2406,6 +2415,7 @@ class HassRecipesPanel extends HTMLElement {
         if (chip) {
           chip.classList.toggle("active");
           this._formDirty = true;
+          this._refreshChips(); // the ingredient now appears (or disappears) in the other steps
           return;
         }
         const rowBtn = e.target.closest("[data-row-act]");
