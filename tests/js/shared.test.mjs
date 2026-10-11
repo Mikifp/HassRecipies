@@ -27,7 +27,7 @@ test("scaleIngredient", () => {
 });
 
 test("substitutes", () => {
-  assert.deepEqual(s.splitSubs("a || b || c"), { main: "a", alts: ["b", "c"] });
+  assert.deepEqual(s.splitSubs("a || b || c"), { main: "a", alts: ["b", "c"], comment: "" });
   assert.equal(s.joinSubs("a", ["b", ""]), "a || b");
 });
 
