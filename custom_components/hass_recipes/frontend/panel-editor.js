@@ -174,6 +174,7 @@ export default function (h) {
           <button type="button" class="ne-handle" draggable="true" data-ne-drag="row" title="Drag to reorder" aria-label="Drag to reorder">${icon("drag-vertical")}</button>
           <input class="ne-qty" data-ne-f="text" placeholder="Ingredient, e.g. 200 g butter" value="${esc(row.text)}">
           <input class="ne-note" data-ne-f="comment" placeholder="Note" value="${esc(row.comment || "")}">
+          <button type="button" class="ne-icon ne-ins" data-ne-act="row-insert" data-uid="${esc(row.uid)}" title="Add to the step you are writing" aria-label="Add to the step you are writing">${icon("text-box-plus-outline")}</button>
           <button type="button" class="ne-icon" data-ne-act="row-menu" data-uid="${esc(row.uid)}" title="More" aria-label="More">${icon("dots-vertical")}</button>
           ${(row.subs || [])
             .map(
@@ -184,7 +185,7 @@ export default function (h) {
         </div>`;
     },
 
-    _neStepHtml(step, num, rowsByUid) {
+    _neStepHtml(step, num, rowsByUid, sectionRows = []) {
       const textHtml = this._neTextHtml(step, rowsByUid);
       const extras = (step.ingredients || []).filter((uid) => {
         if (!rowsByUid.has(uid)) return false;
@@ -217,6 +218,17 @@ export default function (h) {
                 : ""
             }
             <div class="ne-pick" hidden></div>
+            ${(() => {
+              const quick = sectionRows.filter((r) => r.text.trim());
+              return quick.length
+                ? `<div class="ne-quick"><span class="ne-quick-label">${esc(T("Add"))}</span>${quick
+                    .map(
+                      (r) =>
+                        `<button type="button" class="ne-quick-chip${(step.ingredients || []).includes(r.uid) ? " used" : ""}" data-ne-act="quick-insert" data-uid="${esc(r.uid)}">${esc(chipLabel(r))}</button>`
+                    )
+                    .join("")}</div>`
+                : "";
+            })()}
           </div>
           <button type="button" class="ne-icon" data-ne-act="step-menu" data-uid="${esc(step.uid)}" title="More" aria-label="More">${icon("dots-vertical")}</button>
         </div>`;
@@ -234,7 +246,7 @@ export default function (h) {
             <div class="ne-list" data-ne-list="row" data-gi="${gi}">${g.rows.map((r) => this._neRowHtml(r)).join("")}</div>
             <button type="button" class="ne-add" data-ne-act="row-add" data-gi="${gi}">${icon("plus")}Add ingredient</button>
             <div class="ne-sub">Steps</div>
-            <div class="ne-list" data-ne-list="step" data-gi="${gi}">${g.steps.map((s) => this._neStepHtml(s, ++ctx.num, ctx.rowsByUid)).join("")}</div>
+            <div class="ne-list" data-ne-list="step" data-gi="${gi}">${g.steps.map((s) => this._neStepHtml(s, ++ctx.num, ctx.rowsByUid, g.rows)).join("")}</div>
             <button type="button" class="ne-add" data-ne-act="step-add" data-gi="${gi}">${icon("plus")}Add step</button>
           </div>`;
       } else g.steps.forEach(() => ctx.num++);
@@ -343,6 +355,7 @@ export default function (h) {
           return this._neMenu(anchor, [
             ...rows.map((r) => ({ label: `${T("Link")}: ${r.text.trim().slice(0, 40)}`, act: "link", data: { uid: d.uid, row: r.uid } })),
             { label: "Add timer", act: "timer-add", data: { uid: d.uid } },
+            { label: "Link the ingredients this step names", act: "step-autolink", data: { uid: d.uid } },
             { label: "Insert step above", act: "step-above", data: { uid: d.uid } },
             { label: "Insert step below", act: "step-below", data: { uid: d.uid } },
             { label: "Move up", act: "step-up", data: { uid: d.uid } },
@@ -352,10 +365,18 @@ export default function (h) {
         }
         case "group-menu":
           return this._neMenu(anchor, [
+            { label: "Link the ingredients the steps name", act: "group-autolink", data: { gi } },
             { label: "Move up", act: "group-up", data: { gi } },
             { label: "Move down", act: "group-down", data: { gi } },
             { label: "Delete section", act: "group-remove", data: { gi }, danger: true },
           ]);
+        case "row-insert":
+        case "quick-insert":
+          return this._neInsertAtCaret(d.uid);
+        case "step-autolink":
+          return this._neChange((groups) => this._neAutoLink(groups, d.uid, null));
+        case "group-autolink":
+          return this._neChange((groups) => this._neAutoLink(groups, null, gi));
         case "group-toggle": {
           this._syncEditor();
           const g = this._neCache[gi];
@@ -524,6 +545,79 @@ export default function (h) {
       }
     },
 
+    /** Link ingredients to the steps that name them (one step, or every step of a section). */
+    _neAutoLink(groups, stepUid, gi) {
+      const rows = groups.flatMap((g) => g.rows).filter((r) => r.text.trim());
+      const scope = stepUid ? groups.filter((g) => g.steps.some((s) => s.uid === stepUid)) : [groups[gi]].filter(Boolean);
+      for (const g of scope) {
+        const mine = g.rows.length ? g.rows : rows;
+        for (const s of g.steps) {
+          if (stepUid && s.uid !== stepUid) continue;
+          const have = new Set((s.ingredients || []).map(String));
+          const items = mine.filter((r) => r.text.trim() && !have.has(String(r.uid))).map((r) => ({ key: r.uid, text: r.text }));
+          const found = detectChips(s.text, items).map((c) => c.key);
+          if (found.length) {
+            s.ingredients = [...new Set([...(s.ingredients || []), ...found])];
+            s._chips = null;
+          }
+        }
+      }
+    },
+
+    /** Put an ingredient chip into the step being written: at the caret, or over the selected word. */
+    _neInsertAtCaret(uid) {
+      const textEl = this._neActive;
+      if (!textEl || !textEl.isConnected) return;
+      this._syncEditor();
+      const row = this._form.rows.find((r) => r.uid === uid);
+      if (!row) return;
+      const sel = this._neSelection();
+      let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+      if (!range || !textEl.contains(range.commonAncestorContainer)) {
+        range = document.createRange();
+        range.selectNodeContents(textEl);
+        range.collapse(false);
+      }
+      // a selected word becomes the chip, so the text keeps exactly what was written
+      let word = pickWord(row);
+      let replacing = false;
+      if (!range.collapsed) {
+        const holder = document.createElement("div");
+        holder.appendChild(range.cloneContents());
+        const picked = holder.textContent.trim();
+        if (picked && !holder.querySelector(".ne-chip") && !/\n/.test(picked)) {
+          word = picked;
+          replacing = true;
+        }
+      }
+      range.deleteContents();
+      const holder = document.createElement("span");
+      holder.innerHTML = this._neChipHtml(row, word);
+      const chip = holder.firstChild;
+      range.insertNode(chip);
+      const before = chip.previousSibling && chip.previousSibling.nodeType === 3 ? chip.previousSibling.nodeValue : "";
+      if (!replacing && before && !/\s$/.test(before)) chip.before(document.createTextNode(" "));
+      const next = chip.nextSibling && chip.nextSibling.nodeType === 3 ? chip.nextSibling : null;
+      let after = next;
+      if (!replacing && (!next || !/^\s/.test(next.nodeValue))) {
+        after = document.createTextNode(" ");
+        chip.after(after);
+      }
+      const caret = document.createRange();
+      if (after) caret.setStart(after, Math.min(after.nodeValue.length, replacing ? 0 : 1));
+      else caret.setStartAfter(chip);
+      caret.collapse(true);
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(caret);
+      }
+      textEl.focus();
+      const quick = textEl.closest(".ne-step").querySelector(`.ne-quick-chip[data-uid="${uid}"]`);
+      if (quick) quick.classList.add("used");
+      this._formDirty = true;
+      this._syncEditor();
+    },
+
     // ---- the @ picker ----
     _neSelection() {
       return this.shadowRoot.getSelection ? this.shadowRoot.getSelection() : document.getSelection();
@@ -649,14 +743,24 @@ export default function (h) {
       });
       // keep the caret in the text when a picker option is pressed
       form.addEventListener("mousedown", (e) => {
-        if (e.target.closest(".ne-pick")) e.preventDefault();
+        if (e.target.closest(".ne-pick, .ne-ins, .ne-quick-chip")) e.preventDefault();
+      });
+      // the ingredient buttons are live while a step is being written
+      form.addEventListener("focusin", (e) => {
+        if (e.target.classList && e.target.classList.contains("ne-text")) {
+          this._neActive = e.target;
+          form.classList.add("ne-typing");
+        } else if (!(e.target.closest && e.target.closest(".ne-ins, .ne-quick-chip"))) {
+          this._neActive = null;
+          form.classList.remove("ne-typing");
+        }
       });
       form.addEventListener("input", (e) => {
         if (e.target.classList && e.target.classList.contains("ne-text")) this._neUpdatePicker(e.target);
         // chips show the ingredient as it is written, so they follow edits to the ingredient
         if (e.target.matches && e.target.matches(".ne-row [data-ne-f=text]")) {
           const uid = e.target.closest(".ne-row").dataset.uid;
-          form.querySelectorAll(`.ne-chip[data-uid="${uid}"]`).forEach((chip) => {
+          form.querySelectorAll(`.ne-chip[data-uid="${uid}"], .ne-quick-chip[data-uid="${uid}"]`).forEach((chip) => {
             const label = e.target.value.trim();
             if (chip.classList.contains("ne-extra")) chip.firstChild.nodeValue = label;
             else chip.textContent = label;
