@@ -159,6 +159,52 @@ export default function (h) {
       };
     },
 
+    /**
+     * ha-button-toggle-group (the calendar page's view buttons) is only loaded with the calendar. Creating a
+     * calendar card through Home Assistant's card helpers loads it; until then the buttons are plain ha-buttons.
+     */
+    _brEnsureToggle() {
+      if (this._brToggle) return;
+      this._brToggle = "loading";
+      (async () => {
+        try {
+          if (!customElements.get("ha-button-toggle-group") && window.loadCardHelpers) {
+            const helpers = await window.loadCardHelpers();
+            try {
+              helpers.createCardElement({ type: "calendar", entities: [] });
+            } catch (_) {
+              /* the card refuses an empty config, but its module is loaded by then */
+            }
+          }
+          await Promise.race([customElements.whenDefined("ha-button-toggle-group"), new Promise((_, no) => setTimeout(no, 6000))]);
+          // the toggle takes SVG paths: read them from ha-icon, which resolves the mdi names
+          const names = { cards: "view-module", rows: "view-agenda", list: "view-headline" };
+          const holder = document.createElement("div");
+          holder.hidden = true;
+          this.shadowRoot.appendChild(holder);
+          const icons = Object.entries(names).map(([view, name]) => {
+            const el = document.createElement("ha-icon");
+            el.setAttribute("icon", `mdi:${name}`);
+            holder.appendChild(el);
+            return [view, el];
+          });
+          const paths = {};
+          for (let i = 0; i < 20 && Object.keys(paths).length < icons.length; i++) {
+            await new Promise((r) => setTimeout(r, 150));
+            for (const [view, el] of icons) if (el._path) paths[view] = el._path;
+          }
+          holder.remove();
+          if (Object.keys(paths).length === icons.length) {
+            this._brPaths = paths;
+            this._brToggle = "ready";
+            if (this._view && this._view.name === "list" && this._loaded) this._render();
+          }
+        } catch (_) {
+          this._brToggle = "unavailable";
+        }
+      })();
+    },
+
     _brActive() {
       return !!(this._cookbookId || this._search.trim() || Object.values(this._sel).some((set) => set.size));
     },
@@ -258,13 +304,18 @@ export default function (h) {
       const label = (list, cur) => (list.find(([v]) => v === cur) || list[0])[1];
       const view = (v, icon, title, first, last) =>
         `<ha-button size="s" appearance="${b.view === v ? "accent" : "filled"}" data-view="${v}" title="${title}" style="--ha-button-border-radius:${first ? "16px 0 0 16px" : last ? "0 16px 16px 0" : "0"}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon></ha-button>`;
+      this._brEnsureToggle();
+      const toggle =
+        this._brToggle === "ready"
+          ? `<ha-button-toggle-group id="br-view" size="s" no-wrap></ha-button-toggle-group>`
+          : `<div class="vseg" role="group">${view("cards", "view-module", "Cards", true, false)}${view("rows", "view-agenda", "Rows", false, false)}${view("list", "view-headline", "List", false, true)}</div>`;
       return `<div class="btool">
           ${m.paneOpen ? "" : `<span class="chipwrap">${this._brChip(`data-act="br-filters" ${this._filterDlg ? "active" : ""}`, "filter-variant", T("Filters"))}${m.nFilters ? `<span class="bcount">${m.nFilters}</span>` : ""}</span>`}
           ${this._canEdit === false ? "" : this._brChip(`class="select-mode-chip" data-act="select" ${this._select ? "active" : ""}`, "format-list-checks")}
           <ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>
           <ha-dropdown id="br-group"><span slot="trigger">${this._brChip("", "", `${T("Group by")} ${T(label(groups, b.group))}`, "menu-down")}</span>${groups.map(([v, l]) => item(v, l, b.group)).join("")}</ha-dropdown>
           <ha-dropdown id="br-sort"><span slot="trigger">${this._brChip("", "", `${T("Sort by")} ${T(label(sorts, b.sort))}`, "menu-down")}</span>${sorts.map(([v, l]) => item(v, l, b.sort, v === b.sort ? arrow : "")).join("")}</ha-dropdown>
-          <div class="vseg" role="group">${view("cards", "view-module", "Cards", true, false)}${view("rows", "view-agenda", "Rows", false, false)}${view("list", "view-headline", "List", false, true)}</div>
+          ${toggle}
           <ha-dropdown id="br-more"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
             ${this._canEdit === false ? "" : `<ha-dropdown-item value="import"><ha-icon slot="icon" icon="mdi:link-variant"></ha-icon>${esc(T("Import URL"))}</ha-dropdown-item>`}
             <ha-dropdown-item value="data"><ha-icon slot="icon" icon="mdi:swap-vertical"></ha-icon>${esc(T("Backup & migrate"))}</ha-dropdown-item></ha-dropdown>
@@ -507,6 +558,19 @@ export default function (h) {
         this._render();
       });
       menu("br-more", (v) => this._action(v));
+      const tg = root.getElementById("br-view");
+      if (tg) {
+        const label = { cards: T("Cards"), rows: T("Rows"), list: T("List") };
+        tg.buttons = ["cards", "rows", "list"].map((v) => ({ label: label[v], value: v, iconPath: this._brPaths[v] }));
+        tg.active = b.view;
+        tg.addEventListener("value-changed", (e) => {
+          const v = e.detail && e.detail.value;
+          if (!v || v === b.view) return;
+          b.view = v;
+          this._brSave();
+          this._render();
+        });
+      }
       on("[data-view]", "click", (e) => {
         b.view = e.currentTarget.dataset.view;
         this._brSave();
