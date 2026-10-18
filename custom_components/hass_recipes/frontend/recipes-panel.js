@@ -46,8 +46,9 @@ const STYLE = `
   header .hsp { flex: 1; }
   header ha-input-search { flex: 1; min-width: 0; }
   .tabwrap { cursor: pointer; display: flex; }
-  .bottomtabs { position: fixed; left: 0; right: 0; bottom: 0; height: 56px; z-index: 3; display: flex; background: var(--sidebar-background-color, var(--card-background-color)); border-top: 1px solid var(--divider-color); }
-  .bottomtabs .tabwrap { flex: 1; }
+  .tabwrap ha-tab { flex: 1; min-width: 0; }
+  .bottomtabs { position: fixed; left: 0; right: 0; bottom: 0; height: 56px; z-index: 3; display: flex; justify-content: center; font-size: var(--ha-font-size-s, 12px); background: var(--sidebar-background-color, var(--card-background-color)); border-top: 1px solid var(--divider-color); }
+  .bottomtabs .tabwrap { width: 25%; }
   .cq.with-bar { padding-bottom: 56px; }
   ha-button.fab.above-tabs { bottom: 84px; }
   main.wide { max-width: none; padding: 0; }
