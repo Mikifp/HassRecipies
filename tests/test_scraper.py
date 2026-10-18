@@ -61,3 +61,21 @@ def test_recipe_yield_becomes_unit_yield():
     page = '<script type="application/ld+json">{"@type":"Recipe","name":"B","recipeYield":"12 buns","recipeIngredient":["1 egg"],"recipeInstructions":"Bake."}</script>'
     r = scraper.parse_recipe(page, "u")
     assert (r["servings"], r["yield_amount"], r["yield_unit"]) == ("", 12.0, "buns")
+
+
+def test_import_pasted_html():
+    import asyncio
+
+    r = asyncio.run(scraper.async_import_html(PAGE, " https://example.com/p "))
+    assert r["name"] == "Pancakes & Syrup"
+    assert r["source_url"] == "https://example.com/p"
+
+
+def test_import_pasted_html_without_recipe():
+    import asyncio
+
+    try:
+        asyncio.run(scraper.async_import_html("<html><body>nothing</body></html>"))
+    except scraper.RecipeImportError:
+        return
+    raise AssertionError("expected RecipeImportError")
