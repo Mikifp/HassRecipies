@@ -13,6 +13,28 @@
 
 const da = {
   exact: {
+    "Filters": "Filtre",
+    "Cards": "Kort",
+    "Rows": "Rækker",
+    "Sort direction": "Sorteringsretning",
+    "No grouping": "Ingen gruppering",
+    "Group by category": "Gruppér efter kategori",
+    "Group by cookbook": "Gruppér efter kogebog",
+    "Group by tag": "Gruppér efter tag",
+    "Group by tool": "Gruppér efter redskab",
+    "Sort by name": "Sortér efter navn",
+    "Sort by last changed": "Sortér efter senest ændret",
+    "Sort by time": "Sortér efter tid",
+    "Sort by servings": "Sortér efter portioner",
+    "No category": "Ingen kategori",
+    "No tools": "Ingen redskaber",
+    "No tags": "Ingen tags",
+    "No cookbook": "Ingen kogebog",
+    "Time": "Tid",
+    "Save current filters as cookbook": "Gem nuværende filtre som kogebog",
+    "Backup & migrate": "Backup og migrering",
+    "Group by": "Gruppér efter",
+    "Sort by": "Sortér efter",
     // browsing
     Recipes: "Opskrifter",
     Categories: "Kategorier",
@@ -250,6 +272,8 @@ const da = {
   patterns: [
     [/\bStep (\d+) of (\d+)\b/g, "Trin $1 af $2"],
     [/^Step (\d+)$/, "Trin $1"],
+    [/^Search (\d+) recipes$/, "Søg i $1 opskrifter"],
+    [/^(\d+) ingredients$/, "$1 ingredienser"],
     [/^(\d+) ingredients · (\d+) steps$/, "$1 ingredienser · $2 trin"],
     [/^(\d+) selected$/, "$1 valgt"],
     [/^Select all (\d+) shown$/, "Vælg alle $1 viste"],

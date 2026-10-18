@@ -41,43 +41,108 @@ const STYLE = `
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
   .chip { padding: 3px 10px; border-radius: 12px; font-size: 13px; background: var(--secondary-background-color); border: 1px solid var(--divider-color); cursor: pointer; }
   .chip.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
-  /* ---- recipe browser: filter rail + card grid (wide) / compact list (narrow) ---- */
-  .browse { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; align-items: start; }
-  .rail { position: sticky; top: 72px; font-size: 14px; }
-  .rail h4 { margin: 18px 0 6px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary-text-color); }
-  .rail h4:first-child { margin-top: 0; }
-  .rail-item { padding: 6px 10px; border-radius: 8px; cursor: pointer; }
-  .rail-item:hover { background: var(--secondary-background-color); }
-  .rail-item.active { background: color-mix(in srgb, var(--primary-color) 16%, transparent); color: var(--primary-color); font-weight: 500; }
-  .rail label { display: flex; align-items: center; gap: 8px; padding: 4px 4px; cursor: pointer; }
-  .rail input[type=checkbox] { width: auto; margin: 0; }
-  .mfilters { display: none; }
-  .mfilters details { margin-bottom: 12px; }
-  .mfilters summary { cursor: pointer; font-size: 13px; color: var(--secondary-text-color); margin-bottom: 8px; }
-  .only-mob { display: none; }
-  .recipes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
-  .item { position: relative; background: var(--card-background-color); border-radius: var(--ha-card-border-radius, 12px); box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
-  .item .thumb { height: 130px; background: var(--secondary-background-color) center/cover no-repeat; display: flex; align-items: center; justify-content: center; font-size: 34px; }
-  .item .body { padding: 10px 12px 12px; min-width: 0; }
-  .item h3 { margin: 0 0 4px; font-size: 15px; font-weight: 500; line-height: 1.3; }
-  .item .cat { display: inline-block; margin-top: 6px; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--secondary-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color); }
-  .item .chev { display: none; color: var(--secondary-text-color); font-size: 22px; padding-right: 4px; }
+  /* ---- recipe browser: toolbar, filter pane, groups and three views ---- */
+  header .tabs { display: flex; gap: 4px; margin-left: 16px; }
+  header .tabs button { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; border-bottom: 2px solid transparent; color: inherit; opacity: .75; font: inherit; font-size: 14px; padding: 8px 12px; cursor: pointer; }
+  header .tabs button.on { opacity: 1; border-bottom-color: currentColor; }
+  header .tabs ha-icon { --mdc-icon-size: 20px; }
+  .btool { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .btool input[type=search] { flex: 1 1 200px; min-width: 140px; width: auto; border-radius: 10px; height: 38px; padding: 0 12px; }
+  .bbtn, .vbtn, .bsel { height: 38px; border: 1px solid var(--divider-color); border-radius: 10px; background: var(--card-background-color); color: var(--primary-text-color); font: inherit; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; }
+  .bsel { padding: 0 8px; width: auto; }
+  .bbtn.ic, .vbtn { padding: 0 9px; }
+  .bbtn.on, .vbtn.on { background: color-mix(in srgb, var(--primary-color) 14%, transparent); border-color: var(--primary-color); color: var(--primary-color); }
+  .bbtn ha-icon, .vbtn ha-icon { --mdc-icon-size: 20px; }
+  .bcount { background: var(--primary-color); color: var(--text-primary-color, #fff); border-radius: 10px; font-size: 11px; padding: 0 7px; line-height: 18px; }
+  .vseg { display: inline-flex; }
+  .vseg .vbtn { border-radius: 0; margin-left: -1px; }
+  .vseg .vbtn:first-child { border-radius: 10px 0 0 10px; margin-left: 0; }
+  .vseg .vbtn:last-child { border-radius: 0 10px 10px 0; }
+  .bmore { position: relative; }
+  .bmore summary { list-style: none; cursor: pointer; width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--secondary-text-color); }
+  .bmore summary::-webkit-details-marker { display: none; }
+  .bmore summary:hover { background: var(--secondary-background-color); }
+  .bmenu { position: absolute; right: 0; top: 42px; z-index: 6; min-width: 210px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.25); padding: 4px 0; }
+  .bmenu button { display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: 0; color: inherit; font: inherit; padding: 10px 14px; cursor: pointer; text-align: left; }
+  .bmenu button:hover { background: var(--secondary-background-color); }
+  .browse { display: block; }
+  .browse.with-pane { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .bcontent { min-width: 0; }
+  .fpane { background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: var(--ha-card-border-radius, 12px); position: sticky; top: 72px; max-height: calc(100vh - 100px); overflow: auto; font-size: 14px; }
+  .fhead { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px 6px; }
+  .tbtn { background: none; border: 0; color: var(--primary-color); font: inherit; font-size: 13px; font-weight: 500; padding: 6px 8px; border-radius: 16px; cursor: pointer; }
+  .tbtn:hover { background: color-mix(in srgb, var(--primary-color) 10%, transparent); }
+  .tbtn.danger { color: var(--error-color, #db4437); }
+  .fsec { border-top: 1px solid var(--divider-color); }
+  .fsec summary { list-style: none; cursor: pointer; padding: 12px 16px; font-weight: 500; display: flex; align-items: center; }
+  .fsec summary::-webkit-details-marker { display: none; }
+  .fsec summary::after { content: "▾"; margin-left: auto; color: var(--secondary-text-color); transition: transform .15s; }
+  .fsec:not([open]) summary::after { transform: rotate(-90deg); }
+  .fit { display: flex; align-items: center; gap: 10px; padding: 5px 16px; cursor: pointer; }
+  .fit:hover { background: var(--secondary-background-color); }
+  .fit input { width: auto; margin: 0; }
+  .fit span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .fit em { font-style: normal; color: var(--secondary-text-color); font-size: 12px; }
+  .fit.cbk.on { background: color-mix(in srgb, var(--primary-color) 14%, transparent); color: var(--primary-color); font-weight: 500; }
+  .fact { display: flex; flex-wrap: wrap; padding: 6px 8px 10px; }
+  .bgh { display: flex; align-items: center; gap: 8px; margin: 14px 0 10px; font-size: 16px; cursor: pointer; user-select: none; }
+  .bgh:first-child { margin-top: 0; }
+  .bgh ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); }
+  .bgh .gi { color: var(--primary-text-color); }
+  .bgh em { font-style: normal; font-size: 13px; color: var(--secondary-text-color); }
+  .bgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .rcard { position: relative; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: var(--ha-card-border-radius, 12px); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
+  .rcard:hover, .rrow:hover { border-color: var(--primary-color); }
+  .rpic { background: color-mix(in srgb, var(--primary-color) 10%, var(--secondary-background-color)) center/cover no-repeat; color: var(--secondary-text-color); display: flex; align-items: center; justify-content: center; flex: none; }
+  .rpic ha-icon { --mdc-icon-size: 34px; }
+  .rcard .rpic { height: 120px; }
+  .rtx { padding: 10px 12px 12px; min-width: 0; flex: 1; }
+  .rtitle { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .rtitle b { font-weight: 500; font-size: 15px; line-height: 1.3; }
+  .rtx span { font-size: 12px; color: var(--secondary-text-color); }
+  .rpen { background: none; border: 0; color: var(--secondary-text-color); cursor: pointer; padding: 4px; border-radius: 50%; flex: none; display: inline-flex; }
+  .rpen:hover { background: var(--secondary-background-color); color: var(--primary-text-color); }
+  .rpen ha-icon { --mdc-icon-size: 18px; }
+  .brows { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .rrow { position: relative; display: flex; gap: 14px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: var(--ha-card-border-radius, 12px); padding: 12px; cursor: pointer; align-items: flex-start; }
+  .rrow .rpic { width: 84px; height: 84px; border-radius: 10px; }
+  .rrow .rtx { padding: 0; }
+  .rrow b { font-weight: 500; font-size: 15px; display: block; }
+  .rrow p { margin: 2px 0 8px; font-size: 13px; color: var(--secondary-text-color); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .rmeta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 12px; color: var(--secondary-text-color); }
+  .badge { background: color-mix(in srgb, var(--primary-color) 14%, transparent); color: var(--primary-color); border-radius: 10px; padding: 1px 9px; }
+  .rtable { width: 100%; border-collapse: collapse; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: var(--ha-card-border-radius, 12px); overflow: hidden; font-size: 14px; }
+  .rtable th { text-align: left; font-weight: 500; font-size: 12px; color: var(--secondary-text-color); padding: 10px 12px; border-bottom: 1px solid var(--divider-color); white-space: nowrap; user-select: none; }
+  .rtable th[data-sort] { cursor: pointer; }
+  .rtable td { padding: 6px 12px; border-bottom: 1px solid var(--divider-color); }
+  .rtable tbody tr[data-open], .rtable tbody tr[data-pick] { cursor: pointer; }
+  .rtable tbody tr[data-open]:hover, .rtable tbody tr[data-pick]:hover { background: var(--secondary-background-color); }
+  .rtable .c-pic { width: 44px; padding-right: 0; }
+  .mini-pic { width: 32px; height: 32px; border-radius: 8px; }
+  .mini-pic ha-icon { --mdc-icon-size: 18px; }
+  .rtable .c-name { font-weight: 500; }
+  .rtable tr.grow td { background: var(--secondary-background-color); font-weight: 500; cursor: pointer; padding: 8px 12px; }
+  .rtable tr.grow ha-icon { --mdc-icon-size: 18px; vertical-align: -4px; margin-right: 4px; }
+  .rtable tr.grow em { font-style: normal; font-weight: 400; color: var(--secondary-text-color); margin-left: 8px; font-size: 12px; }
+  .fabwrap { position: sticky; bottom: 16px; display: flex; justify-content: flex-end; pointer-events: none; margin-top: 8px; }
+  .fab { pointer-events: auto; display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 22px 0 16px; border: 0; border-radius: 24px; background: var(--primary-color); color: var(--text-primary-color, #fff); font: inherit; font-weight: 500; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.3); }
+  .fab ha-icon { --mdc-icon-size: 22px; }
+  .rcard.picked, .rrow.picked { outline: 3px solid var(--primary-color); }
+  .rtable tr.picked td { background: color-mix(in srgb, var(--primary-color) 14%, transparent); }
   @container (max-width: 680px) {
     main { padding: 12px; }
-    .browse { grid-template-columns: 1fr; gap: 0; }
-    .rail { display: none; }
-    .mfilters { display: block; }
-    .only-desk { display: none; }
-    .only-mob { display: block; }
-    .recipes { grid-template-columns: 1fr; gap: 8px; }
-    .item { flex-direction: row; align-items: center; gap: 12px; padding: 8px 10px 8px 8px; }
-    .item .thumb { width: 56px; height: 56px; flex: none; border-radius: 8px; font-size: 22px; }
-    .item .body { padding: 0; flex: 1; }
-    .item h3 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .item .chev { display: block; }
-    .item .cat { margin-top: 4px; }
-    .toolbar { flex-wrap: nowrap; }
-    .toolbar input { min-width: 0; }
+    .btool .lbl, .btool .bsel[id=br-sort] { display: none; }
+    .btool .bsel { flex: 1 1 120px; min-width: 0; }
+    .btool input[type=search] { flex-basis: 100%; order: -1; }
+    .browse.with-pane { display: block; }
+    .fpane { position: static; max-height: none; margin-bottom: 14px; }
+    .bgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .rcard .rpic { height: 84px; }
+    .brows { grid-template-columns: 1fr; gap: 8px; }
+    .rrow .rpic { width: 64px; height: 64px; }
+    .c-hide { display: none; }
+    header .tabs { margin-left: 4px; }
+    header .tabs button { padding: 8px 8px; }
   }
   .muted { color: var(--secondary-text-color); font-size: 13px; }
   .empty { text-align: center; padding: 48px 16px; color: var(--secondary-text-color); }
@@ -253,9 +318,8 @@ const STYLE = `
   .img-controls { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 8px; }
   .img-controls .btns { display: flex; gap: 8px; flex-wrap: wrap; }
   label.btn { display: inline-block; }
-  .item.picked { outline: 3px solid var(--primary-color); }
-  .item .pick { position: absolute; top: 8px; left: 8px; z-index: 1; width: 22px; height: 22px; border-radius: 50%; background: var(--card-background-color); border: 2px solid var(--primary-color); display: flex; align-items: center; justify-content: center; font-size: 14px; }
-  .item.picked .pick { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+  .rcard .pick, .rrow .pick { position: absolute; top: 8px; left: 8px; z-index: 1; width: 22px; height: 22px; border-radius: 50%; background: var(--card-background-color); border: 2px solid var(--primary-color); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .picked .pick { background: var(--primary-color); color: var(--text-primary-color, #fff); }
   .bulkbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; margin-bottom: 12px; border-radius: 8px; background: var(--secondary-background-color); border: 1px solid var(--divider-color); }
   .bulkbar input, .bulkbar select { width: auto; flex: 0 1 160px; }
   .cookbook-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 14px; }
@@ -618,6 +682,11 @@ class HassRecipesPanel extends HTMLElement {
         <header>
           ${this._narrow ? `<button class="menu" data-act="menu" title="Menu">☰</button>` : ""}
           <h1>Recipes</h1>
+          ${
+            v.name === "list" || v.name === "plan"
+              ? `<nav class="tabs"><button type="button" class="${v.name === "list" ? "on" : ""}" data-act="tab-list"><ha-icon icon="mdi:book-open-page-variant-outline"></ha-icon>Recipes</button><button type="button" class="${v.name === "plan" ? "on" : ""}" data-act="plan"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>Meal plan</button></nav>`
+              : ""
+          }
         </header>
         <div id="timers" class="timers"></div>
       </div>
@@ -641,12 +710,7 @@ class HassRecipesPanel extends HTMLElement {
 
     on("[data-open]", "click", (e) => this._go({ name: "detail", id: e.currentTarget.dataset.open }));
     this._bindPlan(root, on);
-    on("[data-facet]", "click", (e) => {
-      const { facet, value } = e.currentTarget.dataset;
-      const set = this._sel[facet];
-      if (!set.delete(value)) set.add(value);
-      this._render();
-    });
+    this._bindBrowser(root, on);
     on("[data-cookbook]", "click", (e) => this._applyCookbook(e.currentTarget.dataset.cookbook));
     on("input[data-fcb]", "change", (e) => {
       const { fcb, value } = e.currentTarget.dataset;
@@ -809,6 +873,29 @@ class HassRecipesPanel extends HTMLElement {
         break;
       case "import":
         this._go({ name: "import" });
+        break;
+      case "br-filters": {
+        const b = this._brPrefs();
+        b.pane[this._narrow ? "narrow" : "wide"] = !this._brPaneOpen();
+        this._brSave();
+        this._render();
+        break;
+      }
+      case "br-clear":
+        this._sel = { categories: new Set(), tools: new Set(), tags: new Set() };
+        this._search = "";
+        this._cookbookId = null;
+        this._render();
+        break;
+      case "br-dir": {
+        const b = this._brPrefs();
+        b.dir = b.dir === "asc" ? "desc" : "asc";
+        this._brSave();
+        this._render();
+        break;
+      }
+      case "tab-list":
+        this._go({ name: "list" });
         break;
       case "plan":
         this._planPending = null;

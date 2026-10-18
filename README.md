@@ -19,14 +19,14 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Photos: upload from the editor (resized in the browser, stored in `<config>/hass_recipes/images`, included in HA backups) or paste an image URL
 - Layout adapts to the panel's width: on wide screens a filter rail with a card grid and a two-column recipe page; on phones a compact list and an Ingredients / Instructions / Notes tab view with a bottom action bar
 - Browser-style navigation: every screen has its own address (`/recipes#/recipe/<id>`), so the mouse back button / Alt+← steps back through the app, reloading keeps your place, and recipes can be bookmarked
-- Search by name, tag or ingredient; filter by tag
+- Search by name, tag or ingredient. The browser follows Home Assistant's own list pages: a **Filters** pane (cookbooks, categories, tools, tags with counts), **Group by** category, cookbook, tag or tool with collapsible group headings, sorting, and three views you can switch between: **cards**, **rows** (picture, description and details) and a sortable **list**. Your choices are remembered
 - Sections in both ingredients and instructions (`## Dough` in stored ingredients; imported from websites and Mealie where the source has them)
 - Notes on ingredients: each ingredient has a note field ("room temperature", "the organic kind") shown under it in the panel and the cards; it is stored as `200 g butter // room temperature` and never affects scaling or the shopping list
 - Substitutes: any ingredient can carry any number of alternatives, each with its own amount (stored as `200 g butter || 180 g coconut oil || 2 dl cream`), converted to grams like the main ingredient
 - Cook mode shows the whole recipe at once (ingredients beside step cards, current step highlighted, screen kept awake); "One step at a time" switches to a focused view
 - Check off steps (and ingredients) while cooking; checks are remembered per recipe for two days, a finished timer completes its step, and finishing every step resets the checks
 - In the editor, drag the ⠿ handle to reorder ingredients and steps (↑ ↓ buttons on touch screens), and use **+ Step here** between steps to insert a step or section anywhere
-- **New editor (beta)**: a toggle in the recipe editor switches to section cards, where each section holds its ingredients and its steps together. Ingredients a step uses appear as chips inside the step text (type `@` to add one); drag ingredients and steps between sections. It edits the same data as the classic form, so you can switch back and forth
+- **Section-card editor**: each section holds its ingredients and its steps together. Ingredients a step uses appear as chips inside the step text (type `@`, press the button on an ingredient while you write, or use the quick-add row under the step); drag ingredients and steps between sections; pasting a list into an ingredient makes one per line
 - Steps show the ingredients they name as chips right in the text, with the amount scaled to what you are making, in the recipe page, cook mode and the dashboard cards; ingredients a step uses but does not name stay in the row below it
 - Cook mode has **Previous section** / **Next section** buttons for recipes with sections (and jump buttons per section when the whole recipe is shown)
 - Unsaved-changes prompt when you leave the editor
