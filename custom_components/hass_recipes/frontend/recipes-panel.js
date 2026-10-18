@@ -130,6 +130,39 @@ const STYLE = `
   ha-button.fab { position: fixed; right: 24px; bottom: 24px; z-index: 1; --ha-button-box-shadow: var(--ha-box-shadow-l, 0 4px 12px rgba(0,0,0,.25)); }
   .tblhost { overflow-x: hidden; }
   ha-data-table { --data-table-border-width: 0; --data-table-background-color: var(--card-background-color); }
+  /* ---- recipe page: Home Assistant's own cards, lists, expansion panels and buttons ---- */
+  main.rdmain { max-width: none; padding: 0; }
+  .rd { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; padding: 16px 16px 96px; }
+  .rd-left, .rd-right { display: grid; gap: 16px; min-width: 0; }
+  .rd ha-card { display: block; overflow: hidden; }
+  .rd-hero { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+  .rd-nohero { display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--primary-color) 10%, var(--secondary-background-color)); color: var(--secondary-text-color); --mdc-icon-size: 48px; }
+  .rd-desc { margin: 0 0 12px; color: var(--secondary-text-color); line-height: 1.5; }
+  .rd-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .rd-facts { margin-bottom: 12px; }
+  .rd ha-assist-chip { --ha-assist-chip-container-shape: 10px; --ha-assist-chip-container-color: var(--card-background-color); }
+  .card-content { padding: 16px; }
+  ha-card > .card-content:first-child, .rd-hero + .card-content { padding-top: 16px; }
+  .card-actions { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; border-top: 1px solid var(--divider-color); }
+  .rd a.rd-src { text-decoration: none; color: inherit; display: block; }
+  .rd-scale { display: flex; flex-direction: column; gap: 12px; }
+  .rd-amount { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .rd-amount ha-input { width: 96px; --ha-input-height: 40px; }
+  .rd-presets { display: inline-flex; gap: 1px; }
+  .rd-sec { display: block; border-top: 1px solid var(--divider-color); --expansion-panel-summary-padding: 0 8px; --expansion-panel-content-padding: 0; }
+  .rd-sh { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .rd-sh .muted { font-weight: 400; }
+  .rd-ings .ing-text { display: block; line-height: 1.4; }
+  .rd-step { --ha-list-item-headline-line-clamp: none; }
+  .rd-num { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--secondary-background-color); color: var(--secondary-text-color); border: 1px solid var(--divider-color); font-size: 12px; box-sizing: border-box; --mdc-icon-size: 16px; }
+  .rd-step.done .rd-num { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
+  .rd-text { display: block; line-height: 1.9; white-space: normal; }
+  .rd-step.done .rd-text { opacity: .55; text-decoration: line-through; }
+  .rd-extra { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-top: 4px; }
+  header .main-title { flex: 1; min-width: 0; margin-inline-start: var(--ha-space-6, 24px); line-height: 1.2; }
+  header .main-title b { display: block; font-weight: 400; font-size: var(--ha-font-size-xl, 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header .main-title span { display: block; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  @container (max-width: 760px) { .rd { grid-template-columns: minmax(0, 1fr); } header .main-title { margin-inline-start: var(--ha-space-2, 8px); } }
   .rcard.picked, .rrow.picked { outline: 3px solid var(--primary-color); }
   @container (max-width: 680px) {
     main { padding: 12px; }
@@ -671,6 +704,21 @@ class HassRecipesPanel extends HTMLElement {
   _chrome(v) {
     const tabsView = v.name === "list" || v.name === "plan";
     const iconBtn = (act, icon, label) => `<ha-icon-button data-act="${act}" label="${label}"><ha-icon icon="mdi:${icon}"></ha-icon></ha-icon-button>`;
+    if (v.name === "detail" && this._recipe(v.id)) {
+      const r = this._recipe(v.id);
+      const canEdit = this._canEdit !== false;
+      const item = (value, icon, label, extra = "") => `<ha-dropdown-item value="${value}" ${extra}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon>${esc(T(label))}</ha-dropdown-item>`;
+      const cooking = this._cookingId === r.id;
+      return {
+        header: `${iconBtn("back", "arrow-left", "Back")}<div class="main-title"><b>${esc(r.name)}</b>${this._rdSubtitle ? `<span>${esc(this._rdSubtitle)}</span>` : ""}</div>
+          <ha-dropdown id="rd-menu"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
+            ${canEdit ? item("plan-this", "calendar-plus", "Add to meal plan") : ""}${item("shop", "cart-outline", "Add to shopping list")}
+            ${item("dashboard-recipe", cooking ? "view-dashboard" : "view-dashboard-outline", cooking ? "Remove from the dashboard cook card" : "Show on the dashboard cook card")}
+            ${canEdit ? item("edit", "pencil-outline", "Edit") : ""}${this._checked.size || this._doneSteps.size ? item("progress-reset", "restore", "Clear checks") : ""}
+            ${canEdit ? item("delete", "delete-outline", "Delete recipe", 'variant="danger"') : ""}</ha-dropdown>`,
+        bottom: "",
+      };
+    }
     if (!tabsView) return { header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : ""}<h1>Recipes</h1>`, bottom: "" };
     const tab = (act, icon, name, active, narrow) =>
       `<div class="tabwrap" data-act="${act}"><ha-tab name="${esc(T(name))}" ${active ? "active" : ""} ${narrow ? "narrow" : ""}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon></ha-tab></div>`;
@@ -720,7 +768,7 @@ class HassRecipesPanel extends HTMLElement {
         <header>${chrome.header}</header>
         <div id="timers" class="timers"></div>
       </div>
-      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
+      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
     this._timerSig = "";
     this._bind();
     this._autosizeAll();
@@ -742,6 +790,7 @@ class HassRecipesPanel extends HTMLElement {
     on("[data-open]", "click", (e) => this._go({ name: "detail", id: e.currentTarget.dataset.open }));
     this._bindPlan(root, on);
     this._bindBrowser(root, on);
+    if (this._view.name === "detail") this._bindDetail(root, on);
     on("[data-cookbook]", "click", (e) => this._applyCookbook(e.currentTarget.dataset.cookbook));
     on("[data-tab-btn]", "click", (e) => {
       this._tab = e.currentTarget.dataset.tabBtn;
@@ -821,7 +870,7 @@ class HassRecipesPanel extends HTMLElement {
     const toggleStep = (n) => this._setStepDone(n, !this._doneSteps.has(n));
     on("[data-step-toggle]", "click", (e) => {
       // links and the timer button inside a step keep their own behaviour
-      if (e.target.closest("button, a, input")) return;
+      if (e.target.closest("button, a, input, ha-button, ha-icon-button")) return;
       const sel = this.shadowRoot.getSelection ? this.shadowRoot.getSelection() : document.getSelection();
       if (sel && String(sel).trim()) return; // the user is selecting text, not tapping
       toggleStep(+e.currentTarget.dataset.stepToggle);

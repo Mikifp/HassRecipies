@@ -29,6 +29,7 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - **Section-card editor**: each section holds its ingredients and its steps together. Ingredients a step uses appear as chips inside the step text (type `@`, press the button on an ingredient while you write, or use the quick-add row under the step); drag ingredients and steps between sections; pasting a list into an ingredient makes one per line
 - Steps show the ingredients they name as chips right in the text, with the amount scaled to what you are making, in the recipe page, cook mode and the dashboard cards; ingredients a step uses but does not name stay in the row below it
 - Cook mode has **Previous section** / **Next section** buttons for recipes with sections (and jump buttons per section when the whole recipe is shown)
+- The recipe page is built from Home Assistant's own cards, lists, expansion panels, check lists and buttons: ingredients on the left with check-off, scaling and an add-to-shopping-list button, the steps beside them with section panels, ingredient chips in the text and timer buttons, and a Cook button in the corner
 - Unsaved-changes prompt when you leave the editor
 - Yield: say what the ingredients make ("8 pancakes") and the multiplier the recipe opens at (2× = 16 pancakes); type the number you want and everything scales. `makes:` works in the shopping-list service too
 - Scale a recipe (½×–4× or any multiplier); linked ingredients scale too

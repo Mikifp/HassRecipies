@@ -607,7 +607,7 @@ export default function (h) {
       });
       // the filters
       // the filter rows are Home Assistant's own check list items
-      on("ha-check-list-item", "request-selected", (e) => {
+      on("ha-list[data-flist] ha-check-list-item", "request-selected", (e) => {
         if (!e.detail || e.detail.source !== "interaction") return;
         const el = e.currentTarget;
         const kind = el.closest("[data-flist]").dataset.flist;
