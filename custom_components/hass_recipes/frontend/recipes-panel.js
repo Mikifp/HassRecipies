@@ -16,6 +16,7 @@ const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse
 const STYLE = `
   :host { --hq-loud: var(--ha-color-fill-primary-loud-resting, var(--primary-color)); --hq-on-loud: var(--ha-color-on-primary-loud, #fff); --hq-normal: var(--ha-color-fill-primary-normal-resting, color-mix(in srgb, var(--primary-color) 14%, #fff)); --hq-on-normal: var(--ha-color-on-primary-normal, var(--primary-color)); --hq-outline: var(--outline-color, var(--divider-color)); display: block; height: 100%; overflow: auto; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
   * { box-sizing: border-box; }
+  :host(.compact) { overflow: visible; height: auto; }
   .cq { container-type: inline-size; min-height: 100%; }
   .sticky { position: sticky; top: 0; z-index: 2; }
   header { display: flex; align-items: center; box-sizing: border-box; height: 56px; padding: 8px 12px; background: var(--sidebar-background-color, var(--app-header-background-color, var(--card-background-color))); border-bottom: 1px solid var(--divider-color); font-size: var(--ha-font-size-xl, 20px); font-weight: 400; color: var(--sidebar-text-color, var(--primary-text-color)); }
@@ -704,6 +705,13 @@ class HassRecipesPanel extends HTMLElement {
   _chrome(v) {
     const tabsView = v.name === "list" || v.name === "plan";
     const iconBtn = (act, icon, label) => `<ha-icon-button data-act="${act}" label="${label}"><ha-icon icon="mdi:${icon}"></ha-icon></ha-icon-button>`;
+    if (v.name === "cook" && this._recipe(v.id)) {
+      // cook mode: the back arrow leaves it (the menu button would only open the sidebar)
+      return {
+        header: `${iconBtn("cook-exit", "arrow-left", "Back")}<div class="main-title"><b>${esc(this._recipe(v.id).name)}</b><span>${esc(T("Cook mode"))}</span></div>`,
+        bottom: "",
+      };
+    }
     if (v.name === "detail" && this._recipe(v.id)) {
       const r = this._recipe(v.id);
       const canEdit = this._canEdit !== false;
@@ -743,6 +751,8 @@ class HassRecipesPanel extends HTMLElement {
   _render() {
     const v = this._view;
     this._fab = "";
+    // on a phone Home Assistant scrolls the page, not this panel: stay out of the way so the top bar can stick to it
+    this.classList.toggle("compact", this._brCompact());
     let body;
     if (!this._loaded) body = `<div class="empty">Loading…</div>`;
     else if (v.name === "detail" && this._recipe(v.id)) body = this._detailHtml(this._recipe(v.id));

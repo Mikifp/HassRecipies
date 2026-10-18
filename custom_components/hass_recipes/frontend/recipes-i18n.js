@@ -13,6 +13,7 @@
 
 const da = {
   exact: {
+    "Cook mode": "Madlavningstilstand",
     "Create new recipe": "Opret ny opskrift",
     "Start with an empty recipe from scratch": "Start med en tom opskrift",
     "Import from a URL": "Importér fra en URL",
