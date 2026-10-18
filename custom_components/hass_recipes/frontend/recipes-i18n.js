@@ -273,6 +273,7 @@ const da = {
     [/\bStep (\d+) of (\d+)\b/g, "Trin $1 af $2"],
     [/^Step (\d+)$/, "Trin $1"],
     [/^Search (\d+) recipes$/, "Søg i $1 opskrifter"],
+    [/^Show (\d+) recipes$/, "Vis $1 opskrifter"],
     [/^(\d+) ingredients$/, "$1 ingredienser"],
     [/^(\d+) ingredients · (\d+) steps$/, "$1 ingredienser · $2 trin"],
     [/^(\d+) selected$/, "$1 valgt"],

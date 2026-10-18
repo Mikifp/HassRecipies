@@ -42,11 +42,23 @@ const STYLE = `
   .chip { padding: 3px 10px; border-radius: 12px; font-size: 13px; background: var(--secondary-background-color); border: 1px solid var(--divider-color); cursor: pointer; }
   .chip.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
   /* ---- recipe browser: toolbar, filter pane, groups and three views ---- */
-  header .tabs { display: flex; gap: 4px; margin-left: 16px; }
+  header .tabs { display: flex; gap: 4px; }
   header .tabs button { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; border-bottom: 2px solid transparent; color: inherit; opacity: .75; font: inherit; font-size: 14px; padding: 8px 12px; cursor: pointer; }
   header .tabs button.on { opacity: 1; border-bottom-color: currentColor; }
   header .tabs ha-icon { --mdc-icon-size: 20px; }
-  .btool { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  main.wide { max-width: none; padding: 0; }
+  main.wide > .notice, main.wide > .error { margin: 12px 16px; }
+  .bshell.with-pane { display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: stretch; }
+  .bmain { min-width: 0; }
+  .btool { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 16px; background: var(--card-background-color); border-bottom: 1px solid var(--divider-color); }
+  .bulkbar { margin: 12px 16px 0; }
+  .bcontent { min-width: 0; }
+  .bcontent.cards, .bcontent.rows { padding: 16px; }
+  .bcontent .empty { padding: 48px 16px; }
+  .fpane { background: var(--card-background-color); border-right: 1px solid var(--divider-color); font-size: 14px; }
+  .fpane-in { position: sticky; top: 56px; max-height: calc(100vh - 60px); overflow: auto; }
+  .fhead { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; }
+  .fhead .bbtn { height: 30px; border-radius: 16px; padding: 0 12px; font-size: 13px; }
   .btool input[type=search] { flex: 1 1 200px; min-width: 140px; width: auto; border-radius: 10px; height: 38px; padding: 0 12px; }
   .bbtn, .vbtn, .bsel { height: 38px; border: 1px solid var(--divider-color); border-radius: 10px; background: var(--card-background-color); color: var(--primary-text-color); font: inherit; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; }
   .bsel { padding: 0 8px; width: auto; }
@@ -65,19 +77,14 @@ const STYLE = `
   .bmenu { position: absolute; right: 0; top: 42px; z-index: 6; min-width: 210px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.25); padding: 4px 0; }
   .bmenu button { display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: 0; color: inherit; font: inherit; padding: 10px 14px; cursor: pointer; text-align: left; }
   .bmenu button:hover { background: var(--secondary-background-color); }
-  .browse { display: block; }
-  .browse.with-pane { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; align-items: start; }
-  .bcontent { min-width: 0; }
-  .fpane { background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: var(--ha-card-border-radius, 12px); position: sticky; top: 72px; max-height: calc(100vh - 100px); overflow: auto; font-size: 14px; }
-  .fhead { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px 6px; }
   .tbtn { background: none; border: 0; color: var(--primary-color); font: inherit; font-size: 13px; font-weight: 500; padding: 6px 8px; border-radius: 16px; cursor: pointer; }
   .tbtn:hover { background: color-mix(in srgb, var(--primary-color) 10%, transparent); }
   .tbtn.danger { color: var(--error-color, #db4437); }
   .fsec { border-top: 1px solid var(--divider-color); }
-  .fsec summary { list-style: none; cursor: pointer; padding: 12px 16px; font-weight: 500; display: flex; align-items: center; }
+  .fsec summary { list-style: none; cursor: pointer; padding: 12px 16px; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+  .fsec summary::before { content: "▾"; color: var(--secondary-text-color); font-size: 14px; transition: transform .15s; width: 14px; }
+  .fsec:not([open]) summary::before { transform: rotate(-90deg); }
   .fsec summary::-webkit-details-marker { display: none; }
-  .fsec summary::after { content: "▾"; margin-left: auto; color: var(--secondary-text-color); transition: transform .15s; }
-  .fsec:not([open]) summary::after { transform: rotate(-90deg); }
   .fit { display: flex; align-items: center; gap: 10px; padding: 5px 16px; cursor: pointer; }
   .fit:hover { background: var(--secondary-background-color); }
   .fit input { width: auto; margin: 0; }
@@ -111,37 +118,47 @@ const STYLE = `
   .rrow p { margin: 2px 0 8px; font-size: 13px; color: var(--secondary-text-color); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .rmeta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 12px; color: var(--secondary-text-color); }
   .badge { background: color-mix(in srgb, var(--primary-color) 14%, transparent); color: var(--primary-color); border-radius: 10px; padding: 1px 9px; }
-  .rtable { width: 100%; border-collapse: collapse; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: var(--ha-card-border-radius, 12px); overflow: hidden; font-size: 14px; }
-  .rtable th { text-align: left; font-weight: 500; font-size: 12px; color: var(--secondary-text-color); padding: 10px 12px; border-bottom: 1px solid var(--divider-color); white-space: nowrap; user-select: none; }
+  .rtable { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--card-background-color); }
+  .rtable th { text-align: left; font-weight: 500; font-size: 12px; color: var(--secondary-text-color); padding: 0 16px; height: 52px; border-bottom: 1px solid var(--divider-color); white-space: nowrap; user-select: none; }
   .rtable th[data-sort] { cursor: pointer; }
-  .rtable td { padding: 6px 12px; border-bottom: 1px solid var(--divider-color); }
+  .rtable td { padding: 6px 16px; height: 48px; border-bottom: 1px solid var(--divider-color); }
   .rtable tbody tr[data-open], .rtable tbody tr[data-pick] { cursor: pointer; }
   .rtable tbody tr[data-open]:hover, .rtable tbody tr[data-pick]:hover { background: var(--secondary-background-color); }
   .rtable .c-pic { width: 44px; padding-right: 0; }
   .mini-pic { width: 32px; height: 32px; border-radius: 8px; }
   .mini-pic ha-icon { --mdc-icon-size: 18px; }
   .rtable .c-name { font-weight: 500; }
-  .rtable tr.grow td { background: var(--secondary-background-color); font-weight: 500; cursor: pointer; padding: 8px 12px; }
+  .rtable tr.grow td { background: var(--secondary-background-color); font-weight: 500; cursor: pointer; padding: 8px 16px; height: 48px; }
   .rtable tr.grow ha-icon { --mdc-icon-size: 18px; vertical-align: -4px; margin-right: 4px; }
   .rtable tr.grow em { font-style: normal; font-weight: 400; color: var(--secondary-text-color); margin-left: 8px; font-size: 12px; }
-  .fabwrap { position: sticky; bottom: 16px; display: flex; justify-content: flex-end; pointer-events: none; margin-top: 8px; }
+  .fabwrap { position: sticky; bottom: 16px; display: flex; justify-content: flex-end; pointer-events: none; padding: 0 16px; margin-top: -64px; height: 64px; align-items: flex-end; }
   .fab { pointer-events: auto; display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 22px 0 16px; border: 0; border-radius: 24px; background: var(--primary-color); color: var(--text-primary-color, #fff); font: inherit; font-weight: 500; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.3); }
   .fab ha-icon { --mdc-icon-size: 22px; }
   .rcard.picked, .rrow.picked { outline: 3px solid var(--primary-color); }
   .rtable tr.picked td { background: color-mix(in srgb, var(--primary-color) 14%, transparent); }
+  .fdlg { padding: 0; border: 0; max-width: none; max-height: none; width: 100vw; height: 100vh; margin: 0; background: var(--card-background-color); color: var(--primary-text-color); font-family: inherit; }
+  .fdlg[open] { display: flex; flex-direction: column; }
+  .fdlg .dh { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--divider-color); font-size: 18px; flex: none; }
+  .fdlg .dh b { flex: 1; font-weight: 500; }
+  .fdlg .dclose { background: none; border: 0; color: inherit; cursor: pointer; padding: 10px; border-radius: 50%; display: inline-flex; }
+  .fdlg .dlgbody { flex: 1; overflow: auto; }
+  .fdlg .dfoot { flex: none; padding: 12px 16px; border-top: 1px solid var(--divider-color); display: flex; justify-content: center; }
+  .fdlg .dfoot .btn { border-radius: 22px; padding: 10px 28px; }
   @container (max-width: 680px) {
     main { padding: 12px; }
+    main.wide { padding: 0; }
+    .btool { padding: 8px 12px; }
+    .bcontent.cards, .bcontent.rows { padding: 12px; }
     .btool .lbl, .btool .bsel[id=br-sort] { display: none; }
     .btool .bsel { flex: 1 1 120px; min-width: 0; }
     .btool input[type=search] { flex-basis: 100%; order: -1; }
-    .browse.with-pane { display: block; }
-    .fpane { position: static; max-height: none; margin-bottom: 14px; }
     .bgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .rcard .rpic { height: 84px; }
     .brows { grid-template-columns: 1fr; gap: 8px; }
     .rrow .rpic { width: 64px; height: 64px; }
     .c-hide { display: none; }
-    header .tabs { margin-left: 4px; }
+    header:has(.tabs) h1 { display: none; }
+    header .tabs { margin-left: 0; }
     header .tabs button { padding: 8px 8px; }
   }
   .muted { color: var(--secondary-text-color); font-size: 13px; }
@@ -444,7 +461,15 @@ class HassRecipesPanel extends HTMLElement {
         e.returnValue = "";
       }
     };
-    this._onResize = () => this._autosizeAll();
+    this._onResize = () => {
+      this._autosizeAll();
+      // the filters are a side pane on wide screens and a dialog on a phone
+      const compact = this._brCompact();
+      if (compact !== this._lastCompact) {
+        this._lastCompact = compact;
+        if (this._view.name === "list" && this._loaded) this._render();
+      }
+    };
     window.addEventListener("resize", this._onResize);
     window.addEventListener("beforeunload", this._onUnload);
     window.addEventListener("keydown", this._onKey);
@@ -659,6 +684,7 @@ class HassRecipesPanel extends HTMLElement {
 
   _render() {
     const v = this._view;
+    const dlgScroll = this.shadowRoot.querySelector(".dlgbody") ? this.shadowRoot.querySelector(".dlgbody").scrollTop : 0;
     let body;
     if (!this._loaded) body = `<div class="empty">Loading…</div>`;
     else if (v.name === "detail" && this._recipe(v.id)) body = this._detailHtml(this._recipe(v.id));
@@ -684,13 +710,13 @@ class HassRecipesPanel extends HTMLElement {
           <h1>Recipes</h1>
           ${
             v.name === "list" || v.name === "plan"
-              ? `<nav class="tabs"><button type="button" class="${v.name === "list" ? "on" : ""}" data-act="tab-list"><ha-icon icon="mdi:book-open-page-variant-outline"></ha-icon>Recipes</button><button type="button" class="${v.name === "plan" ? "on" : ""}" data-act="plan"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>Meal plan</button></nav>`
+              ? `<nav class="tabs"><button type="button" class="${v.name === "list" ? "on" : ""}" data-act="tab-list"><ha-icon icon="mdi:book-open-page-variant-outline"></ha-icon>Recipes</button><button type="button" class="${v.name === "plan" ? "on" : ""}" data-act="plan"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>Meal plan</button></nav><span style="flex:1"></span>`
               : ""
           }
         </header>
         <div id="timers" class="timers"></div>
       </div>
-      <main class="${this._canEdit === false ? "ro" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main>`;
+      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main>`;
     this._timerSig = "";
     this._bind();
     this._autosizeAll();
@@ -701,6 +727,22 @@ class HassRecipesPanel extends HTMLElement {
       const cur = this.shadowRoot.querySelector(".cstep.current");
       if (cur) cur.scrollIntoView({ block: "center", behavior: "smooth" });
     }
+    const dlg = this.shadowRoot.getElementById("fdlg");
+    if (dlg && this._filterDlg) {
+      dlg.addEventListener("close", () => {
+        if (this._filterDlg) {
+          this._filterDlg = false;
+          this._render();
+        }
+      });
+      try {
+        dlg.showModal();
+      } catch (_) {
+        /* not displayable: the filters stay reachable from the toolbar */
+      }
+      const body = dlg.querySelector(".dlgbody");
+      if (body) body.scrollTop = dlgScroll;
+    } else this._filterDlg = false;
     if (this._neFocus) this._neApplyFocus();
   }
 
@@ -875,12 +917,20 @@ class HassRecipesPanel extends HTMLElement {
         this._go({ name: "import" });
         break;
       case "br-filters": {
-        const b = this._brPrefs();
-        b.pane[this._narrow ? "narrow" : "wide"] = !this._brPaneOpen();
-        this._brSave();
+        if (this._brCompact()) {
+          this._filterDlg = true;
+        } else {
+          const b = this._brPrefs();
+          b.pane[this._narrow ? "narrow" : "wide"] = !this._brPaneOpen();
+          this._brSave();
+        }
         this._render();
         break;
       }
+      case "br-filters-close":
+        this._filterDlg = false;
+        this._render();
+        break;
       case "br-clear":
         this._sel = { categories: new Set(), tools: new Set(), tags: new Set() };
         this._search = "";

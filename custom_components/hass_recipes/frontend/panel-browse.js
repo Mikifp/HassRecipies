@@ -162,9 +162,9 @@ export default function (h) {
       return `<table class="rtable"><thead>${head}</thead><tbody>${body}</tbody></table>`;
     },
 
-    _brPane(values, count) {
+    /** The filter sections, shared by the side pane and the phone dialog. */
+    _brSections(values, count) {
       const b = this._brPrefs();
-      const active = this._cookbookId || this._search.trim() || Object.values(this._sel).some((set) => set.size);
       const sec = (id, title, inner) =>
         `<details class="fsec" data-sec="${id}" ${b.secs.has(id) ? "open" : ""}><summary>${title}</summary>${inner}</details>`;
       const facet = (kind, label) => {
@@ -190,19 +190,48 @@ export default function (h) {
             : filtersOn
               ? `<div class="fact"><button class="tbtn" data-act="cookbook-save">Save current filters as cookbook</button></div>`
               : "";
-      return `<aside class="fpane">
-          <div class="fhead"><b>Filters</b>${active ? `<button type="button" class="tbtn" data-act="br-clear">Clear</button>` : ""}</div>
-          ${sec(
-            "cookbooks",
-            "Cookbooks",
-            `<div class="fit cbk ${this._cookbookId ? "" : "on"}" data-cookbook=""><span>All recipes</span><em>${this._recipes.length}</em></div>` +
-              this._cookbooks
-                .map((c) => `<div class="fit cbk ${c.id === this._cookbookId ? "on" : ""}" data-cookbook="${esc(c.id)}"><span>${esc(c.name)}</span></div>`)
-                .join("") +
-              cookbookActions
-          )}
-          ${facet("categories", "Categories")}${facet("tools", "Tools")}${facet("tags", "Tags")}
-        </aside>`;
+      return (
+        sec(
+          "cookbooks",
+          "Cookbooks",
+          `<div class="fit cbk ${this._cookbookId ? "" : "on"}" data-cookbook=""><span>All recipes</span><em>${this._recipes.length}</em></div>` +
+            this._cookbooks
+              .map((c) => `<div class="fit cbk ${c.id === this._cookbookId ? "on" : ""}" data-cookbook="${esc(c.id)}"><span>${esc(c.name)}</span></div>`)
+              .join("") +
+            cookbookActions
+        ) +
+        facet("categories", "Categories") +
+        facet("tools", "Tools") +
+        facet("tags", "Tags")
+      );
+    },
+
+    _brActive() {
+      return !!(this._cookbookId || this._search.trim() || Object.values(this._sel).some((set) => set.size));
+    },
+
+    /** A phone is narrow enough that the filters open as a dialog instead of a side pane. */
+    _brCompact() {
+      return (this.clientWidth || 1000) < 700;
+    },
+
+    _brPane(values, count) {
+      return `<aside class="fpane"><div class="fpane-in">
+          <div class="fhead"><button type="button" class="bbtn on" data-act="br-filters"><ha-icon icon="mdi:filter-variant"></ha-icon><span class="lbl">Filters</span></button>${
+            this._brActive() ? `<button type="button" class="tbtn" data-act="br-clear">Clear</button>` : ""
+          }</div>
+          ${this._brSections(values, count)}
+        </div></aside>`;
+    },
+
+    _brDialog(values, count, shown) {
+      return `<dialog class="fdlg" id="fdlg">
+          <div class="dh"><button type="button" class="dclose" data-act="br-filters-close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button><b>Filters</b>${
+            this._brActive() ? `<button type="button" class="tbtn" data-act="br-clear">Clear</button>` : ""
+          }</div>
+          <div class="dlgbody">${this._brSections(values, count)}</div>
+          <div class="dfoot"><button type="button" class="btn" data-act="br-filters-close">Show ${shown} recipes</button></div>
+        </dialog>`;
     },
 
     _listHtml() {
@@ -216,7 +245,8 @@ export default function (h) {
         );
       const count = (kind, v) => this._recipes.filter((r) => (r[kind] || []).includes(v)).length;
       const nFilters = this._sel.categories.size + this._sel.tools.size + this._sel.tags.size + (this._cookbookId ? 1 : 0);
-      const paneOpen = this._brPaneOpen();
+      const compact = this._brCompact();
+      const paneOpen = !compact && this._brPaneOpen();
       const groups = this._brGroups(shown);
 
       const bulkbar = this._select
@@ -241,7 +271,7 @@ export default function (h) {
       const viewBtn = (v, icon, title) =>
         `<button type="button" class="vbtn ${b.view === v ? "on" : ""}" data-view="${v}" title="${title}" aria-label="${title}"><ha-icon icon="mdi:${icon}"></ha-icon></button>`;
       const toolbar = `<div class="btool">
-          <button type="button" class="bbtn ${paneOpen ? "on" : ""}" data-act="br-filters"><ha-icon icon="mdi:filter-variant"></ha-icon><span class="lbl">Filters</span>${nFilters ? `<span class="bcount">${nFilters}</span>` : ""}</button>
+          ${paneOpen ? "" : `<button type="button" class="bbtn ${this._filterDlg ? "on" : ""}" data-act="br-filters"><ha-icon icon="mdi:filter-variant"></ha-icon><span class="lbl">Filters</span>${nFilters ? `<span class="bcount">${nFilters}</span>` : ""}</button>`}
           ${this._canEdit === false ? "" : `<button type="button" class="bbtn ic ${this._select ? "on" : ""}" data-act="select" title="${this._select ? "Done selecting" : "Select"}" aria-label="Select"><ha-icon icon="mdi:format-list-checks"></ha-icon></button>`}
           <input id="search" type="search" placeholder="Search ${this._recipes.length} recipes" value="${esc(this._search)}">
           <select id="br-group" class="bsel" title="Group by">${opt(
@@ -280,13 +310,16 @@ export default function (h) {
           : groups.map(groupBlock).join("");
 
       return `
-        ${toolbar}
-        ${bulkbar}
-        <div class="browse ${paneOpen ? "with-pane" : ""}">
+        <div class="bshell ${paneOpen ? "with-pane" : ""}">
           ${paneOpen ? this._brPane(values, count) : ""}
-          <div class="bcontent">${content}</div>
+          <div class="bmain">
+            ${toolbar}
+            ${bulkbar}
+            <div class="bcontent ${b.view}">${content}</div>
+          </div>
         </div>
-        ${this._canEdit === false ? "" : `<div class="fabwrap"><button type="button" class="fab" data-act="new"><ha-icon icon="mdi:plus"></ha-icon><span>New recipe</span></button></div>`}`;
+        ${this._canEdit === false ? "" : `<div class="fabwrap"><button type="button" class="fab" data-act="new"><ha-icon icon="mdi:plus"></ha-icon><span>New recipe</span></button></div>`}
+        ${compact ? this._brDialog(values, count, shown.length) : ""}`;
     },
 
     _bindBrowser(root, on) {
