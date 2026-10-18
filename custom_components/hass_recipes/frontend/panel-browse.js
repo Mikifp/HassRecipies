@@ -15,122 +15,631 @@ export default function (h) {
         .includes(q);
     },
 
-    _listHtml() {
-      const q = this._search.trim().toLowerCase();
-      const shown = this._recipes.filter((r) => this._matches(r, this._sel, q));
-      const values = (kind) =>
-        [...new Set(this._recipes.flatMap((r) => r[kind] || []))].sort((x, y) =>
-          x.localeCompare(y, undefined, { sensitivity: "base" })
+    // ---- browser preferences (view, grouping, sorting, the filter pane) ----
+    _brPrefs() {
+      if (!this._br) {
+        let saved = {};
+        try {
+          saved = JSON.parse(localStorage.getItem("hass_recipes_browser") || "{}");
+        } catch (_) {
+          saved = {};
+        }
+        this._br = {
+          view: ["cards", "rows", "list"].includes(saved.view) ? saved.view : "cards",
+          group: ["none", "category", "cookbook", "tag", "tool"].includes(saved.group) ? saved.group : "none",
+          sort: ["name", "updated", "time", "servings"].includes(saved.sort) ? saved.sort : "name",
+          dir: saved.dir === "desc" ? "desc" : "asc",
+          // whether the filter pane is open, remembered separately for wide and narrow screens (null: open on wide only)
+          pane: { wide: typeof saved.paneWide === "boolean" ? saved.paneWide : null, narrow: typeof saved.paneNarrow === "boolean" ? saved.paneNarrow : null },
+          secs: new Set(Array.isArray(saved.secs) ? saved.secs : ["cookbooks", "categories"]),
+          collapsed: new Set(Array.isArray(saved.collapsed) ? saved.collapsed : []),
+        };
+      }
+      return this._br;
+    },
+
+    _brSave() {
+      const b = this._brPrefs();
+      try {
+        localStorage.setItem(
+          "hass_recipes_browser",
+          JSON.stringify({ view: b.view, group: b.group, sort: b.sort, dir: b.dir, paneWide: b.pane.wide, paneNarrow: b.pane.narrow, secs: [...b.secs], collapsed: [...b.collapsed] })
         );
-      const FACETS = [["categories", "Categories"], ["tools", "Tools"], ["tags", "Tags"]];
+      } catch (_) {
+        /* the choice just is not remembered */
+      }
+    },
 
-      // Wide: left rail with cookbooks and checkbox filters.
-      const rail = `<aside class="rail">
-        <h4>Cookbooks</h4>
-        <div class="rail-item ${this._cookbookId ? "" : "active"}" data-cookbook="">All recipes</div>
-        ${this._cookbooks
-          .map((c) => `<div class="rail-item ${c.id === this._cookbookId ? "active" : ""}" data-cookbook="${esc(c.id)}">${esc(c.name)}</div>`)
-          .join("")}
-        ${FACETS.map(([kind, label]) => {
-          const vals = values(kind);
-          if (!vals.length) return "";
-          return `<h4>${label}</h4>${vals
-            .map(
-              (v) =>
-                `<label><input type="checkbox" data-fcb="${kind}" data-value="${esc(v)}" ${this._sel[kind].has(v) ? "checked" : ""}> ${esc(v)}</label>`
-            )
-            .join("")}`;
-        }).join("")}
-      </aside>`;
+    _brPaneOpen() {
+      const b = this._brPrefs();
+      const mine = this._narrow ? b.pane.narrow : b.pane.wide;
+      return mine === null ? !this._narrow : mine;
+    },
 
-      // Narrow: chips on top; the less common filters sit behind "More filters".
-      const chipRow = (kind, label) => {
+    _recipeTime(r) {
+      return r.total_time || (r.prep_time || 0) + (r.cook_time || 0) || 0;
+    },
+
+    _brSorted(list) {
+      const { sort, dir } = this._brPrefs();
+      const sign = dir === "desc" ? -1 : 1;
+      const by = {
+        name: (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+        updated: (a, b) => String(a.updated_at || a.created_at || "").localeCompare(String(b.updated_at || b.created_at || "")),
+        time: (a, b) => (this._recipeTime(a) || 1e9) - (this._recipeTime(b) || 1e9),
+        servings: (a, b) => (parseFloat(a.servings) || 1e9) - (parseFloat(b.servings) || 1e9),
+      }[sort];
+      return [...list].sort((a, b) => sign * by(a, b) || a.name.localeCompare(b.name));
+    },
+
+    /** The shown recipes as groups: [{ key, title, icon, items }]. A recipe is listed in every group it belongs to. */
+    _brGroups(list) {
+      const { group } = this._brPrefs();
+      if (group === "none") return [{ key: "", title: "", icon: "", items: list }];
+      const facet = { category: "categories", tool: "tools", tag: "tags" }[group];
+      const none = { category: "No category", tool: "No tools", tag: "No tags", cookbook: "No cookbook" }[group];
+      const icon = { category: "folder-outline", tool: "tools", tag: "tag-outline", cookbook: "book-open-page-variant-outline" }[group];
+      const map = new Map();
+      const add = (key, title, r) => {
+        if (!map.has(key)) map.set(key, { key, title, icon, items: [] });
+        map.get(key).items.push(r);
+      };
+      const unfiled = [];
+      if (group === "cookbook") {
+        for (const cb of this._cookbooks) {
+          const sel = { categories: new Set(cb.categories), tools: new Set(cb.tools), tags: new Set(cb.tags) };
+          map.set(cb.id, { key: cb.id, title: cb.name, icon, items: [] });
+          for (const r of list) if (this._matches(r, sel, (cb.query || "").toLowerCase())) map.get(cb.id).items.push(r);
+        }
+        const inAny = new Set([...map.values()].flatMap((g) => g.items.map((r) => r.id)));
+        for (const r of list) if (!inAny.has(r.id)) unfiled.push(r);
+      } else {
+        for (const r of list) {
+          const values = r[facet] || [];
+          if (!values.length) unfiled.push(r);
+          for (const v of values) add(v.toLowerCase(), v, r);
+        }
+      }
+      const groups = [...map.values()].filter((g) => g.items.length).sort((x, y) => x.title.localeCompare(y.title, undefined, { sensitivity: "base" }));
+      if (unfiled.length) groups.push({ key: "~none", title: none, icon: "help-circle-outline", items: unfiled });
+      return groups;
+    },
+
+    _brImg(r) {
+      return r.image ? `style="background-image:url('${esc(r.image)}')"` : "";
+    },
+
+    _brMeta(r) {
+      const time = minutes(this._recipeTime(r));
+      return [time, r.servings && `Serves ${esc(String(r.servings).replace(/\.0+$/, ""))}`].filter(Boolean).join(" · ");
+    },
+
+    _brCard(r) {
+      const picked = this._picked.has(r.id);
+      return `<ha-card class="rcard${picked ? " picked" : ""}" ${this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`}>
+          ${this._select ? `<div class="pick">${picked ? "✓" : ""}</div>` : ""}
+          <div class="rpic" ${this._brImg(r)}>${r.image ? "" : `<ha-icon icon="mdi:silverware-fork-knife"></ha-icon>`}</div>
+          <div class="rtx"><div class="rtitle"><b>${esc(r.name)}</b>${
+            this._canEdit !== false && !this._select
+              ? `<button type="button" class="rpen" data-edit="${esc(r.id)}" title="Edit" aria-label="Edit"><ha-icon icon="mdi:pencil"></ha-icon></button>`
+              : ""
+          }</div><span>${this._brMeta(r)}</span></div></ha-card>`;
+    },
+
+    _brRow(r) {
+      const picked = this._picked.has(r.id);
+      const cat = (r.categories || [])[0];
+      const n = (r.ingredients || []).filter((i) => !/^#{1,6}\s/.test(i)).length;
+      return `<ha-card class="rrow${picked ? " picked" : ""}" ${this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`}>
+          ${this._select ? `<div class="pick">${picked ? "✓" : ""}</div>` : ""}
+          <div class="rpic" ${this._brImg(r)}>${r.image ? "" : `<ha-icon icon="mdi:silverware-fork-knife"></ha-icon>`}</div>
+          <div class="rtx"><b>${esc(r.name)}</b>
+            ${r.description ? `<p>${esc(r.description)}</p>` : ""}
+            <div class="rmeta">${cat ? `<span class="badge">${esc(cat)}</span>` : ""}<span>${this._brMeta(r)}</span>${n ? `<span>${n} ingredients</span>` : ""}</div></div>
+          ${this._canEdit !== false && !this._select ? `<button type="button" class="rpen" data-edit="${esc(r.id)}" title="Edit" aria-label="Edit"><ha-icon icon="mdi:pencil"></ha-icon></button>` : ""}</ha-card>`;
+    },
+
+    // ---- the toolbar, filters and table are Home Assistant's own elements (ha-assist-chip, ha-dropdown,
+    //      ha-input-search, ha-expansion-panel, ha-checkbox, ha-button and ha-data-table) ----
+    _brModel() {
+      const b = this._brPrefs();
+      const q = this._search.trim().toLowerCase();
+      const shown = this._brSorted(this._recipes.filter((r) => this._matches(r, this._sel, q)));
+      const compact = this._brCompact();
+      return {
+        b,
+        shown,
+        groups: this._brGroups(shown),
+        values: (kind) =>
+          [...new Set(this._recipes.flatMap((r) => r[kind] || []))].sort((x, y) => x.localeCompare(y, undefined, { sensitivity: "base" })),
+        count: (kind, v) => this._recipes.filter((r) => (r[kind] || []).includes(v)).length,
+        nFilters: this._sel.categories.size + this._sel.tools.size + this._sel.tags.size + (this._cookbookId ? 1 : 0),
+        compact,
+        paneOpen: !compact && this._brPaneOpen(),
+      };
+    },
+
+    /**
+     * ha-button-toggle-group (the calendar page's view buttons) is only loaded with the calendar. Creating a
+     * calendar card through Home Assistant's card helpers loads it; until then the buttons are plain ha-buttons.
+     */
+    _brEnsureToggle() {
+      if (this._brToggle) return;
+      this._brToggle = "loading";
+      (async () => {
+        try {
+          if (!customElements.get("ha-button-toggle-group") && window.loadCardHelpers) {
+            const helpers = await window.loadCardHelpers();
+            try {
+              helpers.createCardElement({ type: "calendar", entities: [] });
+            } catch (_) {
+              /* the card refuses an empty config, but its module is loaded by then */
+            }
+          }
+          await Promise.race([customElements.whenDefined("ha-button-toggle-group"), new Promise((_, no) => setTimeout(no, 6000))]);
+          // the toggle takes SVG paths: read them from ha-icon, which resolves the mdi names
+          const names = { cards: "view-module", rows: "view-agenda", list: "view-headline" };
+          const holder = document.createElement("div");
+          holder.hidden = true;
+          this.shadowRoot.appendChild(holder);
+          const icons = Object.entries(names).map(([view, name]) => {
+            const el = document.createElement("ha-icon");
+            el.setAttribute("icon", `mdi:${name}`);
+            holder.appendChild(el);
+            return [view, el];
+          });
+          const paths = {};
+          for (let i = 0; i < 20 && Object.keys(paths).length < icons.length; i++) {
+            await new Promise((r) => setTimeout(r, 150));
+            for (const [view, el] of icons) if (el._path) paths[view] = el._path;
+          }
+          holder.remove();
+          if (Object.keys(paths).length === icons.length) {
+            this._brPaths = paths;
+            this._brToggle = "ready";
+            if (this._view && this._view.name === "list" && this._loaded) this._render();
+          }
+        } catch (_) {
+          this._brToggle = "unavailable";
+        }
+      })();
+    },
+
+    _brActive() {
+      return !!(this._cookbookId || this._search.trim() || Object.values(this._sel).some((set) => set.size));
+    },
+
+    /** A phone is narrow enough that the filters open as a dialog instead of a side pane. */
+    _brCompact() {
+      return (this.clientWidth || 1000) < 700;
+    },
+
+    _brChip(attrs, icon, label = "", trailing = "") {
+      return `<ha-assist-chip ${attrs} ${label ? `label="${esc(label)}"` : ""}>${icon ? `<ha-icon slot="icon" icon="mdi:${icon}"></ha-icon>` : ""}${
+        trailing ? `<ha-icon slot="trailing-icon" icon="mdi:${trailing}"></ha-icon>` : ""
+      }</ha-assist-chip>`;
+    },
+
+    /** The filter sections, shared by the side pane and the phone dialog. */
+    _brSections(values, count) {
+      const b = this._brPrefs();
+      this._fq = this._fq || {};
+      const icons = { categories: "folder-outline", tools: "tools", tags: "tag-outline" };
+      // like Home Assistant's filter panels: a header with a count badge and a clear button, a search and a checkbox list
+      const sec = (id, headerHtml, inner) =>
+        `<ha-expansion-panel class="fsec" data-sec="${id}" left-chevron ${b.secs.has(id) ? "expanded" : ""}><div slot="header" class="fhdr">${headerHtml}</div>${inner}</ha-expansion-panel>`;
+      const facet = (kind, label) => {
         const vals = values(kind);
         if (!vals.length) return "";
-        return `<div class="chips"><span class="facet-label">${label}</span>${vals
-          .map((v) => `<span class="chip ${this._sel[kind].has(v) ? "active" : ""}" data-facet="${kind}" data-value="${esc(v)}">${esc(v)}</span>`)
-          .join("")}</div>`;
+        const q = (this._fq[kind] || "").toLowerCase();
+        const n = this._sel[kind].size;
+        const header = `${esc(T(label))}${n ? `<span class="badge">${n}</span><ha-icon-button class="fclear" data-fclear="${kind}" label="Clear filter"><ha-icon icon="mdi:filter-variant-remove"></ha-icon></ha-icon-button>` : ""}`;
+        const search = vals.length > 6 ? `<ha-input-search class="fsearch" appearance="outlined" data-fsearch="${kind}" placeholder="Search"></ha-input-search>` : "";
+        return sec(
+          kind,
+          header,
+          `${search}<ha-list multi data-flist="${kind}">${vals
+            .map(
+              (v) =>
+                `<ha-check-list-item data-value="${esc(v)}" ${this._sel[kind].has(v) ? "selected" : ""} ${q && !v.toLowerCase().includes(q) ? "hidden" : ""}>${esc(v)}</ha-check-list-item>`
+            )
+            .join("")}</ha-list>`
+        );
       };
-      const activeExtra = this._sel.tools.size + this._sel.tags.size;
-      const mfilters = `<div class="mfilters">
-        <div class="chips"><span class="chip ${this._cookbookId ? "" : "active"}" data-cookbook="">All</span>
-          ${this._cookbooks.map((c) => `<span class="chip ${c.id === this._cookbookId ? "active" : ""}" data-cookbook="${esc(c.id)}">${esc(c.name)}</span>`).join("")}</div>
-        ${chipRow("categories", "Category")}
-        ${chipRow("tools", "Tools") || chipRow("tags", "Tags") ? `<details ${activeExtra ? "open" : ""}><summary>More filters${activeExtra ? ` (${activeExtra})` : ""}</summary>${chipRow("tools", "Tools")}${chipRow("tags", "Tags")}</details>` : ""}
-      </div>`;
+      const filtersOn = this._search.trim() || Object.values(this._sel).some((set) => set.size);
+      const act = (name, label, extra = "") => `<ha-button appearance="plain" size="s" data-act="${name}" ${extra}>${label}</ha-button>`;
+      const cookbookActions =
+        this._canEdit === false
+          ? ""
+          : this._cookbookId
+            ? `<div class="fact">${act("cookbook-update", "Save filters to this cookbook")}${act("cookbook-delete", "Delete cookbook", 'variant="danger"')}</div>`
+            : filtersOn
+              ? `<div class="fact">${act("cookbook-save", "Save current filters as cookbook")}</div>`
+              : "";
+      return (
+        sec(
+          "cookbooks",
+          esc(T("Cookbooks")),
+          `<div class="fit cbk ${this._cookbookId ? "" : "on"}" data-cookbook=""><ha-icon icon="mdi:book-multiple-outline"></ha-icon><span>All recipes</span><em>${this._recipes.length}</em></div>` +
+            this._cookbooks
+              .map(
+                (c) =>
+                  `<div class="fit cbk ${c.id === this._cookbookId ? "on" : ""}" data-cookbook="${esc(c.id)}"><ha-icon icon="mdi:book-open-page-variant-outline"></ha-icon><span>${esc(c.name)}</span></div>`
+              )
+              .join("") +
+            cookbookActions
+        ) +
+        facet("categories", "Categories") +
+        facet("tools", "Tools") +
+        facet("tags", "Tags")
+      );
+    },
 
-      const filtersOn = q || Object.values(this._sel).some((set) => set.size);
-      const cookbookActions = this._cookbookId
-        ? `<div class="cookbook-actions">
-            <button class="btn secondary" data-act="cookbook-update">Save filters to this cookbook</button>
-            <button class="btn secondary" data-act="cookbook-delete">Delete cookbook</button></div>`
-        : filtersOn
-          ? `<div class="cookbook-actions"><button class="btn secondary" data-act="cookbook-save">📖 Save current filters as cookbook</button></div>`
-          : "";
+    _brPane(m) {
+      return `<aside class="fpane"><div class="fpane-in">
+          <div class="fhead">${this._brChip('data-act="br-filters" active', "filter-variant", T("Filters"))}${
+            this._brActive() ? `<ha-button appearance="plain" size="s" data-act="br-clear">Clear</ha-button>` : ""
+          }</div>
+          ${this._brSections(m.values, m.count)}
+        </div></aside>`;
+    },
 
-      const items = shown
-        .map((r) => {
-          const time = minutes(r.total_time || (r.prep_time || 0) + (r.cook_time || 0));
-          const img = r.image ? `style="background-image:url('${esc(r.image)}')"` : "";
-          const picked = this._picked.has(r.id);
-          const attr = this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`;
-          const cat = (r.categories || [])[0];
-          return `<div class="item ${picked ? "picked" : ""}" ${attr}>
-            ${this._select ? `<div class="pick">${picked ? "✓" : ""}</div>` : ""}
-            <div class="thumb" ${img}>${r.image ? "" : "🍽️"}</div>
-            <div class="body"><h3>${esc(r.name)}</h3>
-              <div class="muted">${[time, r.servings && `Serves ${esc(r.servings)}`].filter(Boolean).join(" · ")}</div>
-              ${cat ? `<span class="cat">${esc(cat)}</span>` : ""}</div>
-            <span class="chev">›</span>
-          </div>`;
-        })
-        .join("");
+    _brDialog(m) {
+      return `<ha-adaptive-dialog id="fdlg" flexcontent width="full" header-title="${esc(T("Filters"))}">
+          <ha-icon-button slot="headerNavigationIcon" data-act="br-filters-close" label="Close"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>
+          ${this._brActive() ? `<ha-button slot="headerActionItems" appearance="plain" size="s" data-act="br-clear">Clear</ha-button>` : ""}
+          <div class="dlgbody">${this._brSections(m.values, m.count)}</div>
+          <ha-dialog-footer slot="footer"><ha-button slot="primaryAction" data-act="br-filters-close">Show ${m.shown.length} recipes</ha-button></ha-dialog-footer>
+        </ha-adaptive-dialog>`;
+    },
 
-      const bulkbar = this._select
-        ? `<div class="bulkbar">
-            <strong>${this._picked.size} selected</strong>
-            <button class="btn secondary" data-bulk="all">Select all ${shown.length} shown</button>
-            <button class="btn secondary" data-bulk="none">Clear</button>
-            <select id="bulk-field">
-              ${[["categories", "Category"], ["tags", "Tag"], ["tools", "Tool"]]
-                .map(([v, l]) => `<option value="${v}" ${this._bulkField === v ? "selected" : ""}>${l}</option>`)
-                .join("")}
-            </select>
-            <input id="bulk-value" list="bulk-values" placeholder="value" value="${esc(this._bulkValue)}" autocomplete="off">
-            <datalist id="bulk-values">${this._usedValues(this._bulkField).map((v) => `<option value="${esc(v)}"></option>`).join("")}</datalist>
-            <button class="btn" data-bulk="add">Add</button>
-            <button class="btn secondary" data-bulk="remove">Remove</button>
-            <button class="btn danger" data-bulk="delete">Delete</button>
-          </div>`
-        : "";
+    _brToolbar(m) {
+      const { b } = m;
+      const item = (value, label, cur, extra = "") =>
+        `<ha-dropdown-item value="${value}" ${cur === value ? "data-sel" : ""}>${extra}${esc(T(label))}</ha-dropdown-item>`;
+      const groups = [["none", "No grouping"], ["category", "Category"], ["cookbook", "Cookbook"], ["tag", "Tag"], ["tool", "Tool"]];
+      const sorts = [["name", "Name"], ["updated", "Last changed"], ["time", "Time"], ["servings", "Servings"]];
+      const arrow = `<ha-icon slot="details" icon="mdi:arrow-${b.dir === "asc" ? "up" : "down"}"></ha-icon>`;
+      const label = (list, cur) => (list.find(([v]) => v === cur) || list[0])[1];
+      const view = (v, icon, title, first, last) =>
+        `<ha-button size="s" appearance="${b.view === v ? "accent" : "filled"}" data-view="${v}" title="${title}" style="--ha-button-border-radius:${first ? "16px 0 0 16px" : last ? "0 16px 16px 0" : "0"}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon></ha-button>`;
+      this._brEnsureToggle();
+      const toggle =
+        this._brToggle === "ready"
+          ? `<ha-button-toggle-group id="br-view" size="s" no-wrap></ha-button-toggle-group>`
+          : `<div class="vseg" role="group">${view("cards", "view-module", "Cards", true, false)}${view("rows", "view-agenda", "Rows", false, false)}${view("list", "view-headline", "List", false, true)}</div>`;
+      return `<div class="btool">
+          ${m.paneOpen ? "" : `<span class="chipwrap">${this._brChip(`data-act="br-filters" ${this._filterDlg ? "active" : ""}`, "filter-variant", T("Filters"))}${m.nFilters ? `<span class="bcount">${m.nFilters}</span>` : ""}</span>`}
+          ${this._canEdit === false ? "" : this._brChip(`class="select-mode-chip" data-act="select" ${this._select ? "active" : ""}`, "format-list-checks")}
+          ${m.compact ? "" : `<ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>`}
+          <ha-dropdown id="br-group"><span slot="trigger">${this._brChip("", "", `${T("Group by")} ${T(label(groups, b.group))}`, "menu-down")}</span>${groups.map(([v, l]) => item(v, l, b.group)).join("")}</ha-dropdown>
+          <ha-dropdown id="br-sort"><span slot="trigger">${this._brChip("", "", `${T("Sort by")} ${T(label(sorts, b.sort))}`, "menu-down")}</span>${sorts.map(([v, l]) => item(v, l, b.sort, v === b.sort ? arrow : "")).join("")}</ha-dropdown>
+          ${toggle}
+          <ha-dropdown id="br-more"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
+            ${this._canEdit === false ? "" : `<ha-dropdown-item value="import"><ha-icon slot="icon" icon="mdi:link-variant"></ha-icon>${esc(T("Import URL"))}</ha-dropdown-item>`}
+            <ha-dropdown-item value="data"><ha-icon slot="icon" icon="mdi:swap-vertical"></ha-icon>${esc(T("Backup & migrate"))}</ha-dropdown-item></ha-dropdown>
+        </div>`;
+    },
 
-      return `
-        <div class="toolbar">
-          <input id="search" type="search" placeholder="Search recipes, tags, ingredients…" value="${esc(this._search)}">
-          <button class="btn" data-act="new" title="New recipe">+<span class="only-desk"> New</span></button>
-          <button class="btn secondary only-desk" data-act="plan">Meal plan</button>
-          <button class="btn secondary only-desk" data-act="import">Import URL</button>
-          <button class="btn secondary only-desk ${this._select ? "active" : ""}" data-act="select">${this._select ? "Done selecting" : "Select"}</button>
-          <button class="btn secondary only-desk" data-act="data" title="Export, import files, migrate from Mealie">⇅ Backup &amp; migrate</button>
-        </div>
-        <div class="only-mob" style="margin:-4px 0 10px">
-          <details><summary class="muted" style="cursor:pointer">More actions</summary>
-            <div class="actions" style="margin-top:8px">
-              <button class="btn secondary" data-act="plan">Meal plan</button>
-              <button class="btn secondary" data-act="import">Import URL</button>
-              <button class="btn secondary" data-act="select">${this._select ? "Done selecting" : "Select"}</button>
-              <button class="btn secondary" data-act="data">⇅ Backup &amp; migrate</button>
-            </div></details>
-        </div>
-        ${bulkbar}
-        <div class="browse">
-          ${rail}
-          <div style="min-width:0">
-            ${mfilters}
-            ${cookbookActions}
-            ${shown.length ? `<div class="recipes">${items}</div>` : `<div class="empty">${this._recipes.length ? "No recipes match." : "No recipes yet. Create one or import from a URL."}</div>`}
+    /** Home Assistant's selection bar: close, a Select menu, the count, and the bulk actions. */
+    _brBulkBar(m) {
+      if (!this._select) return "";
+      const fields = [["categories", "Category"], ["tags", "Tag"], ["tools", "Tool"]];
+      const cur = (fields.find(([v]) => v === this._bulkField) || fields[0]);
+      return `<div class="selection-bar">
+          <div class="selection-controls">
+            <ha-icon-button data-act="select" label="${esc(T("Done selecting"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>
+            <ha-dropdown id="br-selmenu"><span slot="trigger">${this._brChip("", "format-list-checks", T("Select"), "menu-down")}</span>
+              <ha-dropdown-item value="all">${esc(T(`Select all ${m.shown.length} shown`))}</ha-dropdown-item>
+              <ha-dropdown-item value="none">${esc(T("Clear"))}</ha-dropdown-item></ha-dropdown>
+            <p class="bcnt">${this._picked.size} selected</p>
+          </div>
+          <div class="center-vertical">
+            <ha-dropdown id="br-bfield"><span slot="trigger">${this._brChip("", "", T(cur[1]), "menu-down")}</span>${fields
+              .map(([v, l]) => `<ha-dropdown-item value="${v}" ${v === cur[0] ? "data-sel" : ""}>${esc(T(l))}</ha-dropdown-item>`)
+              .join("")}</ha-dropdown>
+            <ha-input id="bulk-value" class="bulk-value" appearance="outlined" placeholder="value"></ha-input>
+            <ha-button size="s" appearance="accent" data-bulk="add">Add</ha-button>
+            <ha-button size="s" appearance="filled" data-bulk="remove">Remove</ha-button>
+            <ha-button size="s" appearance="filled" variant="danger" data-bulk="delete">Delete</ha-button>
           </div>
         </div>`;
+    },
+
+    _brContentHtml(m) {
+      const { b, shown, groups } = m;
+      if (!shown.length) return `<div class="empty">${this._recipes.length ? "No recipes match." : "No recipes yet. Create one or import from a URL."}</div>`;
+      if (b.view === "list") return `<div class="tblhost"></div>`;
+      return groups
+        .map((g) => {
+          const closed = g.key && b.collapsed.has(g.key);
+          const heading = g.key
+            ? `<div class="bgh" data-group="${esc(g.key)}"><ha-icon icon="mdi:${closed ? "chevron-down" : "chevron-up"}"></ha-icon><ha-icon class="gi" icon="mdi:${g.icon}"></ha-icon><span>${esc(g.title)}</span><em>${g.items.length}</em></div>`
+            : "";
+          if (closed) return heading;
+          return (
+            heading +
+            (b.view === "rows"
+              ? `<div class="brows">${g.items.map((r) => this._brRow(r)).join("")}</div>`
+              : `<div class="bgrid">${g.items.map((r) => this._brCard(r)).join("")}</div>`)
+          );
+        })
+        .join("");
+    },
+
+    _listHtml() {
+      const m = this._brModel();
+      // ha-button size l: kept outside the page so it stays in the bottom corner
+      this._fab = this._canEdit === false ? "" : `<ha-button class="fab ${this._brCompact() ? "above-tabs" : ""}" size="l" data-act="new-dialog"><ha-icon slot="start" icon="mdi:plus"></ha-icon>New recipe</ha-button>`;
+      return `
+        <div class="bshell ${m.paneOpen ? "with-pane" : ""}">
+          ${m.paneOpen ? this._brPane(m) : ""}
+          <div class="bmain">
+            ${this._brToolbar(m)}
+            ${this._brBulkBar(m)}
+            <div class="bcontent ${m.b.view}">${this._brContentHtml(m)}</div>
+          </div>
+        </div>
+        ${m.compact && this._filterDlg ? this._brDialog(m) : ""}
+        ${this._newDlg ? this._brNewDialog() : ""}`;
+    },
+
+    /** "Create recipe": the same dialog Home Assistant shows for "Create automation". */
+    _brNewDialog() {
+      const item = (act, icon, headline, text) =>
+        `<ha-list-item-base interactive data-act="${act}" headline="${esc(T(headline))}" supporting-text="${esc(T(text))}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon><ha-icon-next slot="end"></ha-icon-next></ha-list-item-base>`;
+      return `<ha-adaptive-dialog id="newdlg" flexcontent header-title="${esc(T("New recipe"))}">
+          <ha-list-base>
+            ${item("new-manual", "pencil-outline", "Create new recipe", "Start with an empty recipe from scratch")}
+            ${item("new-url", "link-variant", "Import from a URL", "Fetch a recipe from a web page")}
+          </ha-list-base>
+        </ha-adaptive-dialog>`;
+    },
+
+    /** Re-draw only the recipes (the search box keeps its focus). */
+    _brRefresh() {
+      const bc = this.shadowRoot.querySelector(".bcontent");
+      if (!bc) return this._render();
+      const m = this._brModel();
+      bc.className = `bcontent ${m.b.view}`;
+      bc.innerHTML = this._brContentHtml(m);
+      this._brBindContent(bc, m, true);
+    },
+
+    _brThumb(row) {
+      const d = document.createElement("div");
+      d.style.cssText = "width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb, var(--primary-color) 10%, var(--secondary-background-color)) center/cover no-repeat;color:var(--secondary-text-color)";
+      if (row.image) d.style.backgroundImage = `url("${row.image.replace(/"/g, "%22")}")`;
+      else d.innerHTML = '<ha-icon icon="mdi:silverware-fork-knife" style="--mdc-icon-size:20px"></ha-icon>';
+      return d;
+    },
+
+    /** The list view is a real ha-data-table: the same header, rows and group headers as Home Assistant's own lists. */
+    _brMountTable(host, m) {
+      const { b, groups } = m;
+      const t = document.createElement("ha-data-table");
+      t.hass = this._hass;
+      t.autoHeight = true;
+      t.clickable = true;
+      t.selectable = !!this._select;
+      t.narrow = this._brCompact();
+      t.id = "id";
+      t.noDataText = T("No recipes match.");
+      t.columns = {
+        thumb: { title: "", type: "icon", showNarrow: true, template: (row) => this._brThumb(row) },
+        name: { title: T("Name"), main: true, sortable: true, flex: 3 },
+        category: { title: T("Category"), sortable: true, flex: 2 },
+        tools: { title: T("Tools"), sortable: true, flex: 2 },
+        time: { title: T("Time"), sortable: true, flex: 1, template: (row) => (row.time ? minutes(row.time) : "") },
+        servings: { title: T("Servings"), sortable: true, flex: 1, template: (row) => (row.servings ? String(row.servings) : "") },
+        updated: { title: "", hidden: true, sortable: true },
+        grp: { title: "", hidden: true },
+      };
+      const data = [];
+      groups.forEach((g, gi) => {
+        for (const r of g.items) {
+          data.push({
+            id: `${r.id}~${gi}`,
+            rid: r.id,
+            name: r.name,
+            image: r.image || "",
+            category: (r.categories || []).join(", "),
+            tools: (r.tools || []).join(", "),
+            time: this._recipeTime(r),
+            servings: parseFloat(r.servings) || 0,
+            updated: String(r.updated_at || r.created_at || ""),
+            grp: g.title,
+          });
+        }
+      });
+      t.data = data;
+      t.sortColumn = b.sort;
+      t.sortDirection = b.dir;
+      if (b.group !== "none") {
+        t.groupColumn = "grp";
+        t.groupOrder = groups.map((g) => g.title);
+        t.initialCollapsedGroups = groups.filter((g) => b.collapsed.has(g.key)).map((g) => g.title);
+      }
+      t.addEventListener("row-click", (e) => this._go({ name: "detail", id: String(e.detail.id).split("~")[0] }));
+      t.addEventListener("sorting-changed", (e) => {
+        const { column, direction } = e.detail;
+        if (column === b.sort && direction === b.dir) return;
+        b.sort = column;
+        b.dir = direction;
+        this._brSave();
+        this._render();
+      });
+      t.addEventListener("collapsed-changed", (e) => {
+        const titles = new Set(e.detail.value || []);
+        for (const g of groups) {
+          if (titles.has(g.title)) b.collapsed.add(g.key);
+          else b.collapsed.delete(g.key);
+        }
+        this._brSave();
+      });
+      t.addEventListener("selection-changed", (e) => {
+        this._picked = new Set((e.detail.value || []).map((id) => String(id).split("~")[0]));
+        const n = this.shadowRoot.querySelector(".bcnt");
+        if (n) n.textContent = `${this._picked.size} selected`;
+      });
+      host.appendChild(t);
+      this._brTable = t;
+      // Home Assistant's phone lists show no column header row (sorting is in the toolbar)
+      if (t.narrow) {
+        t.updateComplete.then(() => {
+          const row = t.shadowRoot && t.shadowRoot.querySelector(".mdc-data-table__header-row");
+          if (row) row.style.display = "none";
+        });
+      }
+      if (this._select && this._picked.size) {
+        try {
+          t._checkedRows = data.filter((d) => this._picked.has(d.rid)).map((d) => d.id);
+          t.requestUpdate();
+        } catch (_) {
+          /* the selection just starts empty */
+        }
+      }
+    },
+
+    _brBindContent(scope, m, rebind = false) {
+      const on = (sel, ev, fn) => scope.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, fn));
+      const b = this._brPrefs();
+      // a full render binds [data-open] for the whole panel; only a partial refresh needs it here
+      if (rebind) on("[data-open]", "click", (e) => this._go({ name: "detail", id: e.currentTarget.dataset.open }));
+      on("[data-pick]", "click", (e) => {
+        const id = e.currentTarget.dataset.pick;
+        if (!this._picked.delete(id)) this._picked.add(id);
+        this._render();
+      });
+      on("[data-edit]", "click", (e) => {
+        e.stopPropagation();
+        this._go({ name: "edit", id: e.currentTarget.dataset.edit });
+      });
+      on("[data-group]", "click", (e) => {
+        const key = e.currentTarget.dataset.group;
+        if (!b.collapsed.delete(key)) b.collapsed.add(key);
+        this._brSave();
+        this._render();
+      });
+      const host = scope.querySelector(".tblhost");
+      if (host && m) this._brMountTable(host, m);
+    },
+
+    _bindBrowser(root, on) {
+      const b = this._brPrefs();
+      const m = this._brModel();
+      const fdlg = root.getElementById("fdlg");
+      if (fdlg) {
+        fdlg.open = true;
+        fdlg.addEventListener("closed", () => {
+          if (this._filterDlg) {
+            this._filterDlg = false;
+            this._render();
+          }
+        });
+      }
+      const newDlg = root.getElementById("newdlg");
+      if (newDlg) {
+        newDlg.open = true;
+        newDlg.addEventListener("closed", () => {
+          if (this._newDlg) {
+            this._newDlg = false;
+            this._render();
+          }
+        });
+      }
+      const bc = root.querySelector(".bcontent");
+      if (bc) this._brBindContent(bc, m);
+      // the toolbar
+      const search = root.getElementById("search");
+      if (search) {
+        search.value = this._search;
+        search.addEventListener("input", () => {
+          this._search = search.value || "";
+          this._brRefresh();
+        });
+      }
+      const menu = (id, fn) => {
+        const dd = root.getElementById(id);
+        if (!dd) return;
+        dd.querySelectorAll("ha-dropdown-item[data-sel]").forEach((it) => (it.selected = true));
+        dd.addEventListener("wa-select", (e) => fn(e.detail.item.value));
+      };
+      menu("br-group", (v) => {
+        b.group = v;
+        this._brSave();
+        this._render();
+      });
+      menu("br-sort", (v) => {
+        if (b.sort === v) b.dir = b.dir === "asc" ? "desc" : "asc";
+        else {
+          b.sort = v;
+          b.dir = v === "updated" ? "desc" : "asc";
+        }
+        this._brSave();
+        this._render();
+      });
+      menu("br-more", (v) => this._action(v));
+      menu("br-selmenu", (v) => this._bulkAction(v));
+      menu("br-bfield", (v) => {
+        this._bulkField = v;
+        this._render();
+      });
+      const bulk = root.getElementById("bulk-value");
+      if (bulk) bulk.value = this._bulkValue || "";
+      const tg = root.getElementById("br-view");
+      if (tg) {
+        const label = { cards: T("Cards"), rows: T("Rows"), list: T("List") };
+        tg.buttons = ["cards", "rows", "list"].map((v) => ({ label: label[v], value: v, iconPath: this._brPaths[v] }));
+        tg.active = b.view;
+        tg.addEventListener("value-changed", (e) => {
+          const v = e.detail && e.detail.value;
+          if (!v || v === b.view) return;
+          b.view = v;
+          this._brSave();
+          this._render();
+        });
+      }
+      on("[data-view]", "click", (e) => {
+        b.view = e.currentTarget.dataset.view;
+        this._brSave();
+        this._render();
+      });
+      // the filters
+      // the filter rows are Home Assistant's own check list items
+      on("ha-list[data-flist] ha-check-list-item", "request-selected", (e) => {
+        if (!e.detail || e.detail.source !== "interaction") return;
+        const el = e.currentTarget;
+        const kind = el.closest("[data-flist]").dataset.flist;
+        const value = el.dataset.value;
+        const before = this._sel[kind].has(value);
+        if (e.detail.selected === before) return;
+        if (e.detail.selected) this._sel[kind].add(value);
+        else this._sel[kind].delete(value);
+        this._render();
+      });
+      on("[data-fclear]", "click", (e) => {
+        e.stopPropagation();
+        this._sel[e.currentTarget.dataset.fclear] = new Set();
+        this._render();
+      });
+      this._fq = this._fq || {};
+      on("ha-input-search[data-fsearch]", "input", (e) => {
+        const kind = e.currentTarget.dataset.fsearch;
+        const text = e.currentTarget.value || "";
+        const q = text.trim().toLowerCase();
+        this._fq[kind] = text;
+        e.currentTarget.closest("ha-expansion-panel").querySelectorAll("ha-check-list-item").forEach((it) => {
+          it.hidden = !!q && !it.textContent.toLowerCase().includes(q);
+        });
+      });
+      root.querySelectorAll("ha-input-search[data-fsearch]").forEach((el) => (el.value = this._fq[el.dataset.fsearch] || ""));
+      on("ha-expansion-panel[data-sec]", "expanded-changed", (e) => {
+        const id = e.currentTarget.dataset.sec;
+        if (e.detail && e.detail.expanded) b.secs.add(id);
+        else b.secs.delete(id);
+        this._brSave();
+      });
     },
 
     // ---- categories / tools / tags: a checklist of what is in use, with "create" (like Mealie) ----
@@ -331,8 +840,13 @@ export default function (h) {
 
     async _bulkAction(act) {
       const shown = this._recipes.filter((r) => this._matches(r, this._sel, this._search.trim().toLowerCase()));
-      if (act === "all") this._picked = new Set(shown.map((r) => r.id));
-      else if (act === "none") this._picked = new Set();
+      if (act === "all") {
+        this._picked = new Set(shown.map((r) => r.id));
+        if (this._brTable && this._brTable.isConnected) return this._brTable.selectAll();
+      } else if (act === "none") {
+        this._picked = new Set();
+        if (this._brTable && this._brTable.isConnected) return this._brTable.clearSelection();
+      }
       else if (!this._picked.size) {
         this._error = "Select some recipes first.";
       } else {

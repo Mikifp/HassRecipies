@@ -14,10 +14,12 @@ const { esc, isHeader, clock, scaleBasis, observeTranslations, T, state, isoDate
 const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-form", "panel-editor"].map(load));
 
 const STYLE = `
-  :host { display: block; height: 100%; overflow: auto; container-type: inline-size; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
+  :host { --hq-loud: var(--ha-color-fill-primary-loud-resting, var(--primary-color)); --hq-on-loud: var(--ha-color-on-primary-loud, #fff); --hq-normal: var(--ha-color-fill-primary-normal-resting, color-mix(in srgb, var(--primary-color) 14%, #fff)); --hq-on-normal: var(--ha-color-on-primary-normal, var(--primary-color)); --hq-outline: var(--outline-color, var(--divider-color)); display: block; height: 100%; overflow: auto; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
   * { box-sizing: border-box; }
+  :host(.compact) { overflow: visible; height: auto; }
+  .cq { container-type: inline-size; min-height: 100%; }
   .sticky { position: sticky; top: 0; z-index: 2; }
-  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff); }
+  header { display: flex; align-items: center; box-sizing: border-box; height: 56px; padding: 8px 12px; background: var(--sidebar-background-color, var(--app-header-background-color, var(--card-background-color))); border-bottom: 1px solid var(--divider-color); font-size: var(--ha-font-size-xl, 20px); font-weight: 400; color: var(--sidebar-text-color, var(--primary-text-color)); }
   .timers:empty { display: none; }
   .timers { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; background: var(--secondary-background-color); border-bottom: 1px solid var(--divider-color); }
   .timer { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 16px; background: var(--card-background-color); border: 1px solid var(--divider-color); font-size: 14px; }
@@ -26,8 +28,7 @@ const STYLE = `
   .timer button { background: none; border: 0; color: inherit; cursor: pointer; padding: 0 2px; font: inherit; }
   .timer button.stop { background: #fff; color: var(--error-color, #db4437); border-radius: 12px; padding: 2px 12px; font-weight: 600; }
   @keyframes pulse { 50% { opacity: .6; } }
-  header h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; }
-  header .menu { background: none; border: 0; color: inherit; cursor: pointer; padding: 4px; }
+  header h1 { font-size: inherit; font-weight: inherit; margin: 0; margin-inline-start: var(--ha-space-6, 24px); flex: 1; min-width: 0; line-height: 1.5; }
   main { max-width: 1200px; margin: 0 auto; padding: 16px; }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   input, textarea, select { font: inherit; color: inherit; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 6px; padding: 8px 10px; width: 100%; }
@@ -41,43 +42,145 @@ const STYLE = `
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
   .chip { padding: 3px 10px; border-radius: 12px; font-size: 13px; background: var(--secondary-background-color); border: 1px solid var(--divider-color); cursor: pointer; }
   .chip.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
-  /* ---- recipe browser: filter rail + card grid (wide) / compact list (narrow) ---- */
-  .browse { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; align-items: start; }
-  .rail { position: sticky; top: 72px; font-size: 14px; }
-  .rail h4 { margin: 18px 0 6px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary-text-color); }
-  .rail h4:first-child { margin-top: 0; }
-  .rail-item { padding: 6px 10px; border-radius: 8px; cursor: pointer; }
-  .rail-item:hover { background: var(--secondary-background-color); }
-  .rail-item.active { background: color-mix(in srgb, var(--primary-color) 16%, transparent); color: var(--primary-color); font-weight: 500; }
-  .rail label { display: flex; align-items: center; gap: 8px; padding: 4px 4px; cursor: pointer; }
-  .rail input[type=checkbox] { width: auto; margin: 0; }
-  .mfilters { display: none; }
-  .mfilters details { margin-bottom: 12px; }
-  .mfilters summary { cursor: pointer; font-size: 13px; color: var(--secondary-text-color); margin-bottom: 8px; }
-  .only-mob { display: none; }
-  .recipes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
-  .item { position: relative; background: var(--card-background-color); border-radius: var(--ha-card-border-radius, 12px); box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
-  .item .thumb { height: 130px; background: var(--secondary-background-color) center/cover no-repeat; display: flex; align-items: center; justify-content: center; font-size: 34px; }
-  .item .body { padding: 10px 12px 12px; min-width: 0; }
-  .item h3 { margin: 0 0 4px; font-size: 15px; font-weight: 500; line-height: 1.3; }
-  .item .cat { display: inline-block; margin-top: 6px; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--secondary-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color); }
-  .item .chev { display: none; color: var(--secondary-text-color); font-size: 22px; padding-right: 4px; }
+  /* ---- recipe browser: toolbar, filter pane, groups and three views ---- */
+  header .tabs { flex: 1; display: flex; justify-content: center; font-size: var(--ha-font-size-m, 14px); overflow: hidden; }
+  header ha-icon-button { color: var(--sidebar-icon-color, var(--secondary-text-color)); flex-shrink: 0; }
+  header .hsp { display: none; }
+  header ha-input-search { flex: 1; min-width: 0; margin-inline-start: var(--ha-space-2, 8px); }
+  .tabwrap { cursor: pointer; display: flex; max-width: 45%; overflow: hidden; }
+  .tabwrap ha-tab { flex: 1; min-width: 0; }
+  .bottomtabs { position: fixed; left: 0; right: 0; bottom: 0; height: 56px; box-sizing: border-box; padding: 0 16px; z-index: 2; display: flex; justify-content: space-around; font-size: var(--ha-font-size-s, 12px); background: var(--sidebar-background-color, var(--card-background-color)); border-top: 1px solid var(--divider-color); }
+  .bottomtabs .tabwrap { width: 25%; max-width: none; }
+  .cq.with-bar { padding-bottom: 56px; }
+  ha-button.fab.above-tabs { bottom: 84px; }
+  main.wide { max-width: none; padding: 0; }
+  main.wide > .notice, main.wide > .error { margin: 12px 16px; }
+  .bshell.with-pane { display: grid; grid-template-columns: 250px minmax(0, 1fr); align-items: stretch; }
+  .bmain { min-width: 0; }
+  .btool { display: flex; justify-content: space-between; align-items: center; gap: var(--ha-space-4, 16px); box-sizing: border-box; width: 100%; height: 56px; padding: 0 16px; background: var(--primary-background-color); border-bottom: 1px solid var(--divider-color); }
+  .bcontent { min-width: 0; }
+  .selection-bar { background: rgba(var(--rgb-primary-color), .1); box-sizing: border-box; width: 100%; height: 56px; font-size: var(--ha-font-size-m, 14px); --ha-assist-chip-container-color: var(--card-background-color); justify-content: space-between; align-items: center; padding: 8px 12px; display: flex; gap: 16px; overflow-x: auto; scrollbar-width: none; }
+  .selection-bar > * { flex: none; }
+  .selection-controls { align-items: center; gap: var(--ha-space-2, 8px); display: flex; }
+  .selection-controls p { margin: 0; margin-inline-start: 8px; }
+  .center-vertical { align-items: center; gap: var(--ha-space-2, 8px); display: flex; }
+  ha-input.bulk-value { width: 160px; --ha-input-height: 32px; }
+  .bcontent.cards, .bcontent.rows { padding: 16px 16px 88px; }
+  .bcontent .empty { padding: 48px 16px; }
+  .fpane { background: var(--primary-background-color); border-right: 1px solid var(--divider-color); font-size: 14px; }
+  .fpane-in { position: sticky; top: 56px; max-height: calc(100vh - 60px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb-color) transparent; }
+  .fpane-in::-webkit-scrollbar { width: 0.4rem; height: 0.4rem; }
+  .fpane-in::-webkit-scrollbar-thumb { border-radius: var(--ha-border-radius-sm, 4px); background: var(--scrollbar-thumb-color); }
+  .fhead { display: flex; justify-content: space-between; align-items: center; height: 56px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--divider-color); }
+  .bcount { position: absolute; top: -4px; inset-inline-end: -4px; min-width: 16px; box-sizing: border-box; border-radius: 50%; font-size: var(--ha-font-size-xs, 10px); font-weight: 400; line-height: 1.5; text-align: center; padding: 0 2px; background: var(--primary-color); color: var(--text-primary-color, #fff); pointer-events: none; }
+  .fit { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px 0 16px; cursor: pointer; }
+  .fit[hidden] { display: none; }
+  .fit:hover { background: var(--secondary-background-color); }
+  .fit span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .fit em { font-style: normal; color: var(--secondary-text-color); font-size: 12px; }
+  .fit.cbk.on { background: color-mix(in srgb, var(--primary-color) 14%, transparent); color: var(--primary-color); font-weight: 500; }
+  .fact { display: flex; flex-direction: column; align-items: flex-start; padding: 0 8px 8px 44px; }
+  .bgh { display: flex; align-items: center; gap: 8px; min-height: 52px; padding-inline-start: 12px; font-size: .875rem; font-weight: 500; cursor: pointer; user-select: none; }
+  .bgh:first-child { margin-top: 0; }
+  .bgh ha-icon { --mdc-icon-size: 24px; color: var(--primary-text-color); flex: none; }
+  .bgh .gi { color: var(--secondary-text-color); }
+  .bgh em { font-style: normal; font-weight: 400; font-size: .75rem; color: var(--secondary-text-color); }
+  .bgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .rcard { position: relative; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
+  .rcard:hover, .rrow:hover { --ha-card-border-color: var(--primary-color); }
+  .rpic { background: color-mix(in srgb, var(--primary-color) 10%, var(--secondary-background-color)) center/cover no-repeat; color: var(--secondary-text-color); display: flex; align-items: center; justify-content: center; flex: none; }
+  .rpic ha-icon { --mdc-icon-size: 34px; }
+  .rcard .rpic { height: 120px; }
+  .rtx { padding: 10px 12px 12px; min-width: 0; flex: 1; }
+  .rtitle { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .rtitle b { font-weight: 500; font-size: var(--ha-font-size-m, 14px); line-height: 1.3; }
+  .rtx span { font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .rpen { background: none; border: 0; color: var(--secondary-text-color); cursor: pointer; padding: 4px; border-radius: 50%; flex: none; display: inline-flex; }
+  .rpen:hover { background: var(--secondary-background-color); color: var(--primary-text-color); }
+  .rpen ha-icon { --mdc-icon-size: 18px; }
+  .brows { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .rrow { position: relative; display: flex; gap: 14px; padding: 12px; cursor: pointer; align-items: flex-start; }
+  .rrow .rpic { width: 84px; height: 84px; border-radius: 10px; }
+  .rrow .rtx { padding: 0; }
+  .rrow b { font-weight: 500; font-size: var(--ha-font-size-m, 14px); display: block; }
+  .rrow p { margin: 2px 0 8px; font-size: var(--ha-font-size-m, 14px); color: var(--secondary-text-color); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .rmeta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .badge { background: color-mix(in srgb, var(--primary-color) 14%, transparent); color: var(--primary-color); border-radius: 10px; padding: 1px 9px; }
+  .bcontent { padding-bottom: 88px; }
+  /* the browser uses Home Assistant's own elements; these only place them */
+  ha-assist-chip, ha-filter-pane-chip { --ha-assist-chip-container-shape: 10px; --ha-assist-chip-container-color: var(--card-background-color); cursor: pointer; }
+  .select-mode-chip { --md-assist-chip-icon-label-space: 0; --md-assist-chip-trailing-space: 8px; }
+  ha-dropdown ha-assist-chip { --md-assist-chip-trailing-space: 8px; }
+  ha-dropdown-item[data-sel] { border: 1px solid var(--primary-color); font-weight: var(--ha-font-weight-medium, 500); color: var(--primary-color); background-color: var(--ha-color-fill-primary-quiet-resting); --icon-primary-color: var(--primary-color); }
+  .chipwrap { position: relative; display: inline-block; }
+  .bcount { position: absolute; top: -4px; inset-inline-end: -4px; min-width: 16px; box-sizing: border-box; border-radius: 50%; font-size: var(--ha-font-size-xs, 10px); font-weight: 400; line-height: 1.5; text-align: center; padding: 0 2px; background: var(--primary-color); color: var(--text-primary-color, #fff); pointer-events: none; }
+  .btool ha-input-search { flex: 1 1 0%; min-width: 0; }
+  @media (min-width: 871px) { .btool ha-input-search { --ha-input-search-height: 32px; --ha-input-search-border-radius: 10px; } }
+  .btool ha-dropdown { flex: none; }
+  .vseg { display: inline-flex; gap: 1px; flex: none; }
+  ha-expansion-panel.fsec { display: block; border-bottom: 1px solid var(--divider-color); --expansion-panel-summary-padding: 0 8px; --expansion-panel-content-padding: 0; }
+  .fhdr { display: flex; align-items: center; flex: 1; min-width: 0; }
+  .fhdr .badge { background: var(--primary-color); color: var(--text-primary-color, #fff); border-radius: 50%; min-width: 20px; height: 20px; line-height: 20px; text-align: center; font-size: 12px; margin-inline-start: 8px; padding: 0 4px; box-sizing: border-box; }
+  .fhdr .fclear { margin-inline-start: auto; --mdc-icon-button-size: 40px; }
+  ha-input-search.fsearch { display: block; padding: 4px 8px 0; }
+  ha-check-list-item { --mdc-theme-text-primary-on-background: var(--primary-text-color); height: 48px; }
+  ha-adaptive-dialog { --dialog-content-padding: 0; --ha-bottom-sheet-height: calc(100dvh - var(--ha-space-12, 48px)); }
+  .dlgbody { display: flex; flex-direction: column; flex: 1 1 0%; min-height: 0; overflow-y: auto; }
+  .fit > ha-icon { --mdc-icon-size: 24px; color: var(--secondary-text-color); flex: none; }
+  .fact { display: flex; flex-direction: column; align-items: flex-start; padding: 0 8px 8px 40px; }
+  ha-button.fab { position: fixed; right: 24px; bottom: 24px; z-index: 1; --ha-button-box-shadow: var(--ha-box-shadow-l, 0 4px 12px rgba(0,0,0,.25)); }
+  .tblhost { overflow-x: hidden; }
+  ha-data-table { --data-table-border-width: 0; --data-table-background-color: var(--card-background-color); }
+  /* ---- recipe page: Home Assistant's own cards, lists, expansion panels and buttons ---- */
+  main.rdmain { max-width: none; padding: 0; }
+  .rd { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; padding: 16px 16px 96px; }
+  .rd-left, .rd-right { display: grid; gap: 16px; min-width: 0; }
+  .rd ha-card { display: block; overflow: hidden; }
+  .rd-hero { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+  .rd-nohero { display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--primary-color) 10%, var(--secondary-background-color)); color: var(--secondary-text-color); --mdc-icon-size: 48px; }
+  .rd-desc { margin: 0 0 12px; color: var(--secondary-text-color); line-height: 1.5; }
+  .rd-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .rd-facts { margin-bottom: 12px; }
+  .rd ha-assist-chip { --ha-assist-chip-container-shape: 10px; --ha-assist-chip-container-color: var(--card-background-color); }
+  .card-content { padding: 16px; }
+  ha-card > .card-content:first-child, .rd-hero + .card-content { padding-top: 16px; }
+  .card-actions { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; border-top: 1px solid var(--divider-color); }
+  .rd a.rd-src { text-decoration: none; color: inherit; display: block; }
+  .rd-scale { display: flex; flex-direction: column; gap: 12px; }
+  .rd-amount { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .rd-amount ha-input { width: 96px; --ha-input-height: 40px; }
+  .rd-presets { display: inline-flex; gap: 1px; }
+  .rd-sec { display: block; border-top: 1px solid var(--divider-color); --expansion-panel-summary-padding: 0 8px; --expansion-panel-content-padding: 0; }
+  .rd-sh { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .rd-sh .muted { font-weight: 400; }
+  .rd-ings .ing-text { display: block; line-height: 1.4; }
+  .rd-step { --ha-list-item-headline-line-clamp: none; }
+  .rd-num { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--secondary-background-color); color: var(--secondary-text-color); border: 1px solid var(--divider-color); font-size: 12px; box-sizing: border-box; --mdc-icon-size: 16px; }
+  .rd-step.done .rd-num { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
+  .rd-text { display: block; line-height: 1.9; white-space: normal; }
+  .rd-step.done .rd-text { opacity: .55; text-decoration: line-through; }
+  .rd-extra { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-top: 4px; }
+  header .main-title { flex: 1; min-width: 0; margin-inline-start: var(--ha-space-6, 24px); line-height: 1.2; }
+  header .main-title b { display: block; font-weight: 400; font-size: var(--ha-font-size-xl, 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header .main-title span { display: block; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  @container (max-width: 760px) { .rd { grid-template-columns: minmax(0, 1fr); } header .main-title { margin-inline-start: var(--ha-space-2, 8px); } }
+  .rcard.picked, .rrow.picked { outline: 3px solid var(--primary-color); }
   @container (max-width: 680px) {
     main { padding: 12px; }
-    .browse { grid-template-columns: 1fr; gap: 0; }
-    .rail { display: none; }
-    .mfilters { display: block; }
-    .only-desk { display: none; }
-    .only-mob { display: block; }
-    .recipes { grid-template-columns: 1fr; gap: 8px; }
-    .item { flex-direction: row; align-items: center; gap: 12px; padding: 8px 10px 8px 8px; }
-    .item .thumb { width: 56px; height: 56px; flex: none; border-radius: 8px; font-size: 22px; }
-    .item .body { padding: 0; flex: 1; }
-    .item h3 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .item .chev { display: block; }
-    .item .cat { margin-top: 4px; }
-    .toolbar { flex-wrap: nowrap; }
-    .toolbar input { min-width: 0; }
+    main.wide { padding: 0; }
+    .btool { justify-content: flex-start; padding: 0 0 0 16px; overflow-x: scroll; scrollbar-width: none; }
+    ha-button.fab { right: 16px; bottom: 16px; }
+    ha-expansion-panel.fsec { --expansion-panel-summary-padding: 0 16px; }
+    header { padding: 4px; }
+    header h1 { margin-inline-start: var(--ha-space-2, 8px); }
+    .btool::-webkit-scrollbar { display: none; }
+    .btool > * { flex: none; }
+    .bcontent.cards, .bcontent.rows { padding: 12px 12px 88px; }
+    .bgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .rcard .rpic { height: 84px; }
+    .brows { grid-template-columns: 1fr; gap: 8px; }
+    .rrow .rpic { width: 64px; height: 64px; }
+    header .tabs button { padding: 8px 8px; }
   }
   .muted { color: var(--secondary-text-color); font-size: 13px; }
   .empty { text-align: center; padding: 48px 16px; color: var(--secondary-text-color); }
@@ -144,70 +247,61 @@ const STYLE = `
   .cook-jumps { display: inline-flex; gap: 6px; flex-wrap: wrap; }
   .step-text .ing-chip, .cook .cook-text .ing-chip, .cstep .cstep-text .ing-chip { display: inline-flex; padding: 0 8px; margin: 0 1px; font-size: .9em; vertical-align: baseline; }
   .timer-btn { margin-top: 10px; }
-  .step { border: 1px solid var(--divider-color); border-radius: 8px; padding: 10px; margin-bottom: 12px; }
-  .step-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
-  .step-head .spacer { flex: 1; }
-  .drag-handle { background: none; border: none; color: var(--secondary-text-color); cursor: grab; font-size: 18px; line-height: 1; padding: 6px 2px; touch-action: none; }
-  .step-head .drag-handle { border: none; padding: 2px 6px 2px 0; }
-  .ing-row.dragging, .step.dragging { opacity: .4; }
-  .drop-before { box-shadow: 0 -3px 0 var(--primary-color); }
-  .drop-after { box-shadow: 0 3px 0 var(--primary-color); }
-  .form-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-  .form-title .btn { font-size: 13px; padding: 4px 10px; font-weight: 400; }
-  .ne-meta { margin-bottom: 16px; }
-  .ne-meta summary { cursor: pointer; color: var(--secondary-text-color); padding: 6px 0; }
-  .ne-card { background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: var(--ha-card-border-radius, 12px); margin: 0 0 14px; position: relative; }
-  .ne-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
-  .ne-title { flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; font-weight: 500; padding: 6px 4px; }
-  .ne-title:focus { outline: 2px solid var(--primary-color); border-radius: 6px; }
-  .ne-count { font-size: 12px; color: var(--secondary-text-color); white-space: nowrap; }
-  .ne-body { border-top: 1px solid var(--divider-color); padding: 6px 12px 12px; }
-  .ne-sub { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--secondary-text-color); margin: 12px 0 6px; }
-  .ne-icon, .ne-handle { background: none; border: 0; color: var(--secondary-text-color); cursor: pointer; padding: 4px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; font: inherit; }
-  .ne-icon:hover { background: var(--secondary-background-color); }
-  .ne-handle { cursor: grab; }
-  .ne-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
-  .ne-row .ne-qty { flex: 2 1 160px; width: auto; min-width: 0; }
-  .ne-row .ne-note { flex: 1 1 110px; width: auto; min-width: 0; font-size: 14px; }
-  .ne-sub-row { display: flex; gap: 6px; align-items: center; flex: 1 0 100%; padding-left: 34px; }
-  .ne-sub-row input { font-size: 14px; font-style: italic; }
-  .ne-step { display: flex; gap: 6px; align-items: flex-start; border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 6px 8px 4px; margin-bottom: 8px; background: var(--card-background-color); }
+  .ne-page { max-width: 900px; margin: 0 auto; padding: var(--ha-space-4, 16px); padding-bottom: 96px; display: flex; flex-direction: column; gap: var(--ha-space-4, 16px); }
+  .ne-meta-in { padding: var(--ha-space-4, 16px); display: flex; flex-direction: column; gap: var(--ha-space-2, 8px); }
+  .ne-meta-card ha-expansion-panel { --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0; }
+  .ne-photo { display: flex; align-items: center; gap: var(--ha-space-3, 12px); flex-wrap: wrap; padding: var(--ha-space-2, 8px) 0; }
+  .ne-photo .btns { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
+  .ne-card { display: block; }
+  .ne-head { display: flex; align-items: center; gap: var(--ha-space-1, 4px); padding: var(--ha-space-2, 8px) var(--ha-space-2, 8px) var(--ha-space-2, 8px) var(--ha-space-1, 4px); }
+  .ne-title { flex: 1; min-width: 0; --ha-input-height: 40px; }
+  .ne-count { font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); white-space: nowrap; margin-inline: var(--ha-space-2, 8px); }
+  .ne-body { border-top: 1px solid var(--divider-color); padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) var(--ha-space-4, 16px); }
+  .ne-sub { font-size: var(--ha-font-size-s, 12px); font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--secondary-text-color); margin: var(--ha-space-3, 12px) 0 var(--ha-space-2, 8px); }
+  .ne-handle { cursor: grab; color: var(--secondary-text-color); flex: none; }
+  .ne-row { display: flex; gap: var(--ha-space-1, 4px); align-items: center; flex-wrap: wrap; margin-bottom: var(--ha-space-2, 8px); }
+  .ne-row .ne-qty { flex: 2 1 160px; min-width: 0; }
+  .ne-row .ne-note { flex: 1 1 110px; min-width: 0; }
+  .ne-sub-row { display: flex; gap: var(--ha-space-1, 4px); align-items: center; flex: 1 0 100%; padding-inline-start: 48px; }
+  .ne-sub-row ha-input { flex: 1; min-width: 0; }
+  .ne-step { display: flex; gap: var(--ha-space-1, 4px); align-items: flex-start; border: 1px solid var(--divider-color); border-radius: var(--ha-border-radius-lg, 12px); padding: var(--ha-space-2, 8px) var(--ha-space-1, 4px); margin-bottom: var(--ha-space-2, 8px); background: var(--card-background-color); }
   .ne-step:focus-within { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
-  .ne-n { width: 22px; height: 22px; border-radius: 50%; background: var(--secondary-background-color); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; margin-top: 3px; flex: none; color: var(--secondary-text-color); }
+  .ne-n { width: 24px; height: 24px; margin-top: 12px; border-radius: 50%; flex: none; background: var(--secondary-background-color); font-size: var(--ha-font-size-s, 12px); display: inline-flex; align-items: center; justify-content: center; color: var(--secondary-text-color); }
   .ne-main { flex: 1; min-width: 0; position: relative; }
-  .ne-text { outline: none; line-height: 1.9; min-height: 1.9em; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ne-text { outline: none; line-height: 1.9; min-height: 1.9em; padding: var(--ha-space-2, 8px) 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--ha-font-size-m, 14px); }
   .ne-text:empty::before { content: attr(data-ph); color: var(--secondary-text-color); }
-  .ne-chip { display: inline-block; background: color-mix(in srgb, var(--primary-color) 16%, transparent); color: var(--primary-color); border-radius: 6px; padding: 0 6px; line-height: 1.55; font-size: .92em; margin: 0 1px; user-select: all; }
+  .ne-chip { display: inline-block; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 16%, transparent)); color: var(--ha-color-on-primary-quiet, var(--primary-color)); border-radius: var(--ha-border-radius-md, 8px); padding: 0 var(--ha-space-2, 8px); line-height: 1.6; margin: 0 1px; white-space: normal; }
+  .ne-ins { visibility: hidden; }
+  .ne-typing .ne-ins { visibility: visible; color: var(--primary-color); }
+  .ne-quick { display: none; flex-wrap: wrap; align-items: center; gap: var(--ha-space-1, 4px); margin-top: var(--ha-space-1, 4px); }
+  .ne-step:focus-within .ne-quick { display: flex; }
+  .ne-quick-label { font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); margin-inline-end: 2px; }
+  .ne-quick-chip { cursor: pointer; --ha-assist-chip-container-shape: 10px; }
+  .ne-quick-chip.used { opacity: .5; }
   .ne-extra { user-select: none; display: inline-flex; align-items: center; gap: 2px; margin: 2px 4px 2px 0; }
   .ne-extra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; display: inline-flex; --mdc-icon-size: 14px; }
-  .ne-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
-  .ne-timer { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--secondary-text-color); background: var(--secondary-background-color); border-radius: 8px; padding: 2px 6px; flex-wrap: wrap; }
-  .ne-timer input { width: 52px; padding: 3px 6px; font-size: 13px; }
-  .ne-timer input.ne-tl { width: 130px; }
-  .ne-pick { position: absolute; left: 0; right: 0; z-index: 5; margin-top: 2px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.2); max-height: 220px; overflow: auto; }
-  .ne-pick button { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; padding: 8px 12px; cursor: pointer; }
-  .ne-pick button.on, .ne-pick button:hover { background: color-mix(in srgb, var(--primary-color) 14%, transparent); }
-  .ne-add { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; background: none; border: 1px dashed var(--divider-color); border-radius: 10px; color: var(--primary-color); padding: 8px; cursor: pointer; font: inherit; margin-top: 2px; }
-  .ne-add:hover { background: color-mix(in srgb, var(--primary-color) 8%, transparent); }
-  .ne-add-section { margin-top: 0; }
-  .ne-pop { position: absolute; z-index: 20; min-width: 190px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.25); padding: 4px 0; }
-  .ne-pop button { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; padding: 8px 14px; cursor: pointer; }
-  .ne-pop button:hover { background: var(--secondary-background-color); }
-  .ne-pop button.danger { color: var(--error-color, #db4437); }
+  .ne-extras { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ha-space-1, 4px); margin-top: var(--ha-space-1, 4px); }
+  .ne-timer { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--ha-space-1, 4px); font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .ne-timer ha-input.nt { width: 84px; --ha-input-height: 40px; }
+  .ne-timer ha-input.ne-tl { width: 150px; --ha-input-height: 40px; }
+  .ne-pick { position: absolute; left: 0; right: 0; z-index: 5; margin-top: 2px; background: var(--card-background-color); border-radius: var(--ha-border-radius-lg, 12px); box-shadow: var(--ha-box-shadow-l, 0 4px 12px rgba(0,0,0,.25)); max-height: 260px; overflow: auto; }
+  .ne-pick[hidden] { display: none; }
+  .ne-pick ha-list-item-base.on { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, transparent)); }
+  .ne-body ha-button[data-ne-act] { margin-top: var(--ha-space-1, 4px); }
+  ha-button.ne-add-section { align-self: stretch; }
   .ne-dragging { opacity: .4; }
   .ne-drop { outline: 2px dashed var(--primary-color); border-radius: 8px; }
+  .drop-before { box-shadow: 0 -3px 0 var(--primary-color); }
+  .drop-after { box-shadow: 0 3px 0 var(--primary-color); }
   @media (pointer: coarse) { .ne-handle { display: none; } }
-  .insert-bar { display: flex; gap: 4px; justify-content: center; opacity: .35; margin: -6px 0 2px; transition: opacity .15s; }
-  .insert-bar:hover, .insert-bar:focus-within { opacity: 1; }
-  @media (pointer: coarse) { .drag-handle { display: none; } .insert-bar { opacity: .8; } }
-  .step-head button { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 2px 8px; font: inherit; }
-  .step .timer-field { margin: 8px 0; }
-  .timer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
-  .timer-row input[type=number] { width: 64px; flex: none; }
-  .timer-row .timer-label { flex: 1 1 140px; min-width: 120px; }
-  .sub-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
-  .sub-row input { flex: 1; }
-  .step .chips { margin-bottom: 0; }
+  @container (max-width: 560px) {
+    .ne-page { padding: var(--ha-space-2, 8px); padding-bottom: 96px; gap: var(--ha-space-2, 8px); }
+    .ne-count { display: none; }
+    .ne-body { padding-inline: var(--ha-space-2, 8px); }
+    .ne-row .ne-qty { flex: 1 1 0; min-width: 120px; }
+    .ne-row .ne-note { flex: 1 0 100%; order: 5; }
+    .ne-sub-row { padding-inline-start: 0; }
+  }
   .facet-label { font-size: 12px; color: var(--secondary-text-color); align-self: center; text-transform: uppercase; letter-spacing: .04em; }
   .units { margin-left: auto; }
   .ing-text { display: flex; flex-direction: column; }
@@ -232,17 +326,7 @@ const STYLE = `
   .cook-section { text-transform: uppercase; letter-spacing: .06em; font-size: .85rem; color: var(--primary-color); margin-top: 6px; }
   .cook-done { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; cursor: pointer; }
   .cook-done input { width: auto; }
-  .ing-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
-  .ing-row .ing-inputs { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-  .ing-row.is-header { background: color-mix(in srgb, var(--primary-color) 12%, transparent); border-left: 5px solid var(--primary-color); border-radius: 8px; padding: 8px 8px 8px 10px; margin: 18px 0 10px; }
-  .ing-row.is-header input[data-f=itext] { font-weight: 700; font-size: 1.05rem; background: transparent; }
-  .step.is-section { background: color-mix(in srgb, var(--primary-color) 12%, transparent); border: none; border-left: 5px solid var(--primary-color); margin-top: 18px; }
-  .step.is-section input[data-f=text] { font-weight: 700; font-size: 1.05rem; background: transparent; }
-  .step.is-section .step-head strong { text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: var(--primary-color); }
-  .ing-row input[data-f=isub] { font-size: 14px; font-style: italic; }
-  .row-btns { display: flex; gap: 4px; }
-  .row-btns button, .mini { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 4px 8px; font: inherit; }
-  .mini.link { border: 0; text-align: left; padding: 0; color: var(--primary-color); font-size: 13px; }
+  .mini { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 4px 8px; font: inherit; }
   .yield-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
   .yield-row input { width: auto; }
   .scale { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 16px; }
@@ -274,11 +358,8 @@ const STYLE = `
   .img-controls { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 8px; }
   .img-controls .btns { display: flex; gap: 8px; flex-wrap: wrap; }
   label.btn { display: inline-block; }
-  .item.picked { outline: 3px solid var(--primary-color); }
-  .item .pick { position: absolute; top: 8px; left: 8px; z-index: 1; width: 22px; height: 22px; border-radius: 50%; background: var(--card-background-color); border: 2px solid var(--primary-color); display: flex; align-items: center; justify-content: center; font-size: 14px; }
-  .item.picked .pick { background: var(--primary-color); color: var(--text-primary-color, #fff); }
-  .bulkbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; margin-bottom: 12px; border-radius: 8px; background: var(--secondary-background-color); border: 1px solid var(--divider-color); }
-  .bulkbar input, .bulkbar select { width: auto; flex: 0 1 160px; }
+  .rcard .pick, .rrow .pick { position: absolute; top: 8px; left: 8px; z-index: 1; width: 22px; height: 22px; border-radius: 50%; background: var(--card-background-color); border: 2px solid var(--primary-color); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .picked .pick { background: var(--primary-color); color: var(--text-primary-color, #fff); }
   .cookbook-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 14px; }
   /* cook mode, Mealie style: ingredients beside the steps, steps as cards */
   .cookp .cook-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -313,6 +394,7 @@ const STYLE = `
   .cook details { margin-top: 28px; }
   .cook summary { cursor: pointer; font-size: 1.1rem; }
   .error { color: var(--error-color, #db4437); margin: 8px 0; }
+  main > ha-alert { display: block; margin: var(--ha-space-2, 8px) var(--ha-space-4, 16px); }
   main.ro [data-act="new"], main.ro [data-act="edit"], main.ro [data-act="delete"], main.ro [data-act="import"],
   main.ro [data-act="data"], main.ro [data-act="select"], main.ro [data-act="plan-this"], main.ro [data-act="plan-copy"],
   main.ro [data-act="cookbook-save"], main.ro [data-act="cookbook-update"], main.ro [data-act="cookbook-delete"],
@@ -401,7 +483,15 @@ class HassRecipesPanel extends HTMLElement {
         e.returnValue = "";
       }
     };
-    this._onResize = () => this._autosizeAll();
+    this._onResize = () => {
+      this._autosizeAll();
+      // the filters are a side pane on wide screens and a dialog on a phone
+      const compact = this._brCompact();
+      if (compact !== this._lastCompact) {
+        this._lastCompact = compact;
+        if (this._view.name === "list" && this._loaded) this._render();
+      }
+    };
     window.addEventListener("resize", this._onResize);
     window.addEventListener("beforeunload", this._onUnload);
     window.addEventListener("keydown", this._onKey);
@@ -614,8 +704,61 @@ class HassRecipesPanel extends HTMLElement {
     return this._recipes.find((r) => r.id === id);
   }
 
+  /** The top bar and (on a phone) the bottom tabs, built from Home Assistant's own ha-icon-button, ha-input-search and ha-tab. */
+  _chrome(v) {
+    const tabsView = v.name === "list" || v.name === "plan";
+    const iconBtn = (act, icon, label) => `<ha-icon-button data-act="${act}" label="${label}"><ha-icon icon="mdi:${icon}"></ha-icon></ha-icon-button>`;
+    if (v.name === "cook" && this._recipe(v.id)) {
+      // cook mode: the back arrow leaves it (the menu button would only open the sidebar)
+      return {
+        header: `${iconBtn("cook-exit", "arrow-left", "Back")}<div class="main-title"><b>${esc(this._recipe(v.id).name)}</b><span>${esc(T("Cook mode"))}</span></div>`,
+        bottom: "",
+      };
+    }
+    if (v.name === "detail" && this._recipe(v.id)) {
+      const r = this._recipe(v.id);
+      const canEdit = this._canEdit !== false;
+      const item = (value, icon, label, extra = "") => `<ha-dropdown-item value="${value}" ${extra}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon>${esc(T(label))}</ha-dropdown-item>`;
+      const cooking = this._cookingId === r.id;
+      return {
+        header: `${iconBtn("back", "arrow-left", "Back")}<div class="main-title"><b>${esc(r.name)}</b>${this._rdSubtitle ? `<span>${esc(this._rdSubtitle)}</span>` : ""}</div>
+          <ha-dropdown id="rd-menu"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
+            ${canEdit ? item("plan-this", "calendar-plus", "Add to meal plan") : ""}${item("shop", "cart-outline", "Add to shopping list")}
+            ${item("dashboard-recipe", cooking ? "view-dashboard" : "view-dashboard-outline", cooking ? "Remove from the dashboard cook card" : "Show on the dashboard cook card")}
+            ${canEdit ? item("edit", "pencil-outline", "Edit") : ""}${this._checked.size || this._doneSteps.size ? item("progress-reset", "restore", "Clear checks") : ""}
+            ${canEdit ? item("delete", "delete-outline", "Delete recipe", 'variant="danger"') : ""}</ha-dropdown>`,
+        bottom: "",
+      };
+    }
+    if (v.name === "edit") {
+      return { header: `${iconBtn("cancel", "arrow-left", "Back")}<div class="main-title"><b>${esc(T(v.id ? "Edit recipe" : "New recipe"))}</b></div>`, bottom: "" };
+    }
+    if (!tabsView) return { header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : ""}<h1>Recipes</h1>`, bottom: "" };
+    const tab = (act, icon, name, active, narrow) =>
+      `<div class="tabwrap" data-act="${act}"><ha-tab name="${esc(T(name))}" ${active ? "active" : ""} ${narrow ? "narrow" : ""}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon></ha-tab></div>`;
+    const tabs = (narrow) =>
+      tab("tab-list", "book-open-page-variant-outline", "Recipes", v.name === "list", narrow) + tab("plan", "calendar-month-outline", "Meal plan", v.name === "plan", narrow);
+    if (this._brCompact()) {
+      return {
+        header: `${iconBtn("leave", "arrow-left", "Back")}${
+          v.name === "list"
+            ? `<ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>`
+            : `<h1>${esc(T("Meal plan"))}</h1>`
+        }`,
+        bottom: `<nav class="bottomtabs">${tabs(true)}</nav>`,
+      };
+    }
+    return {
+      header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : iconBtn("leave", "arrow-left", "Back")}<span class="hsp"></span><nav class="tabs">${tabs(false)}</nav><span class="hsp"></span>`,
+      bottom: "",
+    };
+  }
+
   _render() {
     const v = this._view;
+    this._fab = "";
+    // on a phone Home Assistant scrolls the page, not this panel: stay out of the way so the top bar can stick to it
+    this.classList.toggle("compact", this._brCompact());
     let body;
     if (!this._loaded) body = `<div class="empty">Loading…</div>`;
     else if (v.name === "detail" && this._recipe(v.id)) body = this._detailHtml(this._recipe(v.id));
@@ -633,16 +776,15 @@ class HassRecipesPanel extends HTMLElement {
     else if (v.name === "import") body = this._importHtml();
     else body = this._listHtml();
 
+    const chrome = this._chrome(v);
+    this._bottomBar = chrome.bottom;
     this.shadowRoot.innerHTML = `
       <style>${STYLE}</style>
-      <div class="sticky">
-        <header>
-          ${this._narrow ? `<button class="menu" data-act="menu" title="Menu">☰</button>` : ""}
-          <h1>Recipes</h1>
-        </header>
+      <div class="cq ${chrome.bottom ? "with-bar" : ""}"><div class="sticky">
+        <header>${chrome.header}</header>
         <div id="timers" class="timers"></div>
       </div>
-      <main class="${this._canEdit === false ? "ro" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main>`;
+      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<ha-alert alert-type="error">${esc(this._error)}</ha-alert>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
     this._timerSig = "";
     this._bind();
     this._autosizeAll();
@@ -653,19 +795,8 @@ class HassRecipesPanel extends HTMLElement {
       const cur = this.shadowRoot.querySelector(".cstep.current");
       if (cur) cur.scrollIntoView({ block: "center", behavior: "smooth" });
     }
+    if (!this.shadowRoot.getElementById("fdlg")) this._filterDlg = false;
     if (this._neFocus) this._neApplyFocus();
-    if (this._focusStep != null) {
-      const el = this.shadowRoot.querySelector(`.step[data-n="${this._focusStep}"] [data-f=text]`);
-      if (el) el.focus();
-      this._focusStep = null;
-    }
-    if (this._focusUid) {
-      const [uid, part] = this._focusUid.split(":");
-      const found = this.shadowRoot.querySelectorAll(`.ing-row[data-uid="${uid}"] [data-f=${part === "sub" ? "isub" : "itext"}]`);
-      const el = found[found.length - 1]; // a new substitute is the last one
-      if (el) el.focus();
-      this._focusUid = null;
-    }
   }
 
   _bind() {
@@ -674,28 +805,13 @@ class HassRecipesPanel extends HTMLElement {
 
     on("[data-open]", "click", (e) => this._go({ name: "detail", id: e.currentTarget.dataset.open }));
     this._bindPlan(root, on);
-    on("[data-facet]", "click", (e) => {
-      const { facet, value } = e.currentTarget.dataset;
-      const set = this._sel[facet];
-      if (!set.delete(value)) set.add(value);
-      this._render();
-    });
+    this._bindBrowser(root, on);
+    if (this._view.name === "detail") this._bindDetail(root, on);
     on("[data-cookbook]", "click", (e) => this._applyCookbook(e.currentTarget.dataset.cookbook));
-    on("input[data-fcb]", "change", (e) => {
-      const { fcb, value } = e.currentTarget.dataset;
-      if (e.currentTarget.checked) this._sel[fcb].add(value);
-      else this._sel[fcb].delete(value);
-      this._render();
-    });
     on("[data-tab-btn]", "click", (e) => {
       this._tab = e.currentTarget.dataset.tabBtn;
       this._render();
       this.scrollTo(0, 0);
-    });
-    on("[data-pick]", "click", (e) => {
-      const id = e.currentTarget.dataset.pick;
-      if (!this._picked.delete(id)) this._picked.add(id);
-      this._render();
     });
     on("[data-bulk]", "click", (e) => this._bulkAction(e.currentTarget.dataset.bulk));
     const bulkField = root.getElementById("bulk-field");
@@ -761,18 +877,6 @@ class HassRecipesPanel extends HTMLElement {
       this._saveProgress();
     });
 
-    const search = root.getElementById("search");
-    if (search) {
-      search.addEventListener("input", () => {
-        this._search = search.value;
-        const pos = search.selectionStart;
-        this._render();
-        const again = this.shadowRoot.getElementById("search");
-        again.focus();
-        again.setSelectionRange(pos, pos);
-      });
-    }
-
     on("[data-timer-key]", "click", (e) => {
       const r = this._recipe(this._view.id);
       const d = e.currentTarget.dataset;
@@ -782,7 +886,7 @@ class HassRecipesPanel extends HTMLElement {
     const toggleStep = (n) => this._setStepDone(n, !this._doneSteps.has(n));
     on("[data-step-toggle]", "click", (e) => {
       // links and the timer button inside a step keep their own behaviour
-      if (e.target.closest("button, a, input")) return;
+      if (e.target.closest("button, a, input, ha-button, ha-icon-button")) return;
       const sel = this.shadowRoot.getSelection ? this.shadowRoot.getSelection() : document.getSelection();
       if (sel && String(sel).trim()) return; // the user is selecting text, not tapping
       toggleStep(+e.currentTarget.dataset.stepToggle);
@@ -799,55 +903,11 @@ class HassRecipesPanel extends HTMLElement {
 
     const form = root.getElementById("form");
     if (form) {
-      this._bindMulti(root);
+      this._bindFormHa(root);
       form.addEventListener("submit", (e) => this._save(e, form));
-      this._bindFormDrag(form);
-      if (this._neOn()) {
-        this._bindEditor(form);
-        const meta = form.querySelector(".ne-meta");
-        if (meta) meta.addEventListener("toggle", () => (this._neMetaOpen = meta.open));
-      }
-      form.addEventListener("input", (e) => {
-        this._formDirty = true;
-        if (e.target.matches && e.target.matches("textarea[data-autosize]")) this._autosize(e.target);
-        if (e.target.matches && e.target.matches("[name=yield_amount],[name=yield_unit],[name=default_scale]")) {
-          const el = this.shadowRoot.getElementById("yield-preview");
-          if (el) {
-            const f = form.elements;
-            el.textContent = this._yieldPreview({
-              yield_amount: f.yield_amount.value,
-              yield_unit: f.yield_unit.value,
-              default_scale: f.default_scale.value,
-            });
-          }
-        }
-        if (e.target.matches && e.target.matches("[data-f=itext], .step.is-section [data-f=text]")) this._refreshChips();
-      });
+      this._bindEditor(form);
+      form.addEventListener("input", () => (this._formDirty = true));
       form.addEventListener("change", () => (this._formDirty = true));
-      form.addEventListener("paste", (e) => {
-        const row = e.target.closest && e.target.closest(".ing-row");
-        if (row && e.target.matches("[data-f=itext]")) this._pasteRows(e, row.dataset.uid);
-      });
-      form.addEventListener("keydown", (e) => {
-        // Enter in an ingredient row adds the next one instead of submitting.
-        if (e.key === "Enter" && e.target.matches && e.target.matches(".ing-row [data-f=itext]")) {
-          e.preventDefault();
-          this._rowAction("add", e.target.closest(".ing-row").dataset.uid);
-        }
-      });
-      form.addEventListener("click", (e) => {
-        const chip = e.target.closest(".step .chip[data-uid]");
-        if (chip) {
-          chip.classList.toggle("active");
-          this._formDirty = true;
-          this._refreshChips(); // the ingredient now appears (or disappears) in the other steps
-          return;
-        }
-        const rowBtn = e.target.closest("[data-row-act]");
-        if (rowBtn) return this._rowAction(rowBtn.dataset.rowAct, rowBtn.dataset.uid, rowBtn.dataset.i);
-        const btn = e.target.closest("[data-step-act]");
-        if (btn) this._stepAction(btn.dataset.stepAct, +btn.dataset.n, btn.dataset.t);
-      });
     }
     on("[data-open-new]", "click", async (e) => {
       e.preventDefault();
@@ -870,6 +930,54 @@ class HassRecipesPanel extends HTMLElement {
         break;
       case "import":
         this._go({ name: "import" });
+        break;
+      case "br-filters": {
+        if (this._brCompact()) {
+          this._filterDlg = true;
+        } else {
+          const b = this._brPrefs();
+          b.pane[this._narrow ? "narrow" : "wide"] = !this._brPaneOpen();
+          this._brSave();
+        }
+        this._render();
+        break;
+      }
+      case "new-dialog":
+        this._newDlg = true;
+        this._render();
+        break;
+      case "new-manual":
+        this._newDlg = false;
+        this._action("new");
+        break;
+      case "new-url":
+        this._newDlg = false;
+        this._action("import");
+        break;
+      case "br-filters-close":
+        this._filterDlg = false;
+        this._render();
+        break;
+      case "br-clear":
+        this._sel = { categories: new Set(), tools: new Set(), tags: new Set() };
+        this._search = "";
+        this._cookbookId = null;
+        this._render();
+        break;
+      case "br-dir": {
+        const b = this._brPrefs();
+        b.dir = b.dir === "asc" ? "desc" : "asc";
+        this._brSave();
+        this._render();
+        break;
+      }
+      case "leave":
+        // up to the Home Assistant overview, as the back arrow of its own pages leaves them
+        history.pushState(null, "", "/");
+        window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+        break;
+      case "tab-list":
+        this._go({ name: "list" });
         break;
       case "plan":
         this._planPending = null;
@@ -906,6 +1014,16 @@ class HassRecipesPanel extends HTMLElement {
       case "cook":
         this._go({ name: "cook", id, step: 0 }, true);
         break;
+      case "save": {
+        const f = this.shadowRoot.getElementById("form");
+        if (f) f.requestSubmit();
+        break;
+      }
+      case "image-pick": {
+        const f = this.shadowRoot.getElementById("image-file");
+        if (f) f.click();
+        break;
+      }
       case "image-clear":
         this._syncForm();
         this._form.image = "";
@@ -917,9 +1035,6 @@ class HassRecipesPanel extends HTMLElement {
         this._doneSteps = new Set();
         this._saveProgress();
         this._render();
-        break;
-      case "editor-toggle":
-        this._neToggle();
         break;
       case "data":
         this._dataMsg = null;

@@ -13,6 +13,33 @@
 
 const da = {
   exact: {
+    "Cook mode": "Madlavningstilstand",
+    "Create new recipe": "Opret ny opskrift",
+    "Start with an empty recipe from scratch": "Start med en tom opskrift",
+    "Import from a URL": "Importér fra en URL",
+    "Fetch a recipe from a web page": "Hent en opskrift fra en hjemmeside",
+    "Filters": "Filtre",
+    "Cards": "Kort",
+    "Rows": "Rækker",
+    "Sort direction": "Sorteringsretning",
+    "No grouping": "Ingen gruppering",
+    "Group by category": "Gruppér efter kategori",
+    "Group by cookbook": "Gruppér efter kogebog",
+    "Group by tag": "Gruppér efter tag",
+    "Group by tool": "Gruppér efter redskab",
+    "Sort by name": "Sortér efter navn",
+    "Sort by last changed": "Sortér efter senest ændret",
+    "Sort by time": "Sortér efter tid",
+    "Sort by servings": "Sortér efter portioner",
+    "No category": "Ingen kategori",
+    "No tools": "Ingen redskaber",
+    "No tags": "Ingen tags",
+    "No cookbook": "Ingen kogebog",
+    "Time": "Tid",
+    "Save current filters as cookbook": "Gem nuværende filtre som kogebog",
+    "Backup & migrate": "Backup og migrering",
+    "Group by": "Gruppér efter",
+    "Sort by": "Sortér efter",
     // browsing
     Recipes: "Opskrifter",
     Categories: "Kategorier",
@@ -56,6 +83,9 @@ const da = {
     Cook: "Lav mad",
     Shop: "Køb ind",
     Dashboard: "Dashboard",
+    "Add to the step you are writing": "Føj til det trin du skriver",
+    "Link the ingredients this step names": "Knyt de ingredienser trinnet nævner",
+    "Link the ingredients the steps name": "Knyt de ingredienser trinnene nævner",
     "Previous section": "Forrige sektion",
     "Next section": "Næste sektion",
     "New editor (beta)": "Ny editor (beta)",
@@ -137,6 +167,12 @@ const da = {
     Photo: "Foto",
     "Image URL, or upload a photo": "Billed-URL, eller upload et foto",
     "📷 Upload photo": "📷 Upload foto",
+    "Upload photo": "Upload foto",
+    "Uploading…": "Uploader…",
+    "Name is required.": "Navn skal udfyldes.",
+    "Unit, e.g. pancakes, cookies, buns": "Enhed, fx pandekager, kager, boller",
+    "Open the recipe at (× the written amounts)": "Åbn opskriften ved (× de skrevne mængder)",
+    "Expand or collapse": "Fold ud eller sammen",
     "The ingredients make": "Ingredienserne giver",
     "pancakes, cookies, buns…": "pandekager, småkager, boller…",
     "Open the recipe at": "Åbn opskriften med",
@@ -247,6 +283,9 @@ const da = {
   patterns: [
     [/\bStep (\d+) of (\d+)\b/g, "Trin $1 af $2"],
     [/^Step (\d+)$/, "Trin $1"],
+    [/^Search (\d+) recipes$/, "Søg i $1 opskrifter"],
+    [/^Show (\d+) recipes$/, "Vis $1 opskrifter"],
+    [/^(\d+) ingredients$/, "$1 ingredienser"],
     [/^(\d+) ingredients · (\d+) steps$/, "$1 ingredienser · $2 trin"],
     [/^(\d+) selected$/, "$1 valgt"],
     [/^Select all (\d+) shown$/, "Vælg alle $1 viste"],
@@ -296,7 +335,7 @@ export const translate = (language, text) => {
   return lead + core + trail;
 };
 
-const ATTRIBUTES = ["title", "placeholder", "aria-label"];
+const ATTRIBUTES = ["title", "placeholder", "aria-label", "label", "header", "header-title", "headline", "supporting-text"];
 const SKIP = new Set(["STYLE", "SCRIPT", "TEXTAREA", "INPUT"]);
 
 /** Translate every text node and label attribute under `root` (a node or shadow root). */
