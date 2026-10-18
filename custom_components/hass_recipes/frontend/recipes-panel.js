@@ -247,59 +247,61 @@ const STYLE = `
   .cook-jumps { display: inline-flex; gap: 6px; flex-wrap: wrap; }
   .step-text .ing-chip, .cook .cook-text .ing-chip, .cstep .cstep-text .ing-chip { display: inline-flex; padding: 0 8px; margin: 0 1px; font-size: .9em; vertical-align: baseline; }
   .timer-btn { margin-top: 10px; }
-  .form-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-  .form-title .btn { font-size: 13px; padding: 4px 10px; font-weight: 400; }
-  .ne-meta { margin-bottom: 16px; }
-  .ne-meta summary { cursor: pointer; color: var(--secondary-text-color); padding: 6px 0; }
-  .ne-card { background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: var(--ha-card-border-radius, 12px); margin: 0 0 14px; position: relative; }
-  .ne-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
-  .ne-title { flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; font-weight: 500; padding: 6px 4px; }
-  .ne-title:focus { outline: 2px solid var(--primary-color); border-radius: 6px; }
-  .ne-count { font-size: 12px; color: var(--secondary-text-color); white-space: nowrap; }
-  .ne-body { border-top: 1px solid var(--divider-color); padding: 6px 12px 12px; }
-  .ne-sub { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--secondary-text-color); margin: 12px 0 6px; }
-  .ne-icon, .ne-handle { background: none; border: 0; color: var(--secondary-text-color); cursor: pointer; padding: 4px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; font: inherit; }
-  .ne-icon:hover { background: var(--secondary-background-color); }
-  .ne-handle { cursor: grab; }
-  .ne-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
-  .ne-row .ne-qty { flex: 2 1 160px; width: auto; min-width: 0; }
-  .ne-row .ne-note { flex: 1 1 110px; width: auto; min-width: 0; font-size: 14px; }
-  .ne-sub-row { display: flex; gap: 6px; align-items: center; flex: 1 0 100%; padding-left: 34px; }
-  .ne-sub-row input { font-size: 14px; font-style: italic; }
-  .ne-step { display: flex; gap: 6px; align-items: flex-start; border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 6px 8px 4px; margin-bottom: 8px; background: var(--card-background-color); }
+  .ne-page { max-width: 900px; margin: 0 auto; padding: var(--ha-space-4, 16px); padding-bottom: 96px; display: flex; flex-direction: column; gap: var(--ha-space-4, 16px); }
+  .ne-meta-in { padding: var(--ha-space-4, 16px); display: flex; flex-direction: column; gap: var(--ha-space-2, 8px); }
+  .ne-meta-card ha-expansion-panel { --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0; }
+  .ne-photo { display: flex; align-items: center; gap: var(--ha-space-3, 12px); flex-wrap: wrap; padding: var(--ha-space-2, 8px) 0; }
+  .ne-photo .btns { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
+  .ne-card { display: block; }
+  .ne-head { display: flex; align-items: center; gap: var(--ha-space-1, 4px); padding: var(--ha-space-2, 8px) var(--ha-space-2, 8px) var(--ha-space-2, 8px) var(--ha-space-1, 4px); }
+  .ne-title { flex: 1; min-width: 0; --ha-input-height: 40px; }
+  .ne-count { font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); white-space: nowrap; margin-inline: var(--ha-space-2, 8px); }
+  .ne-body { border-top: 1px solid var(--divider-color); padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) var(--ha-space-4, 16px); }
+  .ne-sub { font-size: var(--ha-font-size-s, 12px); font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--secondary-text-color); margin: var(--ha-space-3, 12px) 0 var(--ha-space-2, 8px); }
+  .ne-handle { cursor: grab; color: var(--secondary-text-color); flex: none; }
+  .ne-row { display: flex; gap: var(--ha-space-1, 4px); align-items: center; flex-wrap: wrap; margin-bottom: var(--ha-space-2, 8px); }
+  .ne-row .ne-qty { flex: 2 1 160px; min-width: 0; }
+  .ne-row .ne-note { flex: 1 1 110px; min-width: 0; }
+  .ne-sub-row { display: flex; gap: var(--ha-space-1, 4px); align-items: center; flex: 1 0 100%; padding-inline-start: 48px; }
+  .ne-sub-row ha-input { flex: 1; min-width: 0; }
+  .ne-step { display: flex; gap: var(--ha-space-1, 4px); align-items: flex-start; border: 1px solid var(--divider-color); border-radius: var(--ha-border-radius-lg, 12px); padding: var(--ha-space-2, 8px) var(--ha-space-1, 4px); margin-bottom: var(--ha-space-2, 8px); background: var(--card-background-color); }
   .ne-step:focus-within { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
-  .ne-n { width: 22px; height: 22px; border-radius: 50%; background: var(--secondary-background-color); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; margin-top: 3px; flex: none; color: var(--secondary-text-color); }
+  .ne-n { width: 24px; height: 24px; margin-top: 12px; border-radius: 50%; flex: none; background: var(--secondary-background-color); font-size: var(--ha-font-size-s, 12px); display: inline-flex; align-items: center; justify-content: center; color: var(--secondary-text-color); }
   .ne-main { flex: 1; min-width: 0; position: relative; }
-  .ne-text { outline: none; line-height: 1.9; min-height: 1.9em; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ne-text { outline: none; line-height: 1.9; min-height: 1.9em; padding: var(--ha-space-2, 8px) 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--ha-font-size-m, 14px); }
   .ne-text:empty::before { content: attr(data-ph); color: var(--secondary-text-color); }
-  .ne-chip { display: inline-block; background: color-mix(in srgb, var(--primary-color) 16%, transparent); color: var(--primary-color); border-radius: 6px; padding: 0 6px; line-height: 1.55; font-size: .92em; margin: 0 1px; user-select: all; }
+  .ne-chip { display: inline-block; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 16%, transparent)); color: var(--ha-color-on-primary-quiet, var(--primary-color)); border-radius: var(--ha-border-radius-md, 8px); padding: 0 var(--ha-space-2, 8px); line-height: 1.6; margin: 0 1px; white-space: normal; }
   .ne-ins { visibility: hidden; }
   .ne-typing .ne-ins { visibility: visible; color: var(--primary-color); }
-  .ne-quick { display: none; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+  .ne-quick { display: none; flex-wrap: wrap; align-items: center; gap: var(--ha-space-1, 4px); margin-top: var(--ha-space-1, 4px); }
   .ne-step:focus-within .ne-quick { display: flex; }
-  .ne-quick-label { font-size: 12px; color: var(--secondary-text-color); margin-right: 2px; }
-  .ne-quick-chip { background: none; border: 1px dashed color-mix(in srgb, var(--primary-color) 50%, transparent); color: var(--primary-color); border-radius: 6px; padding: 0 8px; font: inherit; font-size: .92em; line-height: 1.55; cursor: pointer; text-align: left; }
-  .ne-quick-chip:hover { background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
+  .ne-quick-label { font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); margin-inline-end: 2px; }
+  .ne-quick-chip { cursor: pointer; --ha-assist-chip-container-shape: 10px; }
   .ne-quick-chip.used { opacity: .5; }
   .ne-extra { user-select: none; display: inline-flex; align-items: center; gap: 2px; margin: 2px 4px 2px 0; }
   .ne-extra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; display: inline-flex; --mdc-icon-size: 14px; }
-  .ne-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
-  .ne-timer { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--secondary-text-color); background: var(--secondary-background-color); border-radius: 8px; padding: 2px 6px; flex-wrap: wrap; }
-  .ne-timer input { width: 52px; padding: 3px 6px; font-size: 13px; }
-  .ne-timer input.ne-tl { width: 130px; }
-  .ne-pick { position: absolute; left: 0; right: 0; z-index: 5; margin-top: 2px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.2); max-height: 220px; overflow: auto; }
-  .ne-pick button { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; padding: 8px 12px; cursor: pointer; }
-  .ne-pick button.on, .ne-pick button:hover { background: color-mix(in srgb, var(--primary-color) 14%, transparent); }
-  .ne-add { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; background: none; border: 1px dashed var(--divider-color); border-radius: 10px; color: var(--primary-color); padding: 8px; cursor: pointer; font: inherit; margin-top: 2px; }
-  .ne-add:hover { background: color-mix(in srgb, var(--primary-color) 8%, transparent); }
-  .ne-add-section { margin-top: 0; }
-  .ne-pop { position: absolute; z-index: 20; min-width: 190px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.25); padding: 4px 0; }
-  .ne-pop button { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; padding: 8px 14px; cursor: pointer; }
-  .ne-pop button:hover { background: var(--secondary-background-color); }
-  .ne-pop button.danger { color: var(--error-color, #db4437); }
+  .ne-extras { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ha-space-1, 4px); margin-top: var(--ha-space-1, 4px); }
+  .ne-timer { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--ha-space-1, 4px); font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .ne-timer ha-input.nt { width: 84px; --ha-input-height: 40px; }
+  .ne-timer ha-input.ne-tl { width: 150px; --ha-input-height: 40px; }
+  .ne-pick { position: absolute; left: 0; right: 0; z-index: 5; margin-top: 2px; background: var(--card-background-color); border-radius: var(--ha-border-radius-lg, 12px); box-shadow: var(--ha-box-shadow-l, 0 4px 12px rgba(0,0,0,.25)); max-height: 260px; overflow: auto; }
+  .ne-pick[hidden] { display: none; }
+  .ne-pick ha-list-item-base.on { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, transparent)); }
+  .ne-body ha-button[data-ne-act] { margin-top: var(--ha-space-1, 4px); }
+  ha-button.ne-add-section { align-self: stretch; }
   .ne-dragging { opacity: .4; }
   .ne-drop { outline: 2px dashed var(--primary-color); border-radius: 8px; }
+  .drop-before { box-shadow: 0 -3px 0 var(--primary-color); }
+  .drop-after { box-shadow: 0 3px 0 var(--primary-color); }
   @media (pointer: coarse) { .ne-handle { display: none; } }
+  @container (max-width: 560px) {
+    .ne-page { padding: var(--ha-space-2, 8px); padding-bottom: 96px; gap: var(--ha-space-2, 8px); }
+    .ne-count { display: none; }
+    .ne-body { padding-inline: var(--ha-space-2, 8px); }
+    .ne-row .ne-qty { flex: 1 1 0; min-width: 120px; }
+    .ne-row .ne-note { flex: 1 0 100%; order: 5; }
+    .ne-sub-row { padding-inline-start: 0; }
+  }
   .facet-label { font-size: 12px; color: var(--secondary-text-color); align-self: center; text-transform: uppercase; letter-spacing: .04em; }
   .units { margin-left: auto; }
   .ing-text { display: flex; flex-direction: column; }
@@ -392,6 +394,7 @@ const STYLE = `
   .cook details { margin-top: 28px; }
   .cook summary { cursor: pointer; font-size: 1.1rem; }
   .error { color: var(--error-color, #db4437); margin: 8px 0; }
+  main > ha-alert { display: block; margin: var(--ha-space-2, 8px) var(--ha-space-4, 16px); }
   main.ro [data-act="new"], main.ro [data-act="edit"], main.ro [data-act="delete"], main.ro [data-act="import"],
   main.ro [data-act="data"], main.ro [data-act="select"], main.ro [data-act="plan-this"], main.ro [data-act="plan-copy"],
   main.ro [data-act="cookbook-save"], main.ro [data-act="cookbook-update"], main.ro [data-act="cookbook-delete"],
@@ -727,6 +730,9 @@ class HassRecipesPanel extends HTMLElement {
         bottom: "",
       };
     }
+    if (v.name === "edit") {
+      return { header: `${iconBtn("cancel", "arrow-left", "Back")}<div class="main-title"><b>${esc(T(v.id ? "Edit recipe" : "New recipe"))}</b></div>`, bottom: "" };
+    }
     if (!tabsView) return { header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : ""}<h1>Recipes</h1>`, bottom: "" };
     const tab = (act, icon, name, active, narrow) =>
       `<div class="tabwrap" data-act="${act}"><ha-tab name="${esc(T(name))}" ${active ? "active" : ""} ${narrow ? "narrow" : ""}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon></ha-tab></div>`;
@@ -778,7 +784,7 @@ class HassRecipesPanel extends HTMLElement {
         <header>${chrome.header}</header>
         <div id="timers" class="timers"></div>
       </div>
-      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
+      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<ha-alert alert-type="error">${esc(this._error)}</ha-alert>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
     this._timerSig = "";
     this._bind();
     this._autosizeAll();
@@ -897,26 +903,10 @@ class HassRecipesPanel extends HTMLElement {
 
     const form = root.getElementById("form");
     if (form) {
-      this._bindMulti(root);
+      this._bindFormHa(root);
       form.addEventListener("submit", (e) => this._save(e, form));
       this._bindEditor(form);
-      const meta = form.querySelector(".ne-meta");
-      if (meta) meta.addEventListener("toggle", () => (this._neMetaOpen = meta.open));
-      form.addEventListener("input", (e) => {
-        this._formDirty = true;
-        if (e.target.matches && e.target.matches("textarea[data-autosize]")) this._autosize(e.target);
-        if (e.target.matches && e.target.matches("[name=yield_amount],[name=yield_unit],[name=default_scale]")) {
-          const el = this.shadowRoot.getElementById("yield-preview");
-          if (el) {
-            const f = form.elements;
-            el.textContent = this._yieldPreview({
-              yield_amount: f.yield_amount.value,
-              yield_unit: f.yield_unit.value,
-              default_scale: f.default_scale.value,
-            });
-          }
-        }
-      });
+      form.addEventListener("input", () => (this._formDirty = true));
       form.addEventListener("change", () => (this._formDirty = true));
     }
     on("[data-open-new]", "click", async (e) => {
@@ -1024,6 +1014,16 @@ class HassRecipesPanel extends HTMLElement {
       case "cook":
         this._go({ name: "cook", id, step: 0 }, true);
         break;
+      case "save": {
+        const f = this.shadowRoot.getElementById("form");
+        if (f) f.requestSubmit();
+        break;
+      }
+      case "image-pick": {
+        const f = this.shadowRoot.getElementById("image-file");
+        if (f) f.click();
+        break;
+      }
       case "image-clear":
         this._syncForm();
         this._form.image = "";

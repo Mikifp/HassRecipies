@@ -1,6 +1,6 @@
 /* Recipes panel: form methods. Mixed into the panel class by recipes-panel.js. */
 export default function (h) {
-  const { esc, normStep, isHeader, headerText, splitSubs, joinSubs, fmtYield, lines, toInt } = h;
+  const { esc, T, normStep, isHeader, headerText, splitSubs, joinSubs, fmtYield, lines, toInt } = h;
   return {
     /** Downscale big photos in the browser (max 1600 px, JPEG) before uploading. */
     async _prepareImage(file) {
@@ -90,15 +90,102 @@ export default function (h) {
       this._formDirty = !id && !!this._draft;
     },
 
-    /** Copy what is currently typed in the edit form into this._form. */
+    /** Copy what is currently typed in the editor into this._form (the detail fields live in ha-form and are kept up to date as they change). */
     _syncForm() {
-      const form = this.shadowRoot.getElementById("form");
-      if (!form || !this._form) return;
-      for (const key of ["name", "description", "image", "servings", "yield_amount", "yield_unit", "default_scale", "prep_time", "cook_time", "total_time", "tags", "categories", "tools", "notes", "source_url"]) {
-        const el = form.elements[key];
-        if (el) this._form[key] = el.value;
-      }
+      if (!this._form) return;
       this._syncEditor();
+    },
+
+    /** this._form as the data of the detail ha-forms. */
+    _formData() {
+      const d = this._form;
+      const num = (v) => (v === "" || v == null || Number.isNaN(Number(v)) ? undefined : Number(v));
+      return {
+        name: d.name,
+        description: d.description,
+        image: d.image,
+        yield_amount: num(d.yield_amount),
+        yield_unit: d.yield_unit,
+        default_scale: num(d.default_scale),
+        servings: d.servings,
+        prep_time: num(d.prep_time),
+        cook_time: num(d.cook_time),
+        total_time: num(d.total_time),
+        categories: this._multiValues(d.categories),
+        tools: this._multiValues(d.tools),
+        tags: this._multiValues(d.tags),
+        notes: d.notes,
+        source_url: d.source_url,
+      };
+    },
+
+    _formSchema(part) {
+      const text = (name, extra = {}) => ({ name, selector: { text: extra } });
+      const num = (name, extra = {}) => ({ name, selector: { number: { min: 0, step: "any", mode: "box", ...extra } } });
+      const pick = (name) => ({
+        name,
+        selector: { select: { multiple: true, custom_value: true, mode: "dropdown", options: [...new Set([...this._usedValues(name), ...this._multiValues(this._form[name])])] } },
+      });
+      if (part === "top") return [{ ...text("name"), required: true }];
+      if (part === "bottom") return [text("notes", { multiline: true }), text("source_url", { type: "url" })];
+      return [
+        text("description", { multiline: true }),
+        text("image", { type: "url" }),
+        { type: "grid", name: "", schema: [num("yield_amount"), text("yield_unit")] },
+        num("default_scale", { min: 0.1 }),
+        { type: "grid", name: "", schema: [text("servings"), num("prep_time", { unit_of_measurement: "min" }), num("cook_time", { unit_of_measurement: "min" }), num("total_time", { unit_of_measurement: "min" })] },
+        pick("categories"),
+        pick("tools"),
+        pick("tags"),
+      ];
+    },
+
+    _formLabel(s) {
+      const labels = {
+        name: "Name",
+        description: "Description",
+        image: "Image URL, or upload a photo",
+        yield_amount: "The ingredients make",
+        yield_unit: "Unit, e.g. pancakes, cookies, buns",
+        default_scale: "Open the recipe at (× the written amounts)",
+        servings: "Servings",
+        prep_time: "Prep (min)",
+        cook_time: "Cook (min)",
+        total_time: "Total (min)",
+        categories: "Categories",
+        tools: "Tools",
+        tags: "Tags",
+        notes: "Notes",
+        source_url: "Source URL",
+      };
+      return T(labels[s.name] || s.name);
+    },
+
+    /** Give the detail ha-forms their schema and data, and keep this._form in step with them. */
+    _bindFormHa(root) {
+      root.querySelectorAll("ha-form[data-fpart]").forEach((f) => {
+        const part = f.dataset.fpart;
+        f.hass = this._hass;
+        f.schema = this._formSchema(part);
+        f.computeLabel = (s) => this._formLabel(s);
+        f.computeHelper = (s) => (s.name === "default_scale" ? this._yieldPreview(this._form) : "");
+        // each form owns only its own fields, so one cannot overwrite what another holds
+        const keys = new Set(f.schema.flatMap((s) => (s.type === "grid" ? s.schema.map((x) => x.name) : [s.name])));
+        const own = (data) => Object.fromEntries(Object.entries(data).filter(([k]) => keys.has(k)));
+        f.data = own(this._formData());
+        f.addEventListener("value-changed", (e) => {
+          e.stopPropagation();
+          const v = own(e.detail.value || {});
+          f.data = v;
+          const d = this._form;
+          for (const [k, val] of Object.entries(v)) {
+            d[k] = Array.isArray(val) ? val.join(", ") : val == null ? "" : typeof val === "number" ? val : String(val);
+          }
+          this._formDirty = true;
+        });
+      });
+      const meta = root.getElementById("ne-meta");
+      if (meta) meta.addEventListener("expanded-changed", (e) => (this._neMetaOpen = !!e.detail.expanded));
     },
 
     _yieldPreview(d) {
@@ -110,56 +197,30 @@ export default function (h) {
 
     _formHtml() {
       const d = this._form;
-      const f = (k) => esc(d[k] ?? "");
+      const img = esc(d.image || "");
+      this._fab = `<ha-button class="fab" size="l" data-act="save"><ha-icon slot="start" icon="mdi:content-save"></ha-icon>Save</ha-button>`;
       return `
-        <div class="panel">
-          <h2 class="form-title">${this._view.id ? "Edit recipe" : "New recipe"}</h2>
-          <form id="form" data-id="${esc(this._view.id || "")}">
-            <div class="field"><label class="lbl">Name</label><input name="name" required value="${f("name")}"></div>
-            <details class="ne-meta" ${this._neMetaOpen || !this._view.id ? "open" : ""}><summary>Details: photo, times, servings, tags</summary>
-            <div class="field"><label class="lbl">Description</label><textarea name="description" data-autosize rows="2">${f("description")}</textarea></div>
-            <div class="field"><label class="lbl">Photo</label>
-              <div class="img-field">
-                ${d.image ? `<img class="img-preview" src="${f("image")}" alt="">` : ""}
-                <div class="img-controls">
-                  <input name="image" placeholder="Image URL, or upload a photo" value="${f("image")}">
+        <form id="form" class="ne-page" data-id="${esc(this._view.id || "")}">
+          <ha-card class="ne-meta-card">
+            <div class="ne-meta-in">
+              <ha-form data-fpart="top"></ha-form>
+              <ha-expansion-panel id="ne-meta" left-chevron ${this._neMetaOpen || !this._view.id ? "expanded" : ""}>
+                <div slot="header">${esc(T("Details: photo, times, servings, tags"))}</div>
+                <div class="ne-photo">
+                  ${d.image ? `<img class="img-preview" src="${img}" alt="">` : ""}
                   <div class="btns">
-                    <label class="btn secondary">${this._imgBusy ? "Uploading…" : "📷 Upload photo"}
-                      <input type="file" id="image-file" accept="image/*" hidden ${this._imgBusy ? "disabled" : ""}></label>
-                    ${d.image ? `<button type="button" class="btn secondary" data-act="image-clear">Remove</button>` : ""}
+                    <ha-button appearance="outlined" size="s" data-act="image-pick" ${this._imgBusy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:camera-outline"></ha-icon>${this._imgBusy ? "Uploading…" : "Upload photo"}</ha-button>
+                    ${d.image ? `<ha-button appearance="plain" size="s" variant="danger" data-act="image-clear">Remove</ha-button>` : ""}
+                    <input type="file" id="image-file" accept="image/*" hidden ${this._imgBusy ? "disabled" : ""}>
                   </div>
                 </div>
-              </div>
+                <ha-form data-fpart="meta"></ha-form>
+              </ha-expansion-panel>
             </div>
-            <div class="field"><label class="lbl">Yield</label>
-              <div class="yield-row"><span>The ingredients make</span>
-                <input name="yield_amount" type="number" min="0" step="any" placeholder="8" value="${f("yield_amount")}" style="width:90px">
-                <input name="yield_unit" placeholder="pancakes, cookies, buns…" value="${f("yield_unit")}" style="flex:1;min-width:150px"></div>
-              <div class="yield-row"><span>Open the recipe at</span>
-                <input name="default_scale" type="number" min="0.1" step="any" value="${f("default_scale")}" style="width:80px">
-                <span>× the written amounts</span> <span class="muted" id="yield-preview">${esc(this._yieldPreview(d))}</span></div>
-            </div>
-            <div class="row field">
-              <div><label class="lbl">Servings</label><input name="servings" value="${f("servings")}"></div>
-              <div><label class="lbl">Prep (min)</label><input name="prep_time" type="number" min="0" value="${f("prep_time")}"></div>
-              <div><label class="lbl">Cook (min)</label><input name="cook_time" type="number" min="0" value="${f("cook_time")}"></div>
-              <div><label class="lbl">Total (min)</label><input name="total_time" type="number" min="0" value="${f("total_time")}"></div>
-            </div>
-            <div class="row field">
-              ${this._multiHtml("categories", "Categories", "category", d.categories)}
-              ${this._multiHtml("tools", "Tools", "tool", d.tools)}
-              ${this._multiHtml("tags", "Tags", "tag", d.tags)}
-            </div>
-            </details>
-            ${this._newEditorHtml()}
-            <div class="field"><label class="lbl">Notes</label><textarea name="notes" data-autosize rows="2">${f("notes")}</textarea></div>
-            <div class="field"><label class="lbl">Source URL</label><input name="source_url" value="${f("source_url")}"></div>
-            <div class="actions">
-              <button class="btn" type="submit">Save</button>
-              <button class="btn secondary" type="button" data-act="cancel">Cancel</button>
-            </div>
-          </form>
-        </div>`;
+          </ha-card>
+          ${this._newEditorHtml()}
+          <ha-card class="ne-meta-card"><div class="ne-meta-in"><ha-form data-fpart="bottom"></ha-form></div></ha-card>
+        </form>`;
     },
 
     /** Make a text box exactly as tall as its text. */
@@ -181,6 +242,11 @@ export default function (h) {
       e.preventDefault();
       this._syncForm();
       const d = this._form;
+      if (!String(d.name || "").trim()) {
+        this._error = T("Name is required.");
+        this._render();
+        return;
+      }
       // rows -> stored strings; remember each row's final index for step links
       const ingredients = [];
       const indexOf = new Map();
@@ -191,9 +257,9 @@ export default function (h) {
         ingredients.push(row.header ? `## ${text}` : joinSubs(text, row.subs, row.comment || ""));
       }
       const payload = {
-        name: d.name.trim(),
-        description: d.description.trim(),
-        image: d.image.trim(),
+        name: String(d.name).trim(),
+        description: String(d.description || "").trim(),
+        image: String(d.image || "").trim(),
         servings: String(d.servings).trim(),
         yield_amount: parseFloat(d.yield_amount) > 0 ? parseFloat(d.yield_amount) : null,
         yield_unit: String(d.yield_unit || "").trim(),
@@ -201,9 +267,9 @@ export default function (h) {
         prep_time: toInt(d.prep_time),
         cook_time: toInt(d.cook_time),
         total_time: toInt(d.total_time),
-        tags: d.tags.split(",").map((t) => t.trim()).filter(Boolean),
-        categories: d.categories.split(",").map((t) => t.trim()).filter(Boolean),
-        tools: d.tools.split(",").map((t) => t.trim()).filter(Boolean),
+        tags: this._multiValues(d.tags),
+        categories: this._multiValues(d.categories),
+        tools: this._multiValues(d.tools),
         ingredients,
         instructions: d.steps
           .filter((st) => st.text.trim())
@@ -223,8 +289,8 @@ export default function (h) {
               section: false,
             };
           }),
-        notes: d.notes.trim(),
-        source_url: d.source_url.trim(),
+        notes: String(d.notes || "").trim(),
+        source_url: String(d.source_url || "").trim(),
       };
       const id = form.dataset.id;
       try {

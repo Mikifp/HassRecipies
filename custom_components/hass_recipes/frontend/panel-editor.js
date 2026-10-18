@@ -1,7 +1,7 @@
-/* Recipes panel: the section-card editor ("new editor"). Mixed into the panel class by recipes-panel.js.
+/* Recipes panel: the section-card editor, built from Home Assistant's own ha-card, ha-input, ha-dropdown,
+ * ha-button, ha-icon-button and ha-assist-chip. Mixed into the panel class by recipes-panel.js.
  *
- * It edits the very same this._form as the classic form (flat ingredient rows and steps), so the
- * two editors can be switched between without losing anything. Here the flat lists are shown as
+ * It edits this._form (flat ingredient rows and steps). Here the flat lists are shown as
  * sections: a section holds its ingredients and its steps together. Ingredients a step uses are
  * chips inside the step text; the saved text keeps the plain word, the link is stored as before.
  */
@@ -146,17 +146,33 @@ export default function (h) {
     },
 
     // ---- rendering ----
+    /** A "more" menu: Home Assistant's ha-dropdown with ha-dropdown-items. */
+    _neMenuHtml(kind, d, items) {
+      const attrs = Object.entries(d).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ");
+      return `<ha-dropdown data-ne-menu="${kind}" ${attrs}>
+          <ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
+          ${items
+            .map((it) => `<ha-dropdown-item value="${esc(it.value)}" ${it.danger ? 'variant="danger"' : ""}>${icon(it.icon)}${esc(T(it.label))}</ha-dropdown-item>`.replace("<ha-icon ", '<ha-icon slot="icon" '))
+            .join("")}
+        </ha-dropdown>`;
+    },
+
     _neRowHtml(row) {
       return `<div class="ne-row" data-uid="${esc(row.uid)}">
-          <button type="button" class="ne-handle" draggable="true" data-ne-drag="row" title="Drag to reorder" aria-label="Drag to reorder">${icon("drag-vertical")}</button>
-          <input class="ne-qty" data-ne-f="text" placeholder="Ingredient, e.g. 200 g butter" value="${esc(row.text)}">
-          <input class="ne-note" data-ne-f="comment" placeholder="Note" value="${esc(row.comment || "")}">
-          <button type="button" class="ne-icon ne-ins" data-ne-act="row-insert" data-uid="${esc(row.uid)}" title="Add to the step you are writing" aria-label="Add to the step you are writing">${icon("text-box-plus-outline")}</button>
-          <button type="button" class="ne-icon" data-ne-act="row-menu" data-uid="${esc(row.uid)}" title="More" aria-label="More">${icon("dots-vertical")}</button>
+          <ha-icon-button class="ne-handle" draggable="true" data-ne-drag="row" label="${esc(T("Drag to reorder"))}">${icon("drag-vertical")}</ha-icon-button>
+          <ha-input class="ne-qty" appearance="outlined" data-ne-f="text" placeholder="${esc(T("Ingredient, e.g. 200 g butter"))}" value="${esc(row.text)}"></ha-input>
+          <ha-input class="ne-note" appearance="outlined" data-ne-f="comment" placeholder="${esc(T("Note"))}" value="${esc(row.comment || "")}"></ha-input>
+          <ha-icon-button class="ne-ins" data-ne-act="row-insert" data-uid="${esc(row.uid)}" label="${esc(T("Add to the step you are writing"))}">${icon("text-box-plus-outline")}</ha-icon-button>
+          ${this._neMenuHtml("row", { uid: row.uid }, [
+            { value: "sub-add", icon: "swap-horizontal", label: "Add substitute" },
+            { value: "row-up", icon: "arrow-up", label: "Move up" },
+            { value: "row-down", icon: "arrow-down", label: "Move down" },
+            { value: "row-remove", icon: "delete-outline", label: "Delete ingredient", danger: true },
+          ])}
           ${(row.subs || [])
             .map(
-              (sub, n) => `<div class="ne-sub-row"><input data-ne-f="sub" placeholder="Substitute with its own amount, e.g. 180 g coconut oil" value="${esc(sub)}">
-                <button type="button" class="ne-icon" data-ne-act="sub-remove" data-uid="${esc(row.uid)}" data-i="${n}" title="Remove">${icon("close")}</button></div>`
+              (sub, n) => `<div class="ne-sub-row"><ha-input appearance="outlined" data-ne-f="sub" placeholder="${esc(T("Substitute with its own amount, e.g. 180 g coconut oil"))}" value="${esc(sub)}"></ha-input>
+                <ha-icon-button data-ne-act="sub-remove" data-uid="${esc(row.uid)}" data-i="${n}" label="${esc(T("Remove"))}">${icon("close")}</ha-icon-button></div>`
             )
             .join("")}
         </div>`;
@@ -169,8 +185,9 @@ export default function (h) {
         const chips = step._chips && step._chipsText === step.text ? step._chips : [];
         return !chips.some((c) => c.uid === uid);
       });
+      const linkRows = sectionRows.filter((r) => r.text.trim());
       return `<div class="ne-step" data-uid="${esc(step.uid)}">
-          <button type="button" class="ne-handle" draggable="true" data-ne-drag="step" title="Drag to reorder" aria-label="Drag to reorder">${icon("drag-vertical")}</button>
+          <ha-icon-button class="ne-handle" draggable="true" data-ne-drag="step" label="${esc(T("Drag to reorder"))}">${icon("drag-vertical")}</ha-icon-button>
           <span class="ne-n">${num}</span>
           <div class="ne-main">
             <div class="ne-text" contenteditable="true" role="textbox" aria-multiline="true" data-ph="${esc(T("Describe what to do. Type @ to add an ingredient."))}">${textHtml}</div>
@@ -179,35 +196,43 @@ export default function (h) {
                 ? `<div class="ne-extras">${extras
                     .map(
                       (uid) =>
-                        `<span class="ne-chip ne-extra" data-uid="${esc(uid)}">${esc(chipLabel(rowsByUid.get(uid)))}<button type="button" data-ne-act="unlink" data-uid="${esc(uid)}" title="Remove" aria-label="Remove">${icon("close")}</button></span>`
+                        `<span class="ne-chip ne-extra" data-uid="${esc(uid)}">${esc(chipLabel(rowsByUid.get(uid)))}<button type="button" data-ne-act="unlink" data-uid="${esc(uid)}" title="${esc(T("Remove"))}" aria-label="${esc(T("Remove"))}">${icon("close")}</button></span>`
                     )
                     .join("")}
                   ${(step.timers || [])
                     .map(
                       (t, ti) => `<span class="ne-timer">${icon("clock-outline")}
-                      <input data-ne-f="th" type="number" min="0" step="1" placeholder="0" value="${esc(t.h)}" aria-label="Hours"><span>h</span>
-                      <input data-ne-f="tm" type="number" min="0" step="1" placeholder="0" value="${esc(t.m)}" aria-label="Minutes"><span>min</span>
-                      <input data-ne-f="ts" type="number" min="0" step="1" placeholder="0" value="${esc(t.s)}" aria-label="Seconds"><span>sec</span>
-                      <input data-ne-f="tl" class="ne-tl" placeholder="Label, e.g. simmer" value="${esc(t.label)}" maxlength="60">
-                      <button type="button" class="ne-icon" data-ne-act="timer-remove" data-uid="${esc(step.uid)}" data-i="${ti}" title="Remove this timer">${icon("close")}</button></span>`
+                      <ha-input class="nt" appearance="outlined" type="number" data-ne-f="th" placeholder="0" value="${esc(t.h)}" aria-label="${esc(T("Hours"))}"></ha-input><span>h</span>
+                      <ha-input class="nt" appearance="outlined" type="number" data-ne-f="tm" placeholder="0" value="${esc(t.m)}" aria-label="${esc(T("Minutes"))}"></ha-input><span>min</span>
+                      <ha-input class="nt" appearance="outlined" type="number" data-ne-f="ts" placeholder="0" value="${esc(t.s)}" aria-label="${esc(T("Seconds"))}"></ha-input><span>sec</span>
+                      <ha-input class="ne-tl" appearance="outlined" data-ne-f="tl" placeholder="${esc(T("Label, e.g. simmer"))}" value="${esc(t.label)}" maxlength="60"></ha-input>
+                      <ha-icon-button data-ne-act="timer-remove" data-uid="${esc(step.uid)}" data-i="${ti}" label="${esc(T("Remove this timer"))}">${icon("close")}</ha-icon-button></span>`
                     )
                     .join("")}</div>`
                 : ""
             }
             <div class="ne-pick" hidden></div>
-            ${(() => {
-              const quick = sectionRows.filter((r) => r.text.trim());
-              return quick.length
-                ? `<div class="ne-quick"><span class="ne-quick-label">${esc(T("Add"))}</span>${quick
+            ${
+              linkRows.length
+                ? `<div class="ne-quick"><span class="ne-quick-label">${esc(T("Add"))}</span>${linkRows
                     .map(
                       (r) =>
-                        `<button type="button" class="ne-quick-chip${(step.ingredients || []).includes(r.uid) ? " used" : ""}" data-ne-act="quick-insert" data-uid="${esc(r.uid)}">${esc(chipLabel(r))}</button>`
+                        `<ha-assist-chip class="ne-quick-chip${(step.ingredients || []).includes(r.uid) ? " used" : ""}" data-ne-act="quick-insert" data-uid="${esc(r.uid)}" label="${esc(chipLabel(r))}"></ha-assist-chip>`
                     )
                     .join("")}</div>`
-                : "";
-            })()}
+                : ""
+            }
           </div>
-          <button type="button" class="ne-icon" data-ne-act="step-menu" data-uid="${esc(step.uid)}" title="More" aria-label="More">${icon("dots-vertical")}</button>
+          ${this._neMenuHtml("step", { uid: step.uid }, [
+            ...linkRows.map((r) => ({ value: `link:${r.uid}`, icon: "link-variant", label: `${T("Link")}: ${r.text.trim().slice(0, 40)}` })),
+            { value: "timer-add", icon: "timer-outline", label: "Add timer" },
+            { value: "step-autolink", icon: "auto-fix", label: "Link the ingredients this step names" },
+            { value: "step-above", icon: "table-row-plus-before", label: "Insert step above" },
+            { value: "step-below", icon: "table-row-plus-after", label: "Insert step below" },
+            { value: "step-up", icon: "arrow-up", label: "Move up" },
+            { value: "step-down", icon: "arrow-down", label: "Move down" },
+            { value: "step-remove", icon: "delete-outline", label: "Delete step", danger: true },
+          ])}
         </div>`;
     },
 
@@ -221,21 +246,26 @@ export default function (h) {
         body = `<div class="ne-body">
             <div class="ne-sub">Ingredients</div>
             <div class="ne-list" data-ne-list="row" data-gi="${gi}">${g.rows.map((r) => this._neRowHtml(r)).join("")}</div>
-            <button type="button" class="ne-add" data-ne-act="row-add" data-gi="${gi}">${icon("plus")}Add ingredient</button>
+            <ha-button appearance="plain" size="s" data-ne-act="row-add" data-gi="${gi}">${icon("plus").replace("<ha-icon ", '<ha-icon slot="start" ')}Add ingredient</ha-button>
             <div class="ne-sub">Steps</div>
             <div class="ne-list" data-ne-list="step" data-gi="${gi}">${g.steps.map((s) => this._neStepHtml(s, ++ctx.num, ctx.rowsByUid, g.rows)).join("")}</div>
-            <button type="button" class="ne-add" data-ne-act="step-add" data-gi="${gi}">${icon("plus")}Add step</button>
+            <ha-button appearance="plain" size="s" data-ne-act="step-add" data-gi="${gi}">${icon("plus").replace("<ha-icon ", '<ha-icon slot="start" ')}Add step</ha-button>
           </div>`;
       } else g.steps.forEach(() => ctx.num++);
       const movable = gi > 0 || g.title.trim();
-      return `<div class="ne-card" data-gi="${gi}" data-key="${esc(key)}">
+      return `<ha-card class="ne-card" data-gi="${gi}" data-key="${esc(key)}">
           <div class="ne-head">
-            ${movable ? `<button type="button" class="ne-handle" draggable="true" data-ne-drag="group" title="Drag to reorder" aria-label="Drag to reorder">${icon("drag-vertical")}</button>` : ""}
-            <button type="button" class="ne-icon" data-ne-act="group-toggle" data-gi="${gi}" aria-label="Expand or collapse">${icon(collapsed ? "chevron-right" : "chevron-down")}</button>
-            <input class="ne-title" data-ne-f="title" placeholder="Section title (optional)" value="${esc(g.title)}">
+            ${movable ? `<ha-icon-button class="ne-handle" draggable="true" data-ne-drag="group" label="${esc(T("Drag to reorder"))}">${icon("drag-vertical")}</ha-icon-button>` : ""}
+            <ha-icon-button data-ne-act="group-toggle" data-gi="${gi}" label="${esc(T("Expand or collapse"))}">${icon(collapsed ? "chevron-right" : "chevron-down")}</ha-icon-button>
+            <ha-input class="ne-title" appearance="outlined" data-ne-f="title" placeholder="${esc(T("Section title (optional)"))}" value="${esc(g.title)}"></ha-input>
             <span class="ne-count">${count}</span>
-            <button type="button" class="ne-icon" data-ne-act="group-menu" data-gi="${gi}" title="More" aria-label="More">${icon("dots-vertical")}</button>
-          </div>${body}</div>`;
+            ${this._neMenuHtml("group", { gi }, [
+              { value: "group-autolink", icon: "auto-fix", label: "Link the ingredients the steps name" },
+              { value: "group-up", icon: "arrow-up", label: "Move up" },
+              { value: "group-down", icon: "arrow-down", label: "Move down" },
+              { value: "group-remove", icon: "delete-outline", label: "Delete section", danger: true },
+            ])}
+          </div>${body}</ha-card>`;
     },
 
     _newEditorHtml() {
@@ -247,7 +277,7 @@ export default function (h) {
       const hideLoose = fresh.length > 1 && !fresh[0].rows.length && !fresh[0].steps.length;
       return `<div class="ne" id="ne">
           ${fresh.map((g, gi) => (hideLoose && gi === 0 ? "" : this._neCardHtml(g, gi, ctx))).join("")}
-          <button type="button" class="ne-add ne-add-section" data-ne-act="section-add">${icon("plus")}Add section</button>
+          <ha-button appearance="outlined" class="ne-add-section" data-ne-act="section-add">${icon("plus").replace("<ha-icon ", '<ha-icon slot="start" ')}Add section</ha-button>
         </div>`;
     },
 
@@ -296,7 +326,12 @@ export default function (h) {
       this._neApply(groups);
       this._formDirty = true;
       this._neFocus = focus;
+      // the page is rebuilt: keep it where it was
+      const top = this.scrollTop;
+      const pageTop = window.scrollY;
       this._render();
+      this.scrollTop = top;
+      if (this._brCompact()) window.scrollTo(0, pageTop);
     },
 
     _neFind(groups, uid, kind) {
@@ -319,34 +354,6 @@ export default function (h) {
       const newStep = () => ({ uid: this._nextUid(), section: false, text: "", ingredients: [], timers: [] });
       const gi = Number(d.gi);
       switch (act) {
-        case "row-menu":
-          return this._neMenu(anchor, [
-            { label: "Add substitute", act: "sub-add", data: { uid: d.uid } },
-            { label: "Move up", act: "row-up", data: { uid: d.uid } },
-            { label: "Move down", act: "row-down", data: { uid: d.uid } },
-            { label: "Delete ingredient", act: "row-remove", data: { uid: d.uid }, danger: true },
-          ]);
-        case "step-menu": {
-          const hit = this._neFind(this._neCache || [], d.uid, "step");
-          const rows = hit ? hit.g.rows.filter((r) => r.text.trim()) : [];
-          return this._neMenu(anchor, [
-            ...rows.map((r) => ({ label: `${T("Link")}: ${r.text.trim().slice(0, 40)}`, act: "link", data: { uid: d.uid, row: r.uid } })),
-            { label: "Add timer", act: "timer-add", data: { uid: d.uid } },
-            { label: "Link the ingredients this step names", act: "step-autolink", data: { uid: d.uid } },
-            { label: "Insert step above", act: "step-above", data: { uid: d.uid } },
-            { label: "Insert step below", act: "step-below", data: { uid: d.uid } },
-            { label: "Move up", act: "step-up", data: { uid: d.uid } },
-            { label: "Move down", act: "step-down", data: { uid: d.uid } },
-            { label: "Delete step", act: "step-remove", data: { uid: d.uid }, danger: true },
-          ]);
-        }
-        case "group-menu":
-          return this._neMenu(anchor, [
-            { label: "Link the ingredients the steps name", act: "group-autolink", data: { gi } },
-            { label: "Move up", act: "group-up", data: { gi } },
-            { label: "Move down", act: "group-down", data: { gi } },
-            { label: "Delete section", act: "group-remove", data: { gi }, danger: true },
-          ]);
         case "row-insert":
         case "quick-insert":
           return this._neInsertAtCaret(d.uid);
@@ -465,34 +472,6 @@ export default function (h) {
       }
     },
 
-    _neMenu(anchor, items) {
-      this._neCloseMenu();
-      const pop = document.createElement("div");
-      pop.className = "ne-pop";
-      pop.innerHTML = items
-        .map((it, i) => `<button type="button" data-i="${i}" class="${it.danger ? "danger" : ""}">${esc(T(it.label))}</button>`)
-        .join("");
-      const box = anchor.getBoundingClientRect();
-      const host = this.getBoundingClientRect();
-      pop.style.top = `${box.bottom - host.top + this.scrollTop + 2}px`;
-      pop.style.left = `${Math.max(8, box.right - host.left - 200)}px`;
-      pop.addEventListener("mousedown", (e) => e.preventDefault());
-      pop.addEventListener("click", (e) => {
-        const b = e.target.closest("button[data-i]");
-        if (!b) return;
-        const it = items[Number(b.dataset.i)];
-        this._neCloseMenu();
-        this._neAction(it.act, it.data || {}, anchor);
-      });
-      this.shadowRoot.appendChild(pop);
-      this._nePop = pop;
-    },
-
-    _neCloseMenu() {
-      if (this._nePop) this._nePop.remove();
-      this._nePop = null;
-    },
-
     _neApplyFocus() {
       const f = this._neFocus;
       this._neFocus = null;
@@ -502,7 +481,6 @@ export default function (h) {
       if (f.last) {
         const cards = root.querySelectorAll(".ne-card");
         el = cards.length ? cards[cards.length - 1].querySelector("[data-ne-f=title]") : null;
-        if (el) el.select();
       } else if (f.uid) {
         el = root.querySelector(`.ne-row[data-uid="${f.uid}"] [data-ne-f=text]`) || root.querySelector(`.ne-step[data-uid="${f.uid}"] .ne-text`);
         if (el && el.classList.contains("ne-text")) {
@@ -517,8 +495,13 @@ export default function (h) {
         }
       }
       if (el) {
-        el.focus();
-        if (el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+        // Home Assistant's inputs finish rendering a moment after they are added
+        Promise.resolve(el.updateComplete).then(() => {
+          if (!el.isConnected) return;
+          if (el.select && f.last) el.select();
+          el.focus();
+          if (el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+        });
       }
     },
 
@@ -631,10 +614,10 @@ export default function (h) {
 
     _neRenderPicker(box) {
       const p = this._nePick;
-      const items = p.options.map(
-        (o, i) => `<button type="button" data-i="${i}" class="${i === p.index ? "on" : ""}">${esc(o.text.trim())}</button>`
-      );
-      if (p.query) items.push(`<button type="button" data-new="1" class="${p.index === p.options.length ? "on" : ""}">${esc(T("New ingredient"))} “${esc(p.query)}”</button>`);
+      const item = (attrs, on, text, ic) =>
+        `<ha-list-item-base interactive class="${on ? "on" : ""}" ${attrs}><span slot="headline">${esc(text)}</span>${ic ? `<ha-icon slot="start" icon="mdi:${ic}"></ha-icon>` : ""}</ha-list-item-base>`;
+      const items = p.options.map((o, i) => item(`data-i="${i}"`, i === p.index, o.text.trim()));
+      if (p.query) items.push(item('data-new="1"', p.index === p.options.length, `${T("New ingredient")} “${p.query}”`, "plus"));
       if (!items.length) {
         box.hidden = true;
         return;
@@ -701,6 +684,21 @@ export default function (h) {
 
     // ---- events ----
     _bindEditor(form) {
+      // the "more" menus
+      form.addEventListener("wa-select", (e) => {
+        const dd = e.target.closest && e.target.closest("ha-dropdown[data-ne-menu]");
+        const value = e.detail && e.detail.item && e.detail.item.value;
+        if (!dd || !value) return;
+        e.stopPropagation();
+        const d = { ...dd.dataset };
+        delete d.neMenu;
+        let act = value;
+        if (value.startsWith("link:")) {
+          act = "link";
+          d.row = value.slice(5);
+        }
+        this._neAction(act, d, dd);
+      });
       form.addEventListener("click", (e) => {
         const act = e.target.closest("[data-ne-act]");
         if (act) {
@@ -710,13 +708,12 @@ export default function (h) {
           this._neAction(act.dataset.neAct, d, act);
           return;
         }
-        const pick = e.target.closest(".ne-pick button");
+        const pick = e.target.closest(".ne-pick [data-i], .ne-pick [data-new]");
         if (pick && this._nePick) {
           if (pick.dataset.new) this._neInsertChip(null, this._nePick.query);
           else this._neInsertChip(this._nePick.options[Number(pick.dataset.i)].row, null);
           return;
         }
-        this._neCloseMenu();
       });
       // keep the caret in the text when a picker option is pressed
       form.addEventListener("mousedown", (e) => {
@@ -756,7 +753,8 @@ export default function (h) {
           const uid = e.target.closest(".ne-row").dataset.uid;
           form.querySelectorAll(`.ne-chip[data-uid="${uid}"], .ne-quick-chip[data-uid="${uid}"]`).forEach((chip) => {
             const label = e.target.value.trim();
-            if (chip.classList.contains("ne-extra")) chip.firstChild.nodeValue = label;
+            if (chip.classList.contains("ne-quick-chip")) chip.setAttribute("label", label);
+            else if (chip.classList.contains("ne-extra")) chip.firstChild.nodeValue = label;
             else chip.textContent = label;
           });
         }
