@@ -19,7 +19,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .images import MAX_IMAGE_BYTES, image_url
 from .mealplan import MealPlanError
 from .migrate import from_mealie
-from .scraper import RecipeImportError, async_import_url
+from .scraper import RecipeImportError, async_import_html, async_import_url
 from .store import RecipeStore
 
 _STEP = vol.Schema(
@@ -119,6 +119,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_delete,
         ws_import_url,
         ws_import_urls,
+        ws_import_html,
         ws_bulk_update,
         ws_bulk_delete,
         ws_cookbook_create,
@@ -317,6 +318,26 @@ async def ws_import_url(
         return
     result = _store(hass).create(data) if msg["save"] else data
     connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/import_html",
+        vol.Required("html"): vol.All(str, vol.Length(min=1)),
+        vol.Optional("url", default=""): str,
+    }
+)
+@websocket_api.async_response
+async def ws_import_html(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Parse pasted page source into a recipe preview (nothing is saved until the editor is saved)."""
+    try:
+        data = await async_import_html(msg["html"], msg["url"])
+    except RecipeImportError as err:
+        connection.send_error(msg["id"], "import_failed", str(err))
+        return
+    connection.send_result(msg["id"], data)
 
 
 _MAX_BULK = 25

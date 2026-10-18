@@ -397,6 +397,13 @@ def recipe_from_node(node: dict[str, Any], page: str, url: str) -> dict[str, Any
     }
 
 
+async def async_import_html(page: str, url: str = "") -> dict[str, Any]:
+    """Parse a recipe from page source the user pasted (for sites that refuse automated requests)."""
+    if len(page) > _MAX_BYTES:
+        raise RecipeImportError("That page source is too large")
+    return await asyncio.get_running_loop().run_in_executor(None, parse_page, page, url.strip())
+
+
 async def async_import_url(session: ClientSession, url: str) -> dict[str, Any]:
     """Fetch a URL and parse the recipe on it."""
     parsed = urlparse(url)

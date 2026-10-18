@@ -917,6 +917,8 @@ class HassRecipesPanel extends HTMLElement {
     });
     const imp = root.getElementById("import");
     if (imp) imp.addEventListener("submit", (e) => this._import(e, imp));
+    const impHtml = root.getElementById("import-html");
+    if (impHtml) impHtml.addEventListener("submit", (e) => this._importHtml2(e, impHtml));
   }
 
   async _action(act, id) {

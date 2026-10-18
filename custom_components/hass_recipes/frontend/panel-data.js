@@ -169,7 +169,31 @@ export default function (h) {
               <button class="btn secondary" type="button" data-act="cancel">Cancel</button>
             </div>
           </form>
+        </div>
+        <div class="panel" style="margin-top:16px">
+          <h2>Import from page source</h2>
+          <p class="muted">Some sites refuse automated requests (error 403). Open the recipe in your browser, view the page source (Ctrl+U), select all, copy, and paste it here.</p>
+          <form id="import-html">
+            <div class="field"><textarea name="html" rows="5" required placeholder="&lt;html&gt;…"></textarea></div>
+            <div class="field"><input name="url" type="url" placeholder="Recipe URL (optional, kept as the source)"></div>
+            <div class="actions"><button class="btn" type="submit" id="import-html-btn">Import</button></div>
+          </form>
         </div>`;
+    },
+
+    async _importHtml2(e, form) {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const btn = this.shadowRoot.getElementById("import-html-btn");
+      btn.disabled = true;
+      btn.textContent = "Importing…";
+      try {
+        this._draft = await this._ws({ type: "hass_recipes/import_html", html: fd.get("html"), url: String(fd.get("url") || "").trim() });
+        this._go({ name: "edit" });
+      } catch (err) {
+        this._error = err.message || String(err);
+        this._render();
+      }
     },
 
     async _import(e, form) {

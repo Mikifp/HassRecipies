@@ -212,6 +212,9 @@ const da = {
     // import / export
     Import: "Importér",
     "Import from URL": "Importér fra URL",
+    "Import from page source": "Importér fra sidens kildekode",
+    "Some sites refuse automated requests (error 403). Open the recipe in your browser, view the page source (Ctrl+U), select all, copy, and paste it here.": "Nogle sider afviser automatiske forespørgsler (fejl 403). Åbn opskriften i din browser, vis sidens kildekode (Ctrl+U), markér alt, kopiér og indsæt den her.",
+    "Recipe URL (optional, kept as the source)": "Opskriftens URL (valgfri, gemmes som kilde)",
     "Import a file": "Importér en fil",
     "Import finished": "Import færdig",
     "Paste one URL to review it before saving, or several (one per line, up to 25) to import them all at once.":
