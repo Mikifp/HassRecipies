@@ -684,6 +684,11 @@ export default function (h) {
 
     // ---- events ----
     _bindEditor(form) {
+      // Home Assistant opens the command palette on "c", Assist on "a" and so on, unless the key is typed into
+      // a text box it recognises. The step text is an editable area it does not, so keep typing inside the form.
+      form.addEventListener("keydown", (e) => {
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) e.stopPropagation();
+      });
       // the "more" menus
       form.addEventListener("wa-select", (e) => {
         const dd = e.target.closest && e.target.closest("ha-dropdown[data-ne-menu]");
