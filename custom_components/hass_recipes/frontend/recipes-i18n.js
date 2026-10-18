@@ -324,7 +324,7 @@ export const translate = (language, text) => {
   return lead + core + trail;
 };
 
-const ATTRIBUTES = ["title", "placeholder", "aria-label"];
+const ATTRIBUTES = ["title", "placeholder", "aria-label", "label", "header"];
 const SKIP = new Set(["STYLE", "SCRIPT", "TEXTAREA", "INPUT"]);
 
 /** Translate every text node and label attribute under `root` (a node or shadow root). */

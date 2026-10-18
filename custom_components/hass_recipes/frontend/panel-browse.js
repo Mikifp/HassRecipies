@@ -139,79 +139,24 @@ export default function (h) {
           ${this._canEdit !== false && !this._select ? `<button type="button" class="rpen" data-edit="${esc(r.id)}" title="Edit" aria-label="Edit"><ha-icon icon="mdi:pencil"></ha-icon></button>` : ""}</div>`;
     },
 
-    _brTable(groups) {
-      const { sort, dir, collapsed } = this._brPrefs();
-      const arrow = (k) => (sort === k ? `<ha-icon class="sarrow" icon="mdi:arrow-${dir === "asc" ? "up" : "down"}"></ha-icon>` : "");
-      const head = `<tr><th class="c-pic"></th><th data-sort="name"><span class="thl">${arrow("name")}Name</span></th><th class="c-hide">Category</th><th class="c-hide">Tools</th><th data-sort="time"><span class="thl">${arrow("time")}Time</span></th><th data-sort="servings" class="c-hide"><span class="thl">${arrow("servings")}Servings</span></th></tr>`;
-      const rowFor = (r) => {
-        const picked = this._picked.has(r.id);
-        return `<tr class="${picked ? "picked" : ""}" ${this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`}>
-            <td class="c-pic"><div class="rpic mini-pic" ${this._brImg(r)}>${this._select ? (picked ? "✓" : "") : r.image ? "" : `<ha-icon icon="mdi:silverware-fork-knife"></ha-icon>`}</div></td>
-            <td class="c-name">${esc(r.name)}</td><td class="c-hide">${esc((r.categories || []).join(", "))}</td><td class="c-hide">${esc((r.tools || []).join(", "))}</td>
-            <td>${minutes(this._recipeTime(r))}</td><td class="c-hide">${esc(r.servings || "")}</td></tr>`;
-      };
-      const body = groups
-        .map((g) => {
-          const closed = g.key && collapsed.has(g.key);
-          const gh = g.key
-            ? `<tr class="grow" data-group="${esc(g.key)}"><td colspan="6"><div class="gcell"><ha-icon icon="mdi:chevron-${closed ? "down" : "up"}"></ha-icon><span>${esc(g.title)}</span><em>${g.items.length}</em></div></td></tr>`
-            : "";
-          return gh + (closed ? "" : g.items.map(rowFor).join(""));
-        })
-        .join("");
-      return `<table class="rtable"><thead>${head}</thead><tbody>${body}</tbody></table>`;
-    },
-
-    /** The filter sections, shared by the side pane and the phone dialog. */
-    _brSections(values, count) {
+    // ---- the toolbar, filters and table are Home Assistant's own elements (ha-assist-chip, ha-dropdown,
+    //      ha-input-search, ha-expansion-panel, ha-checkbox, ha-button and ha-data-table) ----
+    _brModel() {
       const b = this._brPrefs();
-      const sec = (id, title, inner) =>
-        `<details class="fsec" data-sec="${id}" ${b.secs.has(id) ? "open" : ""}><summary><ha-icon class="fchev" icon="mdi:chevron-down"></ha-icon>${title}</summary>${inner}</details>`;
-      const icons = { categories: "folder-outline", tools: "tools", tags: "tag-outline" };
-      this._fq = this._fq || {};
-      const facet = (kind, label) => {
-        const vals = values(kind);
-        if (!vals.length) return "";
-        const q = (this._fq[kind] || "").toLowerCase();
-        const search =
-          vals.length > 6
-            ? `<div class="fsearch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" data-fsearch="${kind}" placeholder="Search" value="${esc(this._fq[kind] || "")}"></div>`
-            : "";
-        return sec(
-          kind,
-          label,
-          search +
-            vals
-              .map(
-                (v) =>
-                  `<label class="fit" ${q && !v.toLowerCase().includes(q) ? "hidden" : ""}><ha-icon icon="mdi:${icons[kind]}"></ha-icon><span>${esc(v)}</span><em>${count(kind, v)}</em><input type="checkbox" data-fcb="${kind}" data-value="${esc(v)}" ${this._sel[kind].has(v) ? "checked" : ""}></label>`
-              )
-              .join("")
-        );
+      const q = this._search.trim().toLowerCase();
+      const shown = this._brSorted(this._recipes.filter((r) => this._matches(r, this._sel, q)));
+      const compact = this._brCompact();
+      return {
+        b,
+        shown,
+        groups: this._brGroups(shown),
+        values: (kind) =>
+          [...new Set(this._recipes.flatMap((r) => r[kind] || []))].sort((x, y) => x.localeCompare(y, undefined, { sensitivity: "base" })),
+        count: (kind, v) => this._recipes.filter((r) => (r[kind] || []).includes(v)).length,
+        nFilters: this._sel.categories.size + this._sel.tools.size + this._sel.tags.size + (this._cookbookId ? 1 : 0),
+        compact,
+        paneOpen: !compact && this._brPaneOpen(),
       };
-      const filtersOn = this._search.trim() || Object.values(this._sel).some((set) => set.size);
-      const cookbookActions =
-        this._canEdit === false
-          ? ""
-          : this._cookbookId
-            ? `<div class="fact"><button class="tbtn" data-act="cookbook-update">Save filters to this cookbook</button><button class="tbtn danger" data-act="cookbook-delete">Delete cookbook</button></div>`
-            : filtersOn
-              ? `<div class="fact"><button class="tbtn" data-act="cookbook-save">Save current filters as cookbook</button></div>`
-              : "";
-      return (
-        sec(
-          "cookbooks",
-          "Cookbooks",
-          `<div class="fit cbk ${this._cookbookId ? "" : "on"}" data-cookbook=""><ha-icon icon="mdi:book-multiple-outline"></ha-icon><span>All recipes</span><em>${this._recipes.length}</em></div>` +
-            this._cookbooks
-              .map((c) => `<div class="fit cbk ${c.id === this._cookbookId ? "on" : ""}" data-cookbook="${esc(c.id)}"><ha-icon icon="mdi:book-open-page-variant-outline"></ha-icon><span>${esc(c.name)}</span></div>`)
-              .join("") +
-            cookbookActions
-        ) +
-        facet("categories", "Categories") +
-        facet("tools", "Tools") +
-        facet("tags", "Tags")
-      );
     },
 
     _brActive() {
@@ -223,44 +168,114 @@ export default function (h) {
       return (this.clientWidth || 1000) < 700;
     },
 
-    _brPane(values, count) {
+    _brChip(attrs, icon, label = "", trailing = "") {
+      return `<ha-assist-chip ${attrs} ${label ? `label="${esc(label)}"` : ""}>${icon ? `<ha-icon slot="icon" icon="mdi:${icon}"></ha-icon>` : ""}${
+        trailing ? `<ha-icon slot="trailing-icon" icon="mdi:${trailing}"></ha-icon>` : ""
+      }</ha-assist-chip>`;
+    },
+
+    /** The filter sections, shared by the side pane and the phone dialog. */
+    _brSections(values, count) {
+      const b = this._brPrefs();
+      this._fq = this._fq || {};
+      const icons = { categories: "folder-outline", tools: "tools", tags: "tag-outline" };
+      const sec = (id, title, inner) =>
+        `<ha-expansion-panel class="fsec" data-sec="${id}" header="${esc(title)}" left-chevron ${b.secs.has(id) ? "expanded" : ""}>${inner}</ha-expansion-panel>`;
+      const facet = (kind, label) => {
+        const vals = values(kind);
+        if (!vals.length) return "";
+        const q = (this._fq[kind] || "").toLowerCase();
+        const search = vals.length > 6 ? `<div class="fsearch"><ha-input-search appearance="outlined" data-fsearch="${kind}" placeholder="Search"></ha-input-search></div>` : "";
+        return sec(
+          kind,
+          label,
+          search +
+            vals
+              .map(
+                (v) =>
+                  `<div class="fit" data-fitem="${kind}" data-value="${esc(v)}" ${q && !v.toLowerCase().includes(q) ? "hidden" : ""}><ha-icon icon="mdi:${icons[kind]}"></ha-icon><span>${esc(v)}</span><em>${count(kind, v)}</em><ha-checkbox ${
+                    this._sel[kind].has(v) ? "checked" : ""
+                  }></ha-checkbox></div>`
+              )
+              .join("")
+        );
+      };
+      const filtersOn = this._search.trim() || Object.values(this._sel).some((set) => set.size);
+      const act = (name, label, extra = "") => `<ha-button appearance="plain" size="s" data-act="${name}" ${extra}>${label}</ha-button>`;
+      const cookbookActions =
+        this._canEdit === false
+          ? ""
+          : this._cookbookId
+            ? `<div class="fact">${act("cookbook-update", "Save filters to this cookbook")}${act("cookbook-delete", "Delete cookbook", 'variant="danger"')}</div>`
+            : filtersOn
+              ? `<div class="fact">${act("cookbook-save", "Save current filters as cookbook")}</div>`
+              : "";
+      return (
+        sec(
+          "cookbooks",
+          "Cookbooks",
+          `<div class="fit cbk ${this._cookbookId ? "" : "on"}" data-cookbook=""><ha-icon icon="mdi:book-multiple-outline"></ha-icon><span>All recipes</span><em>${this._recipes.length}</em></div>` +
+            this._cookbooks
+              .map(
+                (c) =>
+                  `<div class="fit cbk ${c.id === this._cookbookId ? "on" : ""}" data-cookbook="${esc(c.id)}"><ha-icon icon="mdi:book-open-page-variant-outline"></ha-icon><span>${esc(c.name)}</span></div>`
+              )
+              .join("") +
+            cookbookActions
+        ) +
+        facet("categories", "Categories") +
+        facet("tools", "Tools") +
+        facet("tags", "Tags")
+      );
+    },
+
+    _brPane(m) {
       return `<aside class="fpane"><div class="fpane-in">
-          <div class="fhead"><button type="button" class="bbtn on" data-act="br-filters"><ha-icon icon="mdi:filter-variant"></ha-icon><span class="lbl">Filters</span></button>${
-            this._brActive() ? `<button type="button" class="tbtn" data-act="br-clear">Clear</button>` : ""
+          <div class="fhead">${this._brChip('data-act="br-filters" active', "filter-variant", T("Filters"))}${
+            this._brActive() ? `<ha-button appearance="plain" size="s" data-act="br-clear">Clear</ha-button>` : ""
           }</div>
-          ${this._brSections(values, count)}
+          ${this._brSections(m.values, m.count)}
         </div></aside>`;
     },
 
-    _brDialog(values, count, shown) {
+    _brDialog(m) {
       return `<dialog class="fdlg" id="fdlg">
           <div class="dh"><button type="button" class="dclose" data-act="br-filters-close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button><b>Filters</b>${
-            this._brActive() ? `<button type="button" class="tbtn" data-act="br-clear">Clear</button>` : ""
+            this._brActive() ? `<ha-button appearance="plain" size="s" data-act="br-clear">Clear</ha-button>` : ""
           }</div>
-          <div class="dlgbody">${this._brSections(values, count)}</div>
-          <div class="dfoot"><button type="button" class="btn" data-act="br-filters-close">Show ${shown} recipes</button></div>
+          <div class="dlgbody">${this._brSections(m.values, m.count)}</div>
+          <div class="dfoot"><ha-button size="m" data-act="br-filters-close">Show ${m.shown.length} recipes</ha-button></div>
         </dialog>`;
     },
 
-    _listHtml() {
-      const b = this._brPrefs();
-      const q = this._search.trim().toLowerCase();
-      const matched = this._recipes.filter((r) => this._matches(r, this._sel, q));
-      const shown = this._brSorted(matched);
-      const values = (kind) =>
-        [...new Set(this._recipes.flatMap((r) => r[kind] || []))].sort((x, y) =>
-          x.localeCompare(y, undefined, { sensitivity: "base" })
-        );
-      const count = (kind, v) => this._recipes.filter((r) => (r[kind] || []).includes(v)).length;
-      const nFilters = this._sel.categories.size + this._sel.tools.size + this._sel.tags.size + (this._cookbookId ? 1 : 0);
-      const compact = this._brCompact();
-      const paneOpen = !compact && this._brPaneOpen();
-      const groups = this._brGroups(shown);
+    _brToolbar(m) {
+      const { b } = m;
+      const item = (value, label, cur, extra = "") =>
+        `<ha-dropdown-item value="${value}" ${cur === value ? "data-sel" : ""}>${extra}${esc(T(label))}</ha-dropdown-item>`;
+      const groups = [["none", "No grouping"], ["category", "Category"], ["cookbook", "Cookbook"], ["tag", "Tag"], ["tool", "Tool"]];
+      const sorts = [["name", "Name"], ["updated", "Last changed"], ["time", "Time"], ["servings", "Servings"]];
+      const arrow = `<ha-icon slot="details" icon="mdi:arrow-${b.dir === "asc" ? "up" : "down"}"></ha-icon>`;
+      const label = (list, cur) => (list.find(([v]) => v === cur) || list[0])[1];
+      const view = (v, icon, title, first, last) =>
+        `<ha-button size="s" appearance="${b.view === v ? "accent" : "filled"}" data-view="${v}" title="${title}" style="--ha-button-border-radius:${first ? "16px 0 0 16px" : last ? "0 16px 16px 0" : "0"}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon></ha-button>`;
+      return `<div class="btool">
+          ${m.paneOpen ? "" : `<span class="chipwrap">${this._brChip(`data-act="br-filters" ${this._filterDlg ? "active" : ""}`, "filter-variant", T("Filters"))}${m.nFilters ? `<span class="bcount">${m.nFilters}</span>` : ""}</span>`}
+          ${this._canEdit === false ? "" : this._brChip(`class="select-mode-chip" data-act="select" ${this._select ? "active" : ""}`, "format-list-checks")}
+          <ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>
+          <ha-dropdown id="br-group"><span slot="trigger">${this._brChip("", "", `${T("Group by")} ${T(label(groups, b.group))}`, "menu-down")}</span>${groups.map(([v, l]) => item(v, l, b.group)).join("")}</ha-dropdown>
+          <ha-dropdown id="br-sort"><span slot="trigger">${this._brChip("", "", `${T("Sort by")} ${T(label(sorts, b.sort))}`, "menu-down")}</span>${sorts.map(([v, l]) => item(v, l, b.sort, v === b.sort ? arrow : "")).join("")}</ha-dropdown>
+          <div class="vseg" role="group">${view("cards", "view-module", "Cards", true, false)}${view("rows", "view-agenda", "Rows", false, false)}${view("list", "view-headline", "List", false, true)}</div>
+          <ha-dropdown id="br-more"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
+            ${this._canEdit === false ? "" : `<ha-dropdown-item value="import"><ha-icon slot="icon" icon="mdi:link-variant"></ha-icon>${esc(T("Import URL"))}</ha-dropdown-item>`}
+            <ha-dropdown-item value="data"><ha-icon slot="icon" icon="mdi:swap-vertical"></ha-icon>${esc(T("Backup & migrate"))}</ha-dropdown-item></ha-dropdown>
+        </div>`;
+    },
 
-      const bulkbar = this._select
-        ? `<div class="bulkbar">
-            <strong>${this._picked.size} selected</strong>
-            <button class="btn secondary" data-bulk="all">Select all ${shown.length} shown</button>
+    _brBulkBar(m) {
+      if (!this._select) return "";
+      return `<div class="bulkbar">
+            <strong class="bcnt">${this._picked.size} selected</strong>
+            <button class="btn secondary" data-bulk="all">Select all ${m.shown.length} shown</button>
             <button class="btn secondary" data-bulk="none">Clear</button>
             <select id="bulk-field">
               ${[["categories", "Category"], ["tags", "Tag"], ["tools", "Tool"]]
@@ -272,95 +287,157 @@ export default function (h) {
             <button class="btn" data-bulk="add">Add</button>
             <button class="btn secondary" data-bulk="remove">Remove</button>
             <button class="btn danger" data-bulk="delete">Delete</button>
-          </div>`
-        : "";
-
-      const opt = (list, cur) => list.map(([v, l]) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`).join("");
-      const viewBtn = (v, icon, title) =>
-        `<button type="button" class="vbtn ${b.view === v ? "on" : ""}" data-view="${v}" title="${title}" aria-label="${title}"><ha-icon icon="mdi:${icon}"></ha-icon></button>`;
-      const toolbar = `<div class="btool">
-          ${paneOpen ? "" : `<button type="button" class="bbtn ${this._filterDlg ? "on" : ""}" data-act="br-filters"><ha-icon icon="mdi:filter-variant"></ha-icon><span class="lbl">Filters</span>${nFilters ? `<span class="bcount">${nFilters}</span>` : ""}</button>`}
-          ${this._canEdit === false ? "" : `<button type="button" class="bbtn ic ${this._select ? "on" : ""}" data-act="select" title="${this._select ? "Done selecting" : "Select"}" aria-label="Select"><ha-icon icon="mdi:format-list-checks"></ha-icon></button>`}
-          <div class="bsearch"><ha-icon icon="mdi:magnify"></ha-icon><input id="search" type="search" placeholder="Search ${this._recipes.length} recipes" value="${esc(this._search)}"></div>
-          <select id="br-group" class="bsel" title="Group by">${opt(
-            [["none", "No grouping"], ["category", "Group by category"], ["cookbook", "Group by cookbook"], ["tag", "Group by tag"], ["tool", "Group by tool"]],
-            b.group
-          )}</select>
-          <select id="br-sort" class="bsel" title="Sort by">${opt(
-            [["name", "Sort by name"], ["updated", "Sort by last changed"], ["time", "Sort by time"], ["servings", "Sort by servings"]],
-            b.sort
-          )}</select>
-          <button type="button" class="vbtn dir" data-act="br-dir" title="Sort direction" aria-label="Sort direction"><ha-icon icon="mdi:${b.dir === "asc" ? "sort-ascending" : "sort-descending"}"></ha-icon></button>
-          <div class="vseg" role="group">${viewBtn("cards", "view-module", "Cards")}${viewBtn("rows", "view-agenda", "Rows")}${viewBtn("list", "view-headline", "List")}</div>
-          <details class="bmore"><summary aria-label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></summary>
-            <div class="bmenu">
-              ${this._canEdit === false ? "" : `<button type="button" data-act="import"><ha-icon icon="mdi:link-variant"></ha-icon>Import URL</button>`}
-              <button type="button" data-act="data"><ha-icon icon="mdi:swap-vertical"></ha-icon>Backup &amp; migrate</button>
-            </div></details>
-        </div>`;
-
-      const groupBlock = (g) => {
-        const closed = g.key && b.collapsed.has(g.key);
-        const heading = g.key
-          ? `<div class="bgh" data-group="${esc(g.key)}"><ha-icon icon="mdi:${closed ? "chevron-down" : "chevron-up"}"></ha-icon><ha-icon class="gi" icon="mdi:${g.icon}"></ha-icon><span>${esc(g.title)}</span><em>${g.items.length}</em></div>`
-          : "";
-        if (closed) return heading;
-        const body =
-          b.view === "rows"
-            ? `<div class="brows">${g.items.map((r) => this._brRow(r)).join("")}</div>`
-            : `<div class="bgrid">${g.items.map((r) => this._brCard(r)).join("")}</div>`;
-        return heading + body;
-      };
-      const content = !shown.length
-        ? `<div class="empty">${this._recipes.length ? "No recipes match." : "No recipes yet. Create one or import from a URL."}</div>`
-        : b.view === "list"
-          ? this._brTable(groups)
-          : groups.map(groupBlock).join("");
-
-      // ha-button size l: kept outside the page so it stays in the bottom corner
-      this._fab = this._canEdit === false ? "" : `<button type="button" class="fab" data-act="new"><ha-icon icon="mdi:plus"></ha-icon><span>New recipe</span></button>`;
-      return `
-        <div class="bshell ${paneOpen ? "with-pane" : ""}">
-          ${paneOpen ? this._brPane(values, count) : ""}
-          <div class="bmain">
-            ${toolbar}
-            ${bulkbar}
-            <div class="bcontent ${b.view}">${content}</div>
-          </div>
-        </div>
-        ${compact ? this._brDialog(values, count, shown.length) : ""}`;
+          </div>`;
     },
 
-    _bindBrowser(root, on) {
-      const b = this._brPrefs();
-      on("[data-view]", "click", (e) => {
-        b.view = e.currentTarget.dataset.view;
+    _brContentHtml(m) {
+      const { b, shown, groups } = m;
+      if (!shown.length) return `<div class="empty">${this._recipes.length ? "No recipes match." : "No recipes yet. Create one or import from a URL."}</div>`;
+      if (b.view === "list") return `<div class="tblhost"></div>`;
+      return groups
+        .map((g) => {
+          const closed = g.key && b.collapsed.has(g.key);
+          const heading = g.key
+            ? `<div class="bgh" data-group="${esc(g.key)}"><ha-icon icon="mdi:${closed ? "chevron-down" : "chevron-up"}"></ha-icon><ha-icon class="gi" icon="mdi:${g.icon}"></ha-icon><span>${esc(g.title)}</span><em>${g.items.length}</em></div>`
+            : "";
+          if (closed) return heading;
+          return (
+            heading +
+            (b.view === "rows"
+              ? `<div class="brows">${g.items.map((r) => this._brRow(r)).join("")}</div>`
+              : `<div class="bgrid">${g.items.map((r) => this._brCard(r)).join("")}</div>`)
+          );
+        })
+        .join("");
+    },
+
+    _listHtml() {
+      const m = this._brModel();
+      // ha-button size l: kept outside the page so it stays in the bottom corner
+      this._fab = this._canEdit === false ? "" : `<ha-button class="fab" size="l" data-act="new"><ha-icon slot="start" icon="mdi:plus"></ha-icon>New recipe</ha-button>`;
+      return `
+        <div class="bshell ${m.paneOpen ? "with-pane" : ""}">
+          ${m.paneOpen ? this._brPane(m) : ""}
+          <div class="bmain">
+            ${this._brToolbar(m)}
+            ${this._brBulkBar(m)}
+            <div class="bcontent ${m.b.view}">${this._brContentHtml(m)}</div>
+          </div>
+        </div>
+        ${m.compact ? this._brDialog(m) : ""}`;
+    },
+
+    /** Re-draw only the recipes (the search box keeps its focus). */
+    _brRefresh() {
+      const bc = this.shadowRoot.querySelector(".bcontent");
+      if (!bc) return this._render();
+      const m = this._brModel();
+      bc.className = `bcontent ${m.b.view}`;
+      bc.innerHTML = this._brContentHtml(m);
+      this._brBindContent(bc, m, true);
+    },
+
+    _brThumb(row) {
+      const d = document.createElement("div");
+      d.style.cssText = "width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb, var(--primary-color) 10%, var(--secondary-background-color)) center/cover no-repeat;color:var(--secondary-text-color)";
+      if (row.image) d.style.backgroundImage = `url("${row.image.replace(/"/g, "%22")}")`;
+      else d.innerHTML = '<ha-icon icon="mdi:silverware-fork-knife" style="--mdc-icon-size:20px"></ha-icon>';
+      return d;
+    },
+
+    /** The list view is a real ha-data-table: the same header, rows and group headers as Home Assistant's own lists. */
+    _brMountTable(host, m) {
+      const { b, groups } = m;
+      const t = document.createElement("ha-data-table");
+      t.hass = this._hass;
+      t.autoHeight = true;
+      t.clickable = true;
+      t.selectable = !!this._select;
+      t.narrow = this._brCompact();
+      t.id = "id";
+      t.noDataText = T("No recipes match.");
+      t.columns = {
+        thumb: { title: "", type: "icon", showNarrow: true, template: (row) => this._brThumb(row) },
+        name: { title: T("Name"), main: true, sortable: true, flex: 3 },
+        category: { title: T("Category"), sortable: true, flex: 2 },
+        tools: { title: T("Tools"), sortable: true, flex: 2 },
+        time: { title: T("Time"), sortable: true, flex: 1, template: (row) => (row.time ? minutes(row.time) : "") },
+        servings: { title: T("Servings"), sortable: true, flex: 1, template: (row) => (row.servings ? String(row.servings) : "") },
+        updated: { title: "", hidden: true, sortable: true },
+        grp: { title: "", hidden: true },
+      };
+      const data = [];
+      groups.forEach((g, gi) => {
+        for (const r of g.items) {
+          data.push({
+            id: `${r.id}~${gi}`,
+            rid: r.id,
+            name: r.name,
+            image: r.image || "",
+            category: (r.categories || []).join(", "),
+            tools: (r.tools || []).join(", "),
+            time: this._recipeTime(r),
+            servings: parseFloat(r.servings) || 0,
+            updated: String(r.updated_at || r.created_at || ""),
+            grp: g.title,
+          });
+        }
+      });
+      t.data = data;
+      t.sortColumn = b.sort;
+      t.sortDirection = b.dir;
+      if (b.group !== "none") {
+        t.groupColumn = "grp";
+        t.groupOrder = groups.map((g) => g.title);
+        t.initialCollapsedGroups = groups.filter((g) => b.collapsed.has(g.key)).map((g) => g.title);
+      }
+      t.addEventListener("row-click", (e) => this._go({ name: "detail", id: String(e.detail.id).split("~")[0] }));
+      t.addEventListener("sorting-changed", (e) => {
+        const { column, direction } = e.detail;
+        if (column === b.sort && direction === b.dir) return;
+        b.sort = column;
+        b.dir = direction;
         this._brSave();
         this._render();
       });
-      const group = root.getElementById("br-group");
-      if (group)
-        group.addEventListener("change", () => {
-          b.group = group.value;
-          this._brSave();
-          this._render();
-        });
-      const sort = root.getElementById("br-sort");
-      if (sort)
-        sort.addEventListener("change", () => {
-          b.sort = sort.value;
-          this._brSave();
-          this._render();
-        });
-      on("[data-sort]", "click", (e) => {
-        const key = e.currentTarget.dataset.sort;
-        if (b.sort === key) b.dir = b.dir === "asc" ? "desc" : "asc";
-        else {
-          b.sort = key;
-          b.dir = "asc";
+      t.addEventListener("collapsed-changed", (e) => {
+        const titles = new Set(e.detail.value || []);
+        for (const g of groups) {
+          if (titles.has(g.title)) b.collapsed.add(g.key);
+          else b.collapsed.delete(g.key);
         }
         this._brSave();
+      });
+      t.addEventListener("selection-changed", (e) => {
+        this._picked = new Set((e.detail.value || []).map((id) => String(id).split("~")[0]));
+        const n = this.shadowRoot.querySelector(".bcnt");
+        if (n) n.textContent = `${this._picked.size} selected`;
+      });
+      host.appendChild(t);
+      this._brTable = t;
+      if (this._select && this._picked.size) {
+        try {
+          t._checkedRows = data.filter((d) => this._picked.has(d.rid)).map((d) => d.id);
+          t.requestUpdate();
+        } catch (_) {
+          /* the selection just starts empty */
+        }
+      }
+    },
+
+    _brBindContent(scope, m, rebind = false) {
+      const on = (sel, ev, fn) => scope.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, fn));
+      const b = this._brPrefs();
+      // a full render binds [data-open] for the whole panel; only a partial refresh needs it here
+      if (rebind) on("[data-open]", "click", (e) => this._go({ name: "detail", id: e.currentTarget.dataset.open }));
+      on("[data-pick]", "click", (e) => {
+        const id = e.currentTarget.dataset.pick;
+        if (!this._picked.delete(id)) this._picked.add(id);
         this._render();
+      });
+      on("[data-edit]", "click", (e) => {
+        e.stopPropagation();
+        this._go({ name: "edit", id: e.currentTarget.dataset.edit });
       });
       on("[data-group]", "click", (e) => {
         const key = e.currentTarget.dataset.group;
@@ -368,23 +445,72 @@ export default function (h) {
         this._brSave();
         this._render();
       });
-      on("[data-edit]", "click", (e) => {
-        e.stopPropagation();
-        this._go({ name: "edit", id: e.currentTarget.dataset.edit });
+      const host = scope.querySelector(".tblhost");
+      if (host && m) this._brMountTable(host, m);
+    },
+
+    _bindBrowser(root, on) {
+      const b = this._brPrefs();
+      const m = this._brModel();
+      const bc = root.querySelector(".bcontent");
+      if (bc) this._brBindContent(bc, m);
+      // the toolbar
+      const search = root.getElementById("search");
+      if (search) {
+        search.value = this._search;
+        search.addEventListener("input", () => {
+          this._search = search.value || "";
+          this._brRefresh();
+        });
+      }
+      const menu = (id, fn) => {
+        const dd = root.getElementById(id);
+        if (!dd) return;
+        dd.querySelectorAll("ha-dropdown-item[data-sel]").forEach((it) => (it.selected = true));
+        dd.addEventListener("wa-select", (e) => fn(e.detail.item.value));
+      };
+      menu("br-group", (v) => {
+        b.group = v;
+        this._brSave();
+        this._render();
       });
-      on("input[data-fsearch]", "input", (e) => {
+      menu("br-sort", (v) => {
+        if (b.sort === v) b.dir = b.dir === "asc" ? "desc" : "asc";
+        else {
+          b.sort = v;
+          b.dir = v === "updated" ? "desc" : "asc";
+        }
+        this._brSave();
+        this._render();
+      });
+      menu("br-more", (v) => this._action(v));
+      on("[data-view]", "click", (e) => {
+        b.view = e.currentTarget.dataset.view;
+        this._brSave();
+        this._render();
+      });
+      // the filters
+      on("[data-fitem]", "click", (e) => {
+        const { fitem, value } = e.currentTarget.dataset;
+        const set = this._sel[fitem];
+        if (!set.delete(value)) set.add(value);
+        this._render();
+      });
+      this._fq = this._fq || {};
+      on("ha-input-search[data-fsearch]", "input", (e) => {
         const kind = e.currentTarget.dataset.fsearch;
-        const q = e.currentTarget.value.trim().toLowerCase();
-        this._fq = this._fq || {};
-        this._fq[kind] = e.currentTarget.value;
-        e.currentTarget.closest(".fsec").querySelectorAll(".fit").forEach((it) => {
+        const text = e.currentTarget.value || "";
+        const q = text.trim().toLowerCase();
+        this._fq[kind] = text;
+        e.currentTarget.closest("ha-expansion-panel").querySelectorAll(".fit").forEach((it) => {
           it.hidden = !!q && !it.textContent.toLowerCase().includes(q);
         });
       });
-      on("details[data-sec]", "toggle", (e) => {
-        const d = e.currentTarget;
-        if (d.open) b.secs.add(d.dataset.sec);
-        else b.secs.delete(d.dataset.sec);
+      root.querySelectorAll("ha-input-search[data-fsearch]").forEach((el) => (el.value = this._fq[el.dataset.fsearch] || ""));
+      on("ha-expansion-panel[data-sec]", "expanded-changed", (e) => {
+        const id = e.currentTarget.dataset.sec;
+        if (e.detail && e.detail.expanded) b.secs.add(id);
+        else b.secs.delete(id);
         this._brSave();
       });
     },
@@ -587,8 +713,13 @@ export default function (h) {
 
     async _bulkAction(act) {
       const shown = this._recipes.filter((r) => this._matches(r, this._sel, this._search.trim().toLowerCase()));
-      if (act === "all") this._picked = new Set(shown.map((r) => r.id));
-      else if (act === "none") this._picked = new Set();
+      if (act === "all") {
+        this._picked = new Set(shown.map((r) => r.id));
+        if (this._brTable && this._brTable.isConnected) return this._brTable.selectAll();
+      } else if (act === "none") {
+        this._picked = new Set();
+        if (this._brTable && this._brTable.isConnected) return this._brTable.clearSelection();
+      }
       else if (!this._picked.size) {
         this._error = "Select some recipes first.";
       } else {
