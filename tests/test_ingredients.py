@@ -219,3 +219,33 @@ def test_danish_spoon_plurals_are_units():
         assert r["unit"] is not None, line
         assert r["quantity"] is not None
     assert parse("2 teskeer bagepulver")["food"] == "bagepulver"
+
+
+def test_food_words_pick_the_noun():
+    assert ing.food_words("1 ¹/₂ kilogram kartofler")[0][0] == "kartofler"
+    assert ing.food_words("2 stk røde løg")[0][0] == "løg"
+    assert ing.food_words("280 gram sukker jeg brugte halv brun farin")[0][0] == "sukker"
+    words, compound = ing.food_words("2 tsk salt og peber")
+    assert compound and words[0] == "salt og peber"
+
+
+def test_a_step_links_the_ingredients_it_names():
+    ingredients = ["## Kage", "175 gram smør", "2 stykker æg", "salt og peber", "1 dl mælk"]
+    steps = [
+        {"text": "Kage", "section": True},
+        "Smelt smørret og pisk æggene. Smag til med salt og peber.",
+        "Tilsæt smør igen og rør.",
+        "Hæld mælk i.",
+    ]
+    out = ing.link_ingredients(ingredients, steps)
+    assert out[0] == {"text": "Kage", "section": True}
+    assert out[1]["ingredients"] == [1, 2, 3]
+    # an ingredient links to the first step that names it
+    assert out[2]["ingredients"] == []
+    assert out[3]["ingredients"] == [4]
+
+
+def test_steps_that_already_have_links_are_left_alone():
+    out = ing.link_ingredients(["1 egg", "1 dl milk"], [{"text": "Add the milk and egg.", "ingredients": [0]}, "Pour milk."])
+    assert out[0]["ingredients"] == [0]
+    assert out[1]["ingredients"] == [1]

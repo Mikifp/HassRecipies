@@ -12,6 +12,11 @@ from urllib.parse import urlparse
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
 
+try:
+    from .ingredients import link_ingredients
+except ImportError:  # loaded on its own (tests): importing a page then leaves the steps unlinked
+    link_ingredients = None
+
 _LD_JSON = re.compile(
     r"<script[^>]+type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
     re.DOTALL | re.IGNORECASE,
@@ -323,7 +328,11 @@ def parse_page(page: str, url: str) -> dict[str, Any]:
         own: dict[str, Any] | None = parse_recipe(page, url)
     except RecipeImportError:
         own = None
-    return _merge(_scrapers_parse(page, url), own, url)
+    recipe = _merge(_scrapers_parse(page, url), own, url)
+    # a step that names an ingredient links to it, so the panel can show it as a chip in the text
+    if link_ingredients is not None:
+        recipe["instructions"] = link_ingredients(recipe.get("ingredients") or [], recipe.get("instructions") or [])
+    return recipe
 
 
 def parse_recipe(page: str, url: str) -> dict[str, Any]:

@@ -533,3 +533,123 @@ def format_ingredient(
     if parsed.get("quantity_max") is not None:
         qty += "–" + format_number(parsed["quantity_max"] * scale)
     return " ".join(part for part in (qty, parsed.get("unit_text") or "", food) if part)
+
+
+# ---- ingredients named in a step -------------------------------------------------
+# The panel shows an ingredient a step names as a chip in the step text. A recipe imported from
+# a web page has no such links, so they are found from the step text. This mirrors the front end
+# (frontend/recipes-shared.js: foodWords / detectChips); keep the two in step.
+
+_LETTER = r"[^\W\d_]"
+_UNITS = frozenset(
+    """gram g gr kg kilo kilogram kilogrammer mg milligram ml milliliter cl centiliter dl deciliter l liter
+    tsk tsp teske teskeer tesked teskefuld spsk tbsp spiseske spiseskeer spiseskefuld spiseskefulde dessertske dessertskeer
+    stk stykke stykker fed knivspids knsp nip dåse dåser ds pose poser pakke pakker pk bundt bdt håndfuld
+    skive skiver stang stænger stilk stilke kvist kviste blad blade dryp drys klat glas
+    kop kopper cup cups oz ounce ounces lb lbs pound pounds gallon quart pint pinch pinches clove cloves can cans
+    slice slices piece pieces dash knob scoop sprig sprigs bunch handful stick sticks head heads
+    tablespoon tablespoons teaspoon teaspoons tbsps tsps""".split()
+)
+_STOP = frozenset("jeg til svarer eller or men som der kan også at for med uden evt ca".split())
+_JOIN = frozenset({"og", "and", "&"})
+_AMOUNT = re.compile(r"^[\d¼-¾⅐-⅞¹²³⁰-⁹₀-₉⁄/.,\-–\s]+")
+_FOOD_WORD = re.compile(rf"^{_LETTER}(?:{_LETTER}|['’-])+$")
+
+
+def food_words(text: str) -> tuple[list[str], bool]:
+    """The food words of an ingredient line, best first, and whether it names two foods.
+
+    Units, amounts and trailing remarks are left out; the last word of "røde løg" comes
+    first because that is the noun. "salt og peber" comes back with the whole phrase first.
+    """
+    body = re.split(r"[;(]", _AMOUNT.sub("", text, count=1))[0].split(",")[0]
+    words: list[str] = []
+    seq: list[str] = []
+    for raw in body.split():
+        word = raw.rstrip(".:")
+        if not word:
+            continue
+        low = word.lower()
+        if low in _STOP:
+            break
+        if low in _JOIN:
+            if seq:
+                seq.append(word)
+            continue
+        if words and word[:1].isupper():  # a capital after the food starts a remark
+            break
+        if _FOOD_WORD.match(word) and low not in _UNITS:
+            words.append(word)
+            seq.append(word)
+    while seq and seq[-1].lower() in _JOIN:
+        seq.pop()
+    heads = [w for w in words if not w.lower().endswith("ede")]
+    ordered: list[str] = []
+    for word in reversed(heads or words):
+        ordered.append(word)
+        if "-" in word:
+            ordered.extend(p for p in word.split("-") if len(p) >= 3)
+    ordered = ordered[:4]
+    compound = any(w.lower() in _JOIN for w in seq)
+    if compound:
+        ordered.insert(0, " ".join(seq))
+    return ordered, compound
+
+
+def _mentions(text: str, word: str) -> list[tuple[int, int]]:
+    """Where ``word`` is named in ``text``, inflected forms included (smør / smørret)."""
+    body = r"\s+".join(re.escape(part) for part in word.split(" "))
+    pattern = re.compile(rf"(?<!{_LETTER}){body}{_LETTER}{{0,4}}(?!{_LETTER})", re.IGNORECASE)
+    return [m.span() for m in pattern.finditer(text)]
+
+
+def ingredients_named(text: str, items: list[tuple[int, str]]) -> list[int]:
+    """Which of ``items`` ((index, ingredient line) pairs) the step ``text`` names, by index."""
+    taken: list[tuple[int, int]] = []
+
+    def free(span: tuple[int, int]) -> bool:
+        return not any(span[0] < t[1] and span[1] > t[0] for t in taken)
+
+    found: list[int] = []
+    for index, line in items:
+        words, compound = food_words(line)
+        if compound:
+            whole = [s for s in _mentions(text, words[0]) if free(s)]
+            spans = whole or [s for w in words[1:] for s in _mentions(text, w) if free(s)]
+        else:
+            spans = []
+            for word in words:
+                spans = [s for s in _mentions(text, word) if free(s)]
+                if spans:
+                    break
+        if spans:
+            taken.extend(spans)
+            found.append(index)
+    return sorted(found)
+
+
+def link_ingredients(ingredients: list[str], instructions: list[Any]) -> list[Any]:
+    """Link each ingredient to the first step that names it (steps that already have links are kept)."""
+    lines = []
+    for index, line in enumerate(ingredients):
+        if is_header(line):
+            continue
+        main = split_comment(line)[0].partition(SUBSTITUTE_SEP.strip())[0].strip()
+        lines.append((index, main))
+    linked: set[int] = set()
+    result: list[Any] = []
+    for step in instructions:
+        if isinstance(step, dict) and step.get("section"):
+            result.append(step)
+            continue
+        text = step if isinstance(step, str) else str(step.get("text", ""))
+        existing = [] if isinstance(step, str) else list(step.get("ingredients") or [])
+        if existing:
+            linked.update(i for i in existing if isinstance(i, int))
+            result.append(step)
+            continue
+        found = ingredients_named(text, [(i, line) for i, line in lines if i not in linked])
+        linked.update(found)
+        base = {} if isinstance(step, str) else dict(step)
+        result.append({**base, "text": text, "ingredients": found})
+    return result
