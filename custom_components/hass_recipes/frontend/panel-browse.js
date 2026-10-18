@@ -141,8 +141,8 @@ export default function (h) {
 
     _brTable(groups) {
       const { sort, dir, collapsed } = this._brPrefs();
-      const arrow = (k) => (sort === k ? ` <span class="sarrow">${dir === "asc" ? "↑" : "↓"}</span>` : "");
-      const head = `<tr><th class="c-pic"></th><th data-sort="name">Name${arrow("name")}</th><th class="c-hide">Category</th><th class="c-hide">Tools</th><th data-sort="time">Time${arrow("time")}</th><th data-sort="servings" class="c-hide">Servings${arrow("servings")}</th></tr>`;
+      const arrow = (k) => (sort === k ? `<ha-icon class="sarrow" icon="mdi:arrow-${dir === "asc" ? "up" : "down"}"></ha-icon>` : "");
+      const head = `<tr><th class="c-pic"></th><th data-sort="name">${arrow("name")}Name</th><th class="c-hide">Category</th><th class="c-hide">Tools</th><th data-sort="time">${arrow("time")}Time</th><th data-sort="servings" class="c-hide">${arrow("servings")}Servings</th></tr>`;
       const rowFor = (r) => {
         const picked = this._picked.has(r.id);
         return `<tr class="${picked ? "picked" : ""}" ${this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`}>
@@ -273,7 +273,7 @@ export default function (h) {
       const toolbar = `<div class="btool">
           ${paneOpen ? "" : `<button type="button" class="bbtn ${this._filterDlg ? "on" : ""}" data-act="br-filters"><ha-icon icon="mdi:filter-variant"></ha-icon><span class="lbl">Filters</span>${nFilters ? `<span class="bcount">${nFilters}</span>` : ""}</button>`}
           ${this._canEdit === false ? "" : `<button type="button" class="bbtn ic ${this._select ? "on" : ""}" data-act="select" title="${this._select ? "Done selecting" : "Select"}" aria-label="Select"><ha-icon icon="mdi:format-list-checks"></ha-icon></button>`}
-          <input id="search" type="search" placeholder="Search ${this._recipes.length} recipes" value="${esc(this._search)}">
+          <div class="bsearch"><ha-icon icon="mdi:magnify"></ha-icon><input id="search" type="search" placeholder="Search ${this._recipes.length} recipes" value="${esc(this._search)}"></div>
           <select id="br-group" class="bsel" title="Group by">${opt(
             [["none", "No grouping"], ["category", "Group by category"], ["cookbook", "Group by cookbook"], ["tag", "Group by tag"], ["tool", "Group by tool"]],
             b.group
