@@ -312,7 +312,7 @@ export default function (h) {
       return `<div class="btool">
           ${m.paneOpen ? "" : `<span class="chipwrap">${this._brChip(`data-act="br-filters" ${this._filterDlg ? "active" : ""}`, "filter-variant", T("Filters"))}${m.nFilters ? `<span class="bcount">${m.nFilters}</span>` : ""}</span>`}
           ${this._canEdit === false ? "" : this._brChip(`class="select-mode-chip" data-act="select" ${this._select ? "active" : ""}`, "format-list-checks")}
-          <ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>
+          ${m.compact ? "" : `<ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>`}
           <ha-dropdown id="br-group"><span slot="trigger">${this._brChip("", "", `${T("Group by")} ${T(label(groups, b.group))}`, "menu-down")}</span>${groups.map(([v, l]) => item(v, l, b.group)).join("")}</ha-dropdown>
           <ha-dropdown id="br-sort"><span slot="trigger">${this._brChip("", "", `${T("Sort by")} ${T(label(sorts, b.sort))}`, "menu-down")}</span>${sorts.map(([v, l]) => item(v, l, b.sort, v === b.sort ? arrow : "")).join("")}</ha-dropdown>
           ${toggle}
@@ -365,7 +365,7 @@ export default function (h) {
     _listHtml() {
       const m = this._brModel();
       // ha-button size l: kept outside the page so it stays in the bottom corner
-      this._fab = this._canEdit === false ? "" : `<ha-button class="fab" size="l" data-act="new-dialog"><ha-icon slot="start" icon="mdi:plus"></ha-icon>New recipe</ha-button>`;
+      this._fab = this._canEdit === false ? "" : `<ha-button class="fab ${this._brCompact() ? "above-tabs" : ""}" size="l" data-act="new-dialog"><ha-icon slot="start" icon="mdi:plus"></ha-icon>New recipe</ha-button>`;
       return `
         <div class="bshell ${m.paneOpen ? "with-pane" : ""}">
           ${m.paneOpen ? this._brPane(m) : ""}
@@ -479,6 +479,13 @@ export default function (h) {
       });
       host.appendChild(t);
       this._brTable = t;
+      // Home Assistant's phone lists show no column header row (sorting is in the toolbar)
+      if (t.narrow) {
+        t.updateComplete.then(() => {
+          const row = t.shadowRoot && t.shadowRoot.querySelector(".mdc-data-table__header-row");
+          if (row) row.style.display = "none";
+        });
+      }
       if (this._select && this._picked.size) {
         try {
           t._checkedRows = data.filter((d) => this._picked.has(d.rid)).map((d) => d.id);

@@ -28,7 +28,6 @@ const STYLE = `
   .timer button.stop { background: #fff; color: var(--error-color, #db4437); border-radius: 12px; padding: 2px 12px; font-weight: 600; }
   @keyframes pulse { 50% { opacity: .6; } }
   header h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; }
-  header .menu { background: none; border: 0; color: inherit; cursor: pointer; padding: 4px; }
   main { max-width: 1200px; margin: 0 auto; padding: 16px; }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   input, textarea, select { font: inherit; color: inherit; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 6px; padding: 8px 10px; width: 100%; }
@@ -43,11 +42,14 @@ const STYLE = `
   .chip { padding: 3px 10px; border-radius: 12px; font-size: 13px; background: var(--secondary-background-color); border: 1px solid var(--divider-color); cursor: pointer; }
   .chip.active { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
   /* ---- recipe browser: toolbar, filter pane, groups and three views ---- */
-  header .tabs { display: flex; gap: 4px; }
-  header .tabs button { white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--primary-text-color); font: inherit; font-size: 14px; font-weight: 500; height: 56px; padding: 0 16px; cursor: pointer; }
-  header .tabs button.on { color: var(--primary-color); border-bottom-color: var(--primary-color); }
-  header .tabs ha-icon { --mdc-icon-size: 24px; }
-  header .menu ha-icon { --mdc-icon-size: 24px; }
+  header .tabs { display: flex; }
+  header .hsp { flex: 1; }
+  header ha-input-search { flex: 1; min-width: 0; }
+  .tabwrap { cursor: pointer; display: flex; }
+  .bottomtabs { position: fixed; left: 0; right: 0; bottom: 0; height: 56px; z-index: 3; display: flex; background: var(--sidebar-background-color, var(--card-background-color)); border-top: 1px solid var(--divider-color); }
+  .bottomtabs .tabwrap { flex: 1; }
+  .cq.with-bar { padding-bottom: 56px; }
+  ha-button.fab.above-tabs { bottom: 84px; }
   main.wide { max-width: none; padding: 0; }
   main.wide > .notice, main.wide > .error { margin: 12px 16px; }
   .bshell.with-pane { display: grid; grid-template-columns: 250px minmax(0, 1fr); align-items: stretch; }
@@ -123,15 +125,14 @@ const STYLE = `
   @container (max-width: 680px) {
     main { padding: 12px; }
     main.wide { padding: 0; }
-    .btool { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
-    .btool ha-input-search { flex-basis: 100%; order: -1; }
+    .btool { padding: 0 16px; min-height: 64px; gap: 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .btool::-webkit-scrollbar { display: none; }
+    .btool > * { flex: none; }
     .bcontent.cards, .bcontent.rows { padding: 12px 12px 88px; }
     .bgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .rcard .rpic { height: 84px; }
     .brows { grid-template-columns: 1fr; gap: 8px; }
     .rrow .rpic { width: 64px; height: 64px; }
-    header:has(.tabs) h1 { display: none; }
-    header .tabs { margin-left: 0; }
     header .tabs button { padding: 8px 8px; }
   }
   .muted { color: var(--secondary-text-color); font-size: 13px; }
@@ -655,6 +656,31 @@ class HassRecipesPanel extends HTMLElement {
     return this._recipes.find((r) => r.id === id);
   }
 
+  /** The top bar and (on a phone) the bottom tabs, built from Home Assistant's own ha-icon-button, ha-input-search and ha-tab. */
+  _chrome(v) {
+    const tabsView = v.name === "list" || v.name === "plan";
+    const iconBtn = (act, icon, label) => `<ha-icon-button data-act="${act}" label="${label}"><ha-icon icon="mdi:${icon}"></ha-icon></ha-icon-button>`;
+    if (!tabsView) return { header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : ""}<h1>Recipes</h1>`, bottom: "" };
+    const tab = (act, icon, name, active, narrow) =>
+      `<div class="tabwrap" data-act="${act}"><ha-tab name="${esc(T(name))}" ${active ? "active" : ""} ${narrow ? "narrow" : ""}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon></ha-tab></div>`;
+    const tabs = (narrow) =>
+      tab("tab-list", "book-open-page-variant-outline", "Recipes", v.name === "list", narrow) + tab("plan", "calendar-month-outline", "Meal plan", v.name === "plan", narrow);
+    if (this._brCompact()) {
+      return {
+        header: `${iconBtn("leave", "arrow-left", "Back")}${
+          v.name === "list"
+            ? `<ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>`
+            : `<h1>${esc(T("Meal plan"))}</h1>`
+        }`,
+        bottom: `<nav class="bottomtabs">${tabs(true)}</nav>`,
+      };
+    }
+    return {
+      header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : iconBtn("leave", "arrow-left", "Back")}<span class="hsp"></span><nav class="tabs">${tabs(false)}</nav><span class="hsp"></span>`,
+      bottom: "",
+    };
+  }
+
   _render() {
     const v = this._view;
     this._fab = "";
@@ -676,26 +702,15 @@ class HassRecipesPanel extends HTMLElement {
     else if (v.name === "import") body = this._importHtml();
     else body = this._listHtml();
 
+    const chrome = this._chrome(v);
+    this._bottomBar = chrome.bottom;
     this.shadowRoot.innerHTML = `
       <style>${STYLE}</style>
-      <div class="cq"><div class="sticky">
-        <header>
-          ${
-            this._narrow
-              ? `<button class="menu" data-act="menu" title="Menu" aria-label="Menu"><ha-icon icon="mdi:menu"></ha-icon></button>`
-              : v.name === "list" || v.name === "plan"
-                ? `<button class="menu" data-act="leave" title="Back" aria-label="Back"><ha-icon icon="mdi:arrow-left"></ha-icon></button>`
-                : ""
-          }
-          ${
-            v.name === "list" || v.name === "plan"
-              ? `<span style="flex:1"></span><nav class="tabs"><button type="button" class="${v.name === "list" ? "on" : ""}" data-act="tab-list"><ha-icon icon="mdi:book-open-page-variant-outline"></ha-icon>Recipes</button><button type="button" class="${v.name === "plan" ? "on" : ""}" data-act="plan"><ha-icon icon="mdi:calendar-month-outline"></ha-icon>Meal plan</button></nav><span style="flex:1"></span>`
-              : `<h1>Recipes</h1>`
-          }
-        </header>
+      <div class="cq ${chrome.bottom ? "with-bar" : ""}"><div class="sticky">
+        <header>${chrome.header}</header>
         <div id="timers" class="timers"></div>
       </div>
-      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main></div>${this._fab || ""}`;
+      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
     this._timerSig = "";
     this._bind();
     this._autosizeAll();
