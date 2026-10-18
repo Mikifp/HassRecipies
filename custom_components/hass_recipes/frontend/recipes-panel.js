@@ -144,14 +144,6 @@ const STYLE = `
   .cook-jumps { display: inline-flex; gap: 6px; flex-wrap: wrap; }
   .step-text .ing-chip, .cook .cook-text .ing-chip, .cstep .cstep-text .ing-chip { display: inline-flex; padding: 0 8px; margin: 0 1px; font-size: .9em; vertical-align: baseline; }
   .timer-btn { margin-top: 10px; }
-  .step { border: 1px solid var(--divider-color); border-radius: 8px; padding: 10px; margin-bottom: 12px; }
-  .step-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
-  .step-head .spacer { flex: 1; }
-  .drag-handle { background: none; border: none; color: var(--secondary-text-color); cursor: grab; font-size: 18px; line-height: 1; padding: 6px 2px; touch-action: none; }
-  .step-head .drag-handle { border: none; padding: 2px 6px 2px 0; }
-  .ing-row.dragging, .step.dragging { opacity: .4; }
-  .drop-before { box-shadow: 0 -3px 0 var(--primary-color); }
-  .drop-after { box-shadow: 0 3px 0 var(--primary-color); }
   .form-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
   .form-title .btn { font-size: 13px; padding: 4px 10px; font-weight: 400; }
   .ne-meta { margin-bottom: 16px; }
@@ -205,17 +197,6 @@ const STYLE = `
   .ne-dragging { opacity: .4; }
   .ne-drop { outline: 2px dashed var(--primary-color); border-radius: 8px; }
   @media (pointer: coarse) { .ne-handle { display: none; } }
-  .insert-bar { display: flex; gap: 4px; justify-content: center; opacity: .35; margin: -6px 0 2px; transition: opacity .15s; }
-  .insert-bar:hover, .insert-bar:focus-within { opacity: 1; }
-  @media (pointer: coarse) { .drag-handle { display: none; } .insert-bar { opacity: .8; } }
-  .step-head button { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 2px 8px; font: inherit; }
-  .step .timer-field { margin: 8px 0; }
-  .timer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
-  .timer-row input[type=number] { width: 64px; flex: none; }
-  .timer-row .timer-label { flex: 1 1 140px; min-width: 120px; }
-  .sub-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
-  .sub-row input { flex: 1; }
-  .step .chips { margin-bottom: 0; }
   .facet-label { font-size: 12px; color: var(--secondary-text-color); align-self: center; text-transform: uppercase; letter-spacing: .04em; }
   .units { margin-left: auto; }
   .ing-text { display: flex; flex-direction: column; }
@@ -240,17 +221,7 @@ const STYLE = `
   .cook-section { text-transform: uppercase; letter-spacing: .06em; font-size: .85rem; color: var(--primary-color); margin-top: 6px; }
   .cook-done { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; cursor: pointer; }
   .cook-done input { width: auto; }
-  .ing-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
-  .ing-row .ing-inputs { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-  .ing-row.is-header { background: color-mix(in srgb, var(--primary-color) 12%, transparent); border-left: 5px solid var(--primary-color); border-radius: 8px; padding: 8px 8px 8px 10px; margin: 18px 0 10px; }
-  .ing-row.is-header input[data-f=itext] { font-weight: 700; font-size: 1.05rem; background: transparent; }
-  .step.is-section { background: color-mix(in srgb, var(--primary-color) 12%, transparent); border: none; border-left: 5px solid var(--primary-color); margin-top: 18px; }
-  .step.is-section input[data-f=text] { font-weight: 700; font-size: 1.05rem; background: transparent; }
-  .step.is-section .step-head strong { text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: var(--primary-color); }
-  .ing-row input[data-f=isub] { font-size: 14px; font-style: italic; }
-  .row-btns { display: flex; gap: 4px; }
-  .row-btns button, .mini { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 4px 8px; font: inherit; }
-  .mini.link { border: 0; text-align: left; padding: 0; color: var(--primary-color); font-size: 13px; }
+  .mini { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 4px 8px; font: inherit; }
   .yield-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
   .yield-row input { width: auto; }
   .scale { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 16px; }
@@ -662,18 +633,6 @@ class HassRecipesPanel extends HTMLElement {
       if (cur) cur.scrollIntoView({ block: "center", behavior: "smooth" });
     }
     if (this._neFocus) this._neApplyFocus();
-    if (this._focusStep != null) {
-      const el = this.shadowRoot.querySelector(`.step[data-n="${this._focusStep}"] [data-f=text]`);
-      if (el) el.focus();
-      this._focusStep = null;
-    }
-    if (this._focusUid) {
-      const [uid, part] = this._focusUid.split(":");
-      const found = this.shadowRoot.querySelectorAll(`.ing-row[data-uid="${uid}"] [data-f=${part === "sub" ? "isub" : "itext"}]`);
-      const el = found[found.length - 1]; // a new substitute is the last one
-      if (el) el.focus();
-      this._focusUid = null;
-    }
   }
 
   _bind() {
@@ -809,12 +768,9 @@ class HassRecipesPanel extends HTMLElement {
     if (form) {
       this._bindMulti(root);
       form.addEventListener("submit", (e) => this._save(e, form));
-      this._bindFormDrag(form);
-      if (this._neOn()) {
-        this._bindEditor(form);
-        const meta = form.querySelector(".ne-meta");
-        if (meta) meta.addEventListener("toggle", () => (this._neMetaOpen = meta.open));
-      }
+      this._bindEditor(form);
+      const meta = form.querySelector(".ne-meta");
+      if (meta) meta.addEventListener("toggle", () => (this._neMetaOpen = meta.open));
       form.addEventListener("input", (e) => {
         this._formDirty = true;
         if (e.target.matches && e.target.matches("textarea[data-autosize]")) this._autosize(e.target);
@@ -829,33 +785,8 @@ class HassRecipesPanel extends HTMLElement {
             });
           }
         }
-        if (e.target.matches && e.target.matches("[data-f=itext], .step.is-section [data-f=text]")) this._refreshChips();
       });
       form.addEventListener("change", () => (this._formDirty = true));
-      form.addEventListener("paste", (e) => {
-        const row = e.target.closest && e.target.closest(".ing-row");
-        if (row && e.target.matches("[data-f=itext]")) this._pasteRows(e, row.dataset.uid);
-      });
-      form.addEventListener("keydown", (e) => {
-        // Enter in an ingredient row adds the next one instead of submitting.
-        if (e.key === "Enter" && e.target.matches && e.target.matches(".ing-row [data-f=itext]")) {
-          e.preventDefault();
-          this._rowAction("add", e.target.closest(".ing-row").dataset.uid);
-        }
-      });
-      form.addEventListener("click", (e) => {
-        const chip = e.target.closest(".step .chip[data-uid]");
-        if (chip) {
-          chip.classList.toggle("active");
-          this._formDirty = true;
-          this._refreshChips(); // the ingredient now appears (or disappears) in the other steps
-          return;
-        }
-        const rowBtn = e.target.closest("[data-row-act]");
-        if (rowBtn) return this._rowAction(rowBtn.dataset.rowAct, rowBtn.dataset.uid, rowBtn.dataset.i);
-        const btn = e.target.closest("[data-step-act]");
-        if (btn) this._stepAction(btn.dataset.stepAct, +btn.dataset.n, btn.dataset.t);
-      });
     }
     on("[data-open-new]", "click", async (e) => {
       e.preventDefault();
@@ -925,9 +856,6 @@ class HassRecipesPanel extends HTMLElement {
         this._doneSteps = new Set();
         this._saveProgress();
         this._render();
-        break;
-      case "editor-toggle":
-        this._neToggle();
         break;
       case "data":
         this._dataMsg = null;

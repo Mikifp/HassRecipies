@@ -18,29 +18,6 @@ export default function (h) {
   const chipLabel = (row) => String(row.text).trim();
 
   return {
-    // ---- mode ----
-    _neOn() {
-      if (this._editorMode === undefined) {
-        try {
-          this._editorMode = localStorage.getItem("hass_recipes_editor") === "new" ? "new" : "classic";
-        } catch (_) {
-          this._editorMode = "classic";
-        }
-      }
-      return this._editorMode === "new";
-    },
-
-    _neToggle() {
-      this._syncForm();
-      this._editorMode = this._neOn() ? "classic" : "new";
-      try {
-        localStorage.setItem("hass_recipes_editor", this._editorMode);
-      } catch (_) {
-        /* the choice just is not remembered */
-      }
-      this._render();
-    },
-
     // ---- flat lists <-> sections ----
     /** The flat rows and steps as sections: [{ title, rowHeader, stepHeader, rows, steps }]. */
     _neGroups() {
@@ -313,7 +290,7 @@ export default function (h) {
 
     // ---- actions ----
     _neChange(mutate, focus = null) {
-      this._syncEditor();
+      this._syncForm();
       const groups = this._neGroups();
       mutate(groups);
       this._neApply(groups);
@@ -378,7 +355,7 @@ export default function (h) {
         case "group-autolink":
           return this._neChange((groups) => this._neAutoLink(groups, null, gi));
         case "group-toggle": {
-          this._syncEditor();
+          this._syncForm();
           const g = this._neCache[gi];
           if (!g) return;
           this._neCollapsed = this._neCollapsed || new Set();
@@ -568,7 +545,7 @@ export default function (h) {
     _neInsertAtCaret(uid) {
       const textEl = this._neActive;
       if (!textEl || !textEl.isConnected) return;
-      this._syncEditor();
+      this._syncForm();
       const row = this._form.rows.find((r) => r.uid === uid);
       if (!row) return;
       const sel = this._neSelection();
@@ -709,7 +686,7 @@ export default function (h) {
       this._nePick = null;
       this._formDirty = true;
       if (!row) {
-        this._syncEditor();
+        this._syncForm();
         this._neFocus = { uid: target.uid, field: "text" };
         this._render();
       } else {
@@ -754,6 +731,23 @@ export default function (h) {
           this._neActive = null;
           form.classList.remove("ne-typing");
         }
+      });
+      // pasting a list into an ingredient makes one ingredient per line
+      form.addEventListener("paste", (e) => {
+        const t = e.target;
+        if (!(t.matches && t.matches(".ne-row [data-ne-f=text]"))) return;
+        const text = (e.clipboardData || window.clipboardData).getData("text");
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (lines.length < 2) return;
+        e.preventDefault();
+        const uid = t.closest(".ne-row").dataset.uid;
+        const replace = !t.value.trim();
+        this._neChange((groups) => {
+          const hit = this._neFind(groups, uid, "row");
+          if (!hit) return;
+          const fresh = lines.map((l) => this._rowFromString(l));
+          hit.list.splice(replace ? hit.i : hit.i + 1, replace ? 1 : 0, ...fresh);
+        });
       });
       form.addEventListener("input", (e) => {
         if (e.target.classList && e.target.classList.contains("ne-text")) this._neUpdatePicker(e.target);

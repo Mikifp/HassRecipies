@@ -98,89 +98,7 @@ export default function (h) {
         const el = form.elements[key];
         if (el) this._form[key] = el.value;
       }
-      if (this._neOn()) {
-        this._syncEditor();
-        return;
-      }
-      this._form.rows = [...form.querySelectorAll(".ing-row")].map((el) => ({
-        uid: el.dataset.uid,
-        header: el.dataset.header === "1",
-        text: el.querySelector("[data-f=itext]").value,
-        subs: [...el.querySelectorAll("[data-f=isub]")].map((i) => i.value),
-        comment: (el.querySelector("[data-f=icomment]") || { value: "" }).value,
-      }));
-      this._form.steps = [...form.querySelectorAll(".step")].map((el) => ({
-        section: el.dataset.section === "1",
-        text: el.querySelector("[data-f=text]").value,
-        timers: [...el.querySelectorAll(".timer-row")].map((row) => ({
-          h: row.querySelector("[data-f=th]").value,
-          m: row.querySelector("[data-f=tm]").value,
-          s: row.querySelector("[data-f=ts]").value,
-          label: row.querySelector("[data-f=tl]").value,
-        })),
-        ingredients: [...el.querySelectorAll(".chip.active[data-uid]")].map((c) => c.dataset.uid),
-      }));
-    },
-
-    _stepChips(step, rows) {
-      let all = rows.filter((row) => !row.header && row.text.trim());
-      if (!all.length) return `<span class="muted">Add ingredients above to link them to this step.</span>`;
-      // Only the ingredients of the step's own section are offered: the ingredient section
-      // with the same title as the step's section, or the loose ones above the first
-      // ingredient section when the step has none. Without a match, everything is offered.
-      const norm = (t) => String(t).trim().toLowerCase();
-      const sectionOf = new Map();
-      let current = "";
-      let hasSections = false;
-      for (const row of rows) {
-        if (row.header) {
-          current = norm(row.text);
-          hasSections = true;
-        } else sectionOf.set(row.uid, current);
-      }
-      if (hasSections) {
-        let wanted = "";
-        const list = (this._form && this._form.steps) || [];
-        for (const other of list.slice(0, Math.max(list.indexOf(step), 0))) if (other.section) wanted = norm(other.text);
-        const same = all.filter((row) => sectionOf.get(row.uid) === wanted || step.ingredients.includes(row.uid));
-        if (same.length) all = same;
-      }
-      // An ingredient linked to another step is not offered again here, unless this step
-      // already has it (older recipes may link one ingredient to several steps).
-      const taken = new Set();
-      for (const other of (this._form && this._form.steps) || []) {
-        if (other !== step && !other.section) for (const uid of other.ingredients) taken.add(uid);
-      }
-      const items = all.filter((row) => !taken.has(row.uid) || step.ingredients.includes(row.uid));
-      if (!items.length) return `<span class="muted">Every ingredient is already used in another step.</span>`;
-      return items
-        .map(
-          (row) =>
-            `<button type="button" class="chip ${step.ingredients.includes(row.uid) ? "active" : ""}" data-uid="${esc(row.uid)}">${esc(row.text)}</button>`
-        )
-        .join("");
-    },
-
-    _rowHtml(row) {
-      const inputs = row.header
-        ? `<input data-f="itext" placeholder="Section title, e.g. Dough" value="${esc(row.text)}">`
-        : `<input data-f="itext" placeholder="e.g. 200 g butter" value="${esc(row.text)}">
-           ${row.subs
-             .map(
-               (sub, n) => `<div class="sub-row"><input data-f="isub" placeholder="Substitute with its own amount, e.g. 180 g coconut oil" value="${esc(sub)}">
-                 <button type="button" class="mini" data-row-act="sub-remove" data-uid="${esc(row.uid)}" data-i="${n}" title="Remove this substitute">✕</button></div>`
-             )
-             .join("")}
-           <button type="button" class="mini link" data-row-act="sub" data-uid="${esc(row.uid)}">+ ${row.subs.length ? "another " : ""}substitute</button>
-           <input data-f="icomment" class="ing-comment-input" placeholder="Note, e.g. room temperature" value="${esc(row.comment || "")}">`;
-      return `<div class="ing-row ${row.header ? "is-header" : ""}" data-uid="${esc(row.uid)}" data-header="${row.header ? 1 : 0}">
-        <button type="button" class="drag-handle" draggable="true" data-drag="row" title="Drag to reorder" aria-label="Drag to reorder">⠿</button>
-        <div class="ing-inputs">${inputs}</div>
-        <span class="row-btns">
-          <button type="button" data-row-act="up" data-uid="${esc(row.uid)}" title="Move up">↑</button>
-          <button type="button" data-row-act="down" data-uid="${esc(row.uid)}" title="Move down">↓</button>
-          <button type="button" data-row-act="remove" data-uid="${esc(row.uid)}" title="Remove">✕</button>
-        </span></div>`;
+      this._syncEditor();
     },
 
     _yieldPreview(d) {
@@ -193,45 +111,12 @@ export default function (h) {
     _formHtml() {
       const d = this._form;
       const f = (k) => esc(d[k] ?? "");
-      let num = 0;
-      const steps = d.steps
-        .map((st, n) => {
-          const head = (label) => `<div class="step-head"><button type="button" class="drag-handle" draggable="true" data-drag="step" title="Drag to reorder" aria-label="Drag to reorder">⠿</button><strong>${label}</strong><span class="spacer"></span>
-              <button type="button" data-step-act="up" data-n="${n}" title="Move up">↑</button>
-              <button type="button" data-step-act="down" data-n="${n}" title="Move down">↓</button>
-              <button type="button" data-step-act="remove" data-n="${n}" title="Remove">✕</button></div>`;
-          const bar = `<div class="insert-bar"><button type="button" class="mini link" data-step-act="insert" data-n="${n}">+ Step here</button><button type="button" class="mini link" data-step-act="insert-section" data-n="${n}">+ Section here</button></div>`;
-          if (st.section) {
-            return bar + `<div class="step is-section" data-n="${n}" data-section="1">${head("Section")}
-              <input data-f="text" placeholder="Section title, e.g. Assembly" value="${esc(st.text)}"></div>`;
-          }
-          num += 1;
-          return bar + `<div class="step" data-n="${n}" data-section="0">${head(`Step ${num}`)}
-            <textarea data-f="text" data-autosize rows="2" placeholder="What to do…">${esc(st.text)}</textarea>
-            <div class="timer-field"><label class="lbl">Timers (optional)</label>
-              ${st.timers
-                .map(
-                  (t, ti) => `<div class="timer-row">
-                    <input data-f="th" type="number" min="0" step="1" placeholder="0" value="${esc(t.h)}" aria-label="Hours"><span>h</span>
-                    <input data-f="tm" type="number" min="0" step="1" placeholder="0" value="${esc(t.m)}" aria-label="Minutes"><span>min</span>
-                    <input data-f="ts" type="number" min="0" step="1" placeholder="0" value="${esc(t.s)}" aria-label="Seconds"><span>sec</span>
-                    <input data-f="tl" class="timer-label" placeholder="Label, e.g. simmer" value="${esc(t.label)}" maxlength="60">
-                    <button type="button" class="mini" data-step-act="remove-timer" data-n="${n}" data-t="${ti}" title="Remove this timer">✕</button></div>`
-                )
-                .join("")}
-              <button type="button" class="mini link" data-step-act="add-timer" data-n="${n}">+ ${st.timers.length ? "another " : ""}timer</button></div>
-            <label class="lbl">Ingredients used in this step</label>
-            <div class="chips step-ings-edit">${this._stepChips(st, d.rows)}</div>
-          </div>`;
-        })
-        .join("");
       return `
         <div class="panel">
-          <h2 class="form-title">${this._view.id ? "Edit recipe" : "New recipe"}
-            <button type="button" class="btn secondary" data-act="editor-toggle">${this._neOn() ? "Classic editor" : "New editor (beta)"}</button></h2>
+          <h2 class="form-title">${this._view.id ? "Edit recipe" : "New recipe"}</h2>
           <form id="form" data-id="${esc(this._view.id || "")}">
             <div class="field"><label class="lbl">Name</label><input name="name" required value="${f("name")}"></div>
-            ${this._neOn() ? `<details class="ne-meta" ${this._neMetaOpen || !this._view.id ? "open" : ""}><summary>Details: photo, times, servings, tags</summary>` : ""}
+            <details class="ne-meta" ${this._neMetaOpen || !this._view.id ? "open" : ""}><summary>Details: photo, times, servings, tags</summary>
             <div class="field"><label class="lbl">Description</label><textarea name="description" data-autosize rows="2">${f("description")}</textarea></div>
             <div class="field"><label class="lbl">Photo</label>
               <div class="img-field">
@@ -265,21 +150,8 @@ export default function (h) {
               ${this._multiHtml("tools", "Tools", "tool", d.tools)}
               ${this._multiHtml("tags", "Tags", "tag", d.tags)}
             </div>
-            ${this._neOn() ? `</details>${this._newEditorHtml()}` : `<div class="field"><label class="lbl">Ingredients</label>
-              <div id="rows">${d.rows.map((row) => this._rowHtml(row)).join("")}</div>
-              <div class="actions" style="margin-top:8px">
-                <button type="button" class="btn secondary" data-row-act="add">+ Add ingredient</button>
-                <button type="button" class="btn secondary" data-row-act="add-section">+ Add section</button>
-              </div>
-              <p class="muted">Enter adds a row below. Pasting a list splits it into one ingredient per line.</p>
-            </div>
-            <div class="field"><label class="lbl">Instructions</label>
-              <div id="steps">${steps}</div>
-              <div class="actions">
-                <button type="button" class="btn secondary" data-step-act="add">+ Add step</button>
-                <button type="button" class="btn secondary" data-step-act="add-section">+ Add section</button>
-              </div>
-            </div>`}
+            </details>
+            ${this._newEditorHtml()}
             <div class="field"><label class="lbl">Notes</label><textarea name="notes" data-autosize rows="2">${f("notes")}</textarea></div>
             <div class="field"><label class="lbl">Source URL</label><input name="source_url" value="${f("source_url")}"></div>
             <div class="actions">
@@ -303,135 +175,6 @@ export default function (h) {
       boxes.forEach((t) => this._autosize(t));
       // fonts and the final width settle a moment after the render
       requestAnimationFrame(() => this.shadowRoot.querySelectorAll("textarea[data-autosize]").forEach((t) => this._autosize(t)));
-    },
-
-    /** Typing in an ingredient row: keep the step chips' labels in step. */
-    _refreshChips() {
-      this._syncForm();
-      const form = this.shadowRoot.getElementById("form");
-      form.querySelectorAll(".step").forEach((el, n) => {
-        const box = el.querySelector(".step-ings-edit");
-        if (box) box.innerHTML = this._stepChips(this._form.steps[n], this._form.rows);
-      });
-    },
-
-    _rowAction(act, uid, idx) {
-      this._syncForm();
-      const rows = this._form.rows;
-      const at = rows.findIndex((r) => r.uid === uid);
-      let focus = null;
-      if (act === "add" || act === "add-section") {
-        const row = { uid: this._nextUid(), header: act === "add-section", text: "", subs: [] };
-        rows.splice(at >= 0 ? at + 1 : rows.length, 0, row);
-        focus = row.uid;
-      } else if (act === "remove" && at >= 0) {
-        rows.splice(at, 1);
-        for (const st of this._form.steps) st.ingredients = st.ingredients.filter((u) => u !== uid);
-      } else if (act === "up" && at > 0) {
-        [rows[at - 1], rows[at]] = [rows[at], rows[at - 1]];
-      } else if (act === "down" && at >= 0 && at < rows.length - 1) {
-        [rows[at + 1], rows[at]] = [rows[at], rows[at + 1]];
-      } else if (act === "sub" && at >= 0) {
-        rows[at].subs.push("");
-        focus = `${uid}:sub`;
-      } else if (act === "sub-remove" && at >= 0) {
-        rows[at].subs.splice(Number(idx), 1);
-      }
-      this._formDirty = true;
-      this._focusUid = focus;
-      this._render();
-    },
-
-    /** Drag the ⠿ handle of an ingredient row or a step to put it somewhere else (mouse; on touch use ↑ ↓). */
-    _bindFormDrag(form) {
-      let drag = null;
-      const unitOf = (kind) => (kind === "row" ? ".ing-row" : ".step");
-      const clear = () => form.querySelectorAll(".drop-before, .drop-after, .dragging").forEach((el) => el.classList.remove("drop-before", "drop-after", "dragging"));
-      const target = (e) => {
-        if (!drag) return null;
-        const el = e.target.closest && e.target.closest(unitOf(drag.kind));
-        if (!el || el === drag.el) return null;
-        const box = el.getBoundingClientRect();
-        return { el, after: e.clientY > box.top + box.height / 2 };
-      };
-      form.addEventListener("dragstart", (e) => {
-        const h = e.target.closest && e.target.closest("[data-drag]");
-        if (!h) return;
-        const kind = h.dataset.drag;
-        const el = h.closest(unitOf(kind));
-        drag = { kind, el };
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", kind);
-        if (e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(el, 12, 12);
-        el.classList.add("dragging");
-      });
-      form.addEventListener("dragover", (e) => {
-        const t = target(e);
-        if (!t) return;
-        e.preventDefault();
-        form.querySelectorAll(".drop-before, .drop-after").forEach((el) => el.classList.remove("drop-before", "drop-after"));
-        t.el.classList.add(t.after ? "drop-after" : "drop-before");
-      });
-      form.addEventListener("drop", (e) => {
-        const t = target(e);
-        if (!t) return;
-        e.preventDefault();
-        const { kind, el } = drag;
-        drag = null;
-        clear();
-        this._syncForm();
-        const list = kind === "row" ? this._form.rows : this._form.steps;
-        const index = (node) => (kind === "row" ? list.findIndex((r) => r.uid === node.dataset.uid) : Number(node.dataset.n));
-        const from = index(el);
-        let to = index(t.el) + (t.after ? 1 : 0);
-        if (from < 0 || to < 0) return;
-        if (from < to) to -= 1;
-        if (from !== to) {
-          list.splice(to, 0, list.splice(from, 1)[0]);
-          this._formDirty = true;
-          this._render();
-        }
-      });
-      form.addEventListener("dragend", () => {
-        drag = null;
-        clear();
-      });
-    },
-
-    /** Pasting several lines into a row creates a row per line. */
-    _pasteRows(e, uid) {
-      const text = (e.clipboardData || window.clipboardData).getData("text");
-      if (!/\r?\n/.test(text)) return;
-      const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      if (lines.length < 2) return;
-      e.preventDefault();
-      this._syncForm();
-      const rows = this._form.rows;
-      const at = rows.findIndex((r) => r.uid === uid);
-      const fresh = lines.map((l) => this._rowFromString(l));
-      // an empty row is replaced by the pasted list, a filled one keeps its place
-      const replace = at >= 0 && !rows[at].text.trim();
-      rows.splice(replace ? at : at + 1, replace ? 1 : 0, ...fresh);
-      this._formDirty = true;
-      this._render();
-    },
-
-    _stepAction(act, n, t) {
-      this._syncForm();
-      const steps = this._form.steps;
-      if (act === "add") steps.push({ text: "", ingredients: [], timers: [], section: false });
-      else if (act === "add-section") steps.push({ text: "", ingredients: [], timers: [], section: true });
-      else if (act === "insert" || act === "insert-section") {
-        steps.splice(n, 0, { text: "", ingredients: [], timers: [], section: act === "insert-section" });
-        this._focusStep = n;
-      }
-      else if (act === "add-timer" && steps[n]) steps[n].timers.push({ h: "", m: "", s: "", label: "" });
-      else if (act === "remove-timer" && steps[n]) steps[n].timers.splice(Number(t), 1);
-      else if (act === "remove") steps.splice(n, 1);
-      else if (act === "up" && n > 0) [steps[n - 1], steps[n]] = [steps[n], steps[n - 1]];
-      else if (act === "down" && n < steps.length - 1) [steps[n + 1], steps[n]] = [steps[n], steps[n + 1]];
-      this._formDirty = true;
-      this._render();
     },
 
     async _save(e, form) {
