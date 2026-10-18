@@ -116,27 +116,27 @@ export default function (h) {
 
     _brCard(r) {
       const picked = this._picked.has(r.id);
-      return `<div class="rcard${picked ? " picked" : ""}" ${this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`}>
+      return `<ha-card class="rcard${picked ? " picked" : ""}" ${this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`}>
           ${this._select ? `<div class="pick">${picked ? "✓" : ""}</div>` : ""}
           <div class="rpic" ${this._brImg(r)}>${r.image ? "" : `<ha-icon icon="mdi:silverware-fork-knife"></ha-icon>`}</div>
           <div class="rtx"><div class="rtitle"><b>${esc(r.name)}</b>${
             this._canEdit !== false && !this._select
               ? `<button type="button" class="rpen" data-edit="${esc(r.id)}" title="Edit" aria-label="Edit"><ha-icon icon="mdi:pencil"></ha-icon></button>`
               : ""
-          }</div><span>${this._brMeta(r)}</span></div></div>`;
+          }</div><span>${this._brMeta(r)}</span></div></ha-card>`;
     },
 
     _brRow(r) {
       const picked = this._picked.has(r.id);
       const cat = (r.categories || [])[0];
       const n = (r.ingredients || []).filter((i) => !/^#{1,6}\s/.test(i)).length;
-      return `<div class="rrow${picked ? " picked" : ""}" ${this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`}>
+      return `<ha-card class="rrow${picked ? " picked" : ""}" ${this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`}>
           ${this._select ? `<div class="pick">${picked ? "✓" : ""}</div>` : ""}
           <div class="rpic" ${this._brImg(r)}>${r.image ? "" : `<ha-icon icon="mdi:silverware-fork-knife"></ha-icon>`}</div>
           <div class="rtx"><b>${esc(r.name)}</b>
             ${r.description ? `<p>${esc(r.description)}</p>` : ""}
             <div class="rmeta">${cat ? `<span class="badge">${esc(cat)}</span>` : ""}<span>${this._brMeta(r)}</span>${n ? `<span>${n} ingredients</span>` : ""}</div></div>
-          ${this._canEdit !== false && !this._select ? `<button type="button" class="rpen" data-edit="${esc(r.id)}" title="Edit" aria-label="Edit"><ha-icon icon="mdi:pencil"></ha-icon></button>` : ""}</div>`;
+          ${this._canEdit !== false && !this._select ? `<button type="button" class="rpen" data-edit="${esc(r.id)}" title="Edit" aria-label="Edit"><ha-icon icon="mdi:pencil"></ha-icon></button>` : ""}</ha-card>`;
     },
 
     // ---- the toolbar, filters and table are Home Assistant's own elements (ha-assist-chip, ha-dropdown,
@@ -225,25 +225,25 @@ export default function (h) {
       const b = this._brPrefs();
       this._fq = this._fq || {};
       const icons = { categories: "folder-outline", tools: "tools", tags: "tag-outline" };
-      const sec = (id, title, inner) =>
-        `<ha-expansion-panel class="fsec" data-sec="${id}" header="${esc(title)}" left-chevron ${b.secs.has(id) ? "expanded" : ""}>${inner}</ha-expansion-panel>`;
+      // like Home Assistant's filter panels: a header with a count badge and a clear button, a search and a checkbox list
+      const sec = (id, headerHtml, inner) =>
+        `<ha-expansion-panel class="fsec" data-sec="${id}" left-chevron ${b.secs.has(id) ? "expanded" : ""}><div slot="header" class="fhdr">${headerHtml}</div>${inner}</ha-expansion-panel>`;
       const facet = (kind, label) => {
         const vals = values(kind);
         if (!vals.length) return "";
         const q = (this._fq[kind] || "").toLowerCase();
-        const search = vals.length > 6 ? `<div class="fsearch"><ha-input-search appearance="outlined" data-fsearch="${kind}" placeholder="Search"></ha-input-search></div>` : "";
+        const n = this._sel[kind].size;
+        const header = `${esc(T(label))}${n ? `<span class="badge">${n}</span><ha-icon-button class="fclear" data-fclear="${kind}" label="Clear filter"><ha-icon icon="mdi:filter-variant-remove"></ha-icon></ha-icon-button>` : ""}`;
+        const search = vals.length > 6 ? `<ha-input-search class="fsearch" appearance="outlined" data-fsearch="${kind}" placeholder="Search"></ha-input-search>` : "";
         return sec(
           kind,
-          label,
-          search +
-            vals
-              .map(
-                (v) =>
-                  `<div class="fit" data-fitem="${kind}" data-value="${esc(v)}" ${q && !v.toLowerCase().includes(q) ? "hidden" : ""}><ha-icon icon="mdi:${icons[kind]}"></ha-icon><span>${esc(v)}</span><em>${count(kind, v)}</em><ha-checkbox ${
-                    this._sel[kind].has(v) ? "checked" : ""
-                  }></ha-checkbox></div>`
-              )
-              .join("")
+          header,
+          `${search}<ha-list multi data-flist="${kind}">${vals
+            .map(
+              (v) =>
+                `<ha-check-list-item data-value="${esc(v)}" ${this._sel[kind].has(v) ? "selected" : ""} ${q && !v.toLowerCase().includes(q) ? "hidden" : ""}>${esc(v)}</ha-check-list-item>`
+            )
+            .join("")}</ha-list>`
         );
       };
       const filtersOn = this._search.trim() || Object.values(this._sel).some((set) => set.size);
@@ -259,7 +259,7 @@ export default function (h) {
       return (
         sec(
           "cookbooks",
-          "Cookbooks",
+          esc(T("Cookbooks")),
           `<div class="fit cbk ${this._cookbookId ? "" : "on"}" data-cookbook=""><ha-icon icon="mdi:book-multiple-outline"></ha-icon><span>All recipes</span><em>${this._recipes.length}</em></div>` +
             this._cookbooks
               .map(
@@ -285,13 +285,12 @@ export default function (h) {
     },
 
     _brDialog(m) {
-      return `<dialog class="fdlg" id="fdlg">
-          <div class="dh"><button type="button" class="dclose" data-act="br-filters-close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button><b>Filters</b>${
-            this._brActive() ? `<ha-button appearance="plain" size="s" data-act="br-clear">Clear</ha-button>` : ""
-          }</div>
+      return `<ha-adaptive-dialog id="fdlg" flexcontent width="full" header-title="${esc(T("Filters"))}">
+          <ha-icon-button slot="headerNavigationIcon" data-act="br-filters-close" label="Close"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>
+          ${this._brActive() ? `<ha-button slot="headerActionItems" appearance="plain" size="s" data-act="br-clear">Clear</ha-button>` : ""}
           <div class="dlgbody">${this._brSections(m.values, m.count)}</div>
-          <div class="dfoot"><ha-button size="m" data-act="br-filters-close">Show ${m.shown.length} recipes</ha-button></div>
-        </dialog>`;
+          <ha-dialog-footer slot="footer"><ha-button slot="primaryAction" data-act="br-filters-close">Show ${m.shown.length} recipes</ha-button></ha-dialog-footer>
+        </ha-adaptive-dialog>`;
     },
 
     _brToolbar(m) {
@@ -322,23 +321,29 @@ export default function (h) {
         </div>`;
     },
 
+    /** Home Assistant's selection bar: close, a Select menu, the count, and the bulk actions. */
     _brBulkBar(m) {
       if (!this._select) return "";
-      return `<div class="bulkbar">
-            <strong class="bcnt">${this._picked.size} selected</strong>
-            <button class="btn secondary" data-bulk="all">Select all ${m.shown.length} shown</button>
-            <button class="btn secondary" data-bulk="none">Clear</button>
-            <select id="bulk-field">
-              ${[["categories", "Category"], ["tags", "Tag"], ["tools", "Tool"]]
-                .map(([v, l]) => `<option value="${v}" ${this._bulkField === v ? "selected" : ""}>${l}</option>`)
-                .join("")}
-            </select>
-            <input id="bulk-value" list="bulk-values" placeholder="value" value="${esc(this._bulkValue)}" autocomplete="off">
-            <datalist id="bulk-values">${this._usedValues(this._bulkField).map((v) => `<option value="${esc(v)}"></option>`).join("")}</datalist>
-            <button class="btn" data-bulk="add">Add</button>
-            <button class="btn secondary" data-bulk="remove">Remove</button>
-            <button class="btn danger" data-bulk="delete">Delete</button>
-          </div>`;
+      const fields = [["categories", "Category"], ["tags", "Tag"], ["tools", "Tool"]];
+      const cur = (fields.find(([v]) => v === this._bulkField) || fields[0]);
+      return `<div class="selection-bar">
+          <div class="selection-controls">
+            <ha-icon-button data-act="select" label="${esc(T("Done selecting"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>
+            <ha-dropdown id="br-selmenu"><span slot="trigger">${this._brChip("", "format-list-checks", T("Select"), "menu-down")}</span>
+              <ha-dropdown-item value="all">${esc(T(`Select all ${m.shown.length} shown`))}</ha-dropdown-item>
+              <ha-dropdown-item value="none">${esc(T("Clear"))}</ha-dropdown-item></ha-dropdown>
+            <p class="bcnt">${this._picked.size} selected</p>
+          </div>
+          <div class="center-vertical">
+            <ha-dropdown id="br-bfield"><span slot="trigger">${this._brChip("", "", T(cur[1]), "menu-down")}</span>${fields
+              .map(([v, l]) => `<ha-dropdown-item value="${v}" ${v === cur[0] ? "data-sel" : ""}>${esc(T(l))}</ha-dropdown-item>`)
+              .join("")}</ha-dropdown>
+            <ha-input id="bulk-value" class="bulk-value" appearance="outlined" placeholder="value"></ha-input>
+            <ha-button size="s" appearance="accent" data-bulk="add">Add</ha-button>
+            <ha-button size="s" appearance="filled" data-bulk="remove">Remove</ha-button>
+            <ha-button size="s" appearance="filled" variant="danger" data-bulk="delete">Delete</ha-button>
+          </div>
+        </div>`;
     },
 
     _brContentHtml(m) {
@@ -375,7 +380,7 @@ export default function (h) {
             <div class="bcontent ${m.b.view}">${this._brContentHtml(m)}</div>
           </div>
         </div>
-        ${m.compact ? this._brDialog(m) : ""}
+        ${m.compact && this._filterDlg ? this._brDialog(m) : ""}
         ${this._newDlg ? this._brNewDialog() : ""}`;
     },
 
@@ -523,6 +528,16 @@ export default function (h) {
     _bindBrowser(root, on) {
       const b = this._brPrefs();
       const m = this._brModel();
+      const fdlg = root.getElementById("fdlg");
+      if (fdlg) {
+        fdlg.open = true;
+        fdlg.addEventListener("closed", () => {
+          if (this._filterDlg) {
+            this._filterDlg = false;
+            this._render();
+          }
+        });
+      }
       const newDlg = root.getElementById("newdlg");
       if (newDlg) {
         newDlg.open = true;
@@ -565,6 +580,13 @@ export default function (h) {
         this._render();
       });
       menu("br-more", (v) => this._action(v));
+      menu("br-selmenu", (v) => this._bulkAction(v));
+      menu("br-bfield", (v) => {
+        this._bulkField = v;
+        this._render();
+      });
+      const bulk = root.getElementById("bulk-value");
+      if (bulk) bulk.value = this._bulkValue || "";
       const tg = root.getElementById("br-view");
       if (tg) {
         const label = { cards: T("Cards"), rows: T("Rows"), list: T("List") };
@@ -584,18 +606,21 @@ export default function (h) {
         this._render();
       });
       // the filters
-      // the checkbox reports its own change (a click on it also reaches the row, so the row ignores it)
-      on("[data-fitem]", "click", (e) => {
-        if (e.target.closest("ha-checkbox")) return;
-        const { fitem, value } = e.currentTarget.dataset;
-        const set = this._sel[fitem];
-        if (!set.delete(value)) set.add(value);
+      // the filter rows are Home Assistant's own check list items
+      on("ha-check-list-item", "request-selected", (e) => {
+        if (!e.detail || e.detail.source !== "interaction") return;
+        const el = e.currentTarget;
+        const kind = el.closest("[data-flist]").dataset.flist;
+        const value = el.dataset.value;
+        const before = this._sel[kind].has(value);
+        if (e.detail.selected === before) return;
+        if (e.detail.selected) this._sel[kind].add(value);
+        else this._sel[kind].delete(value);
         this._render();
       });
-      on("[data-fitem] ha-checkbox", "change", (e) => {
-        const { fitem, value } = e.currentTarget.closest("[data-fitem]").dataset;
-        if (e.currentTarget.checked) this._sel[fitem].add(value);
-        else this._sel[fitem].delete(value);
+      on("[data-fclear]", "click", (e) => {
+        e.stopPropagation();
+        this._sel[e.currentTarget.dataset.fclear] = new Set();
         this._render();
       });
       this._fq = this._fq || {};
@@ -604,7 +629,7 @@ export default function (h) {
         const text = e.currentTarget.value || "";
         const q = text.trim().toLowerCase();
         this._fq[kind] = text;
-        e.currentTarget.closest("ha-expansion-panel").querySelectorAll(".fit").forEach((it) => {
+        e.currentTarget.closest("ha-expansion-panel").querySelectorAll("ha-check-list-item").forEach((it) => {
           it.hidden = !!q && !it.textContent.toLowerCase().includes(q);
         });
       });
