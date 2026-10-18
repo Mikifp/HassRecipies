@@ -13,6 +13,10 @@
 
 const da = {
   exact: {
+    "Create new recipe": "Opret ny opskrift",
+    "Start with an empty recipe from scratch": "Start med en tom opskrift",
+    "Import from a URL": "Importér fra en URL",
+    "Fetch a recipe from a web page": "Hent en opskrift fra en hjemmeside",
     "Filters": "Filtre",
     "Cards": "Kort",
     "Rows": "Rækker",
@@ -324,7 +328,7 @@ export const translate = (language, text) => {
   return lead + core + trail;
 };
 
-const ATTRIBUTES = ["title", "placeholder", "aria-label", "label", "header"];
+const ATTRIBUTES = ["title", "placeholder", "aria-label", "label", "header", "header-title", "headline", "supporting-text"];
 const SKIP = new Set(["STYLE", "SCRIPT", "TEXTAREA", "INPUT"]);
 
 /** Translate every text node and label attribute under `root` (a node or shadow root). */

@@ -883,6 +883,18 @@ class HassRecipesPanel extends HTMLElement {
         this._render();
         break;
       }
+      case "new-dialog":
+        this._newDlg = true;
+        this._render();
+        break;
+      case "new-manual":
+        this._newDlg = false;
+        this._action("new");
+        break;
+      case "new-url":
+        this._newDlg = false;
+        this._action("import");
+        break;
       case "br-filters-close":
         this._filterDlg = false;
         this._render();

@@ -314,7 +314,7 @@ export default function (h) {
     _listHtml() {
       const m = this._brModel();
       // ha-button size l: kept outside the page so it stays in the bottom corner
-      this._fab = this._canEdit === false ? "" : `<ha-button class="fab" size="l" data-act="new"><ha-icon slot="start" icon="mdi:plus"></ha-icon>New recipe</ha-button>`;
+      this._fab = this._canEdit === false ? "" : `<ha-button class="fab" size="l" data-act="new-dialog"><ha-icon slot="start" icon="mdi:plus"></ha-icon>New recipe</ha-button>`;
       return `
         <div class="bshell ${m.paneOpen ? "with-pane" : ""}">
           ${m.paneOpen ? this._brPane(m) : ""}
@@ -324,7 +324,20 @@ export default function (h) {
             <div class="bcontent ${m.b.view}">${this._brContentHtml(m)}</div>
           </div>
         </div>
-        ${m.compact ? this._brDialog(m) : ""}`;
+        ${m.compact ? this._brDialog(m) : ""}
+        ${this._newDlg ? this._brNewDialog() : ""}`;
+    },
+
+    /** "Create recipe": the same dialog Home Assistant shows for "Create automation". */
+    _brNewDialog() {
+      const item = (act, icon, headline, text) =>
+        `<ha-list-item-base interactive data-act="${act}" headline="${esc(T(headline))}" supporting-text="${esc(T(text))}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon><ha-icon-next slot="end"></ha-icon-next></ha-list-item-base>`;
+      return `<ha-adaptive-dialog id="newdlg" flexcontent header-title="${esc(T("New recipe"))}">
+          <ha-list-base>
+            ${item("new-manual", "pencil-outline", "Create new recipe", "Start with an empty recipe from scratch")}
+            ${item("new-url", "link-variant", "Import from a URL", "Fetch a recipe from a web page")}
+          </ha-list-base>
+        </ha-adaptive-dialog>`;
     },
 
     /** Re-draw only the recipes (the search box keeps its focus). */
@@ -452,6 +465,16 @@ export default function (h) {
     _bindBrowser(root, on) {
       const b = this._brPrefs();
       const m = this._brModel();
+      const newDlg = root.getElementById("newdlg");
+      if (newDlg) {
+        newDlg.open = true;
+        newDlg.addEventListener("closed", () => {
+          if (this._newDlg) {
+            this._newDlg = false;
+            this._render();
+          }
+        });
+      }
       const bc = root.querySelector(".bcontent");
       if (bc) this._brBindContent(bc, m);
       // the toolbar
