@@ -154,7 +154,7 @@ export default function (h) {
         .map((g) => {
           const closed = g.key && collapsed.has(g.key);
           const gh = g.key
-            ? `<tr class="grow" data-group="${esc(g.key)}"><td colspan="6"><ha-icon icon="mdi:chevron-${closed ? "right" : "down"}"></ha-icon>${esc(g.title)}<em>${g.items.length}</em></td></tr>`
+            ? `<tr class="grow" data-group="${esc(g.key)}"><td colspan="6"><ha-icon icon="mdi:chevron-${closed ? "down" : "up"}"></ha-icon>${esc(g.title)}<em>${g.items.length}</em></td></tr>`
             : "";
           return gh + (closed ? "" : g.items.map(rowFor).join(""));
         })
@@ -166,7 +166,7 @@ export default function (h) {
     _brSections(values, count) {
       const b = this._brPrefs();
       const sec = (id, title, inner) =>
-        `<details class="fsec" data-sec="${id}" ${b.secs.has(id) ? "open" : ""}><summary>${title}</summary>${inner}</details>`;
+        `<details class="fsec" data-sec="${id}" ${b.secs.has(id) ? "open" : ""}><summary><ha-icon class="fchev" icon="mdi:chevron-down"></ha-icon>${title}</summary>${inner}</details>`;
       const facet = (kind, label) => {
         const vals = values(kind);
         if (!vals.length) return "";
@@ -283,7 +283,7 @@ export default function (h) {
             b.sort
           )}</select>
           <button type="button" class="vbtn dir" data-act="br-dir" title="Sort direction" aria-label="Sort direction"><ha-icon icon="mdi:${b.dir === "asc" ? "sort-ascending" : "sort-descending"}"></ha-icon></button>
-          <div class="vseg">${viewBtn("cards", "view-grid-outline", "Cards")}${viewBtn("rows", "view-agenda-outline", "Rows")}${viewBtn("list", "format-list-bulleted", "List")}</div>
+          <div class="vseg" role="group">${viewBtn("cards", "view-module", "Cards")}${viewBtn("rows", "view-agenda", "Rows")}${viewBtn("list", "view-headline", "List")}</div>
           <details class="bmore"><summary aria-label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></summary>
             <div class="bmenu">
               ${this._canEdit === false ? "" : `<button type="button" data-act="import"><ha-icon icon="mdi:link-variant"></ha-icon>Import URL</button>`}
@@ -294,7 +294,7 @@ export default function (h) {
       const groupBlock = (g) => {
         const closed = g.key && b.collapsed.has(g.key);
         const heading = g.key
-          ? `<div class="bgh" data-group="${esc(g.key)}"><ha-icon icon="mdi:${closed ? "chevron-right" : "chevron-down"}"></ha-icon><ha-icon class="gi" icon="mdi:${g.icon}"></ha-icon><span>${esc(g.title)}</span><em>${g.items.length}</em></div>`
+          ? `<div class="bgh" data-group="${esc(g.key)}"><ha-icon icon="mdi:${closed ? "chevron-down" : "chevron-up"}"></ha-icon><ha-icon class="gi" icon="mdi:${g.icon}"></ha-icon><span>${esc(g.title)}</span><em>${g.items.length}</em></div>`
           : "";
         if (closed) return heading;
         const body =
@@ -309,6 +309,8 @@ export default function (h) {
           ? this._brTable(groups)
           : groups.map(groupBlock).join("");
 
+      // ha-button size l: kept outside the page so it stays in the bottom corner
+      this._fab = this._canEdit === false ? "" : `<button type="button" class="fab" data-act="new"><ha-icon icon="mdi:plus"></ha-icon><span>New recipe</span></button>`;
       return `
         <div class="bshell ${paneOpen ? "with-pane" : ""}">
           ${paneOpen ? this._brPane(values, count) : ""}
@@ -318,7 +320,6 @@ export default function (h) {
             <div class="bcontent ${b.view}">${content}</div>
           </div>
         </div>
-        ${this._canEdit === false ? "" : `<div class="fabwrap"><button type="button" class="fab" data-act="new"><ha-icon icon="mdi:plus"></ha-icon><span>New recipe</span></button></div>`}
         ${compact ? this._brDialog(values, count, shown.length) : ""}`;
     },
 

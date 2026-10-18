@@ -14,8 +14,9 @@ const { esc, isHeader, clock, scaleBasis, observeTranslations, T, state, isoDate
 const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-form", "panel-editor"].map(load));
 
 const STYLE = `
-  :host { display: block; height: 100%; overflow: auto; container-type: inline-size; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
+  :host { --hq-loud: var(--ha-color-fill-primary-loud-resting, var(--primary-color)); --hq-on-loud: var(--ha-color-on-primary-loud, #fff); --hq-normal: var(--ha-color-fill-primary-normal-resting, color-mix(in srgb, var(--primary-color) 14%, #fff)); --hq-on-normal: var(--ha-color-on-primary-normal, var(--primary-color)); --hq-outline: var(--outline-color, var(--divider-color)); display: block; height: 100%; overflow: auto; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
   * { box-sizing: border-box; }
+  .cq { container-type: inline-size; min-height: 100%; }
   .sticky { position: sticky; top: 0; z-index: 2; }
   header { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 16px; min-height: 56px; background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff); }
   .timers:empty { display: none; }
@@ -54,7 +55,7 @@ const STYLE = `
   .btool { display: flex; gap: 12px; align-items: center; min-height: 56px; padding: 0 16px; background: var(--primary-background-color); border-bottom: 1px solid var(--divider-color); }
   .bulkbar { margin: 12px 16px 0; }
   .bcontent { min-width: 0; }
-  .bcontent.cards, .bcontent.rows { padding: 16px; }
+  .bcontent.cards, .bcontent.rows { padding: 16px 16px 88px; }
   .bcontent .empty { padding: 48px 16px; }
   .fpane { background: var(--primary-background-color); border-right: 1px solid var(--divider-color); font-size: 14px; }
   .fpane-in { position: sticky; top: 56px; max-height: calc(100vh - 60px); overflow: auto; }
@@ -63,16 +64,19 @@ const STYLE = `
   .bsearch { position: relative; flex: 1 1 200px; min-width: 140px; }
   .bsearch ha-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); --mdc-icon-size: 20px; color: var(--secondary-text-color); pointer-events: none; }
   .btool input[type=search] { width: 100%; height: 32px; padding: 0 12px 0 38px; border-radius: 10px; border: 1px solid var(--outline-color, var(--divider-color)); background: var(--card-background-color); font-size: 14px; }
-  .bbtn, .vbtn, .bsel { height: 32px; border: 1px solid var(--outline-color, var(--divider-color)); border-radius: 10px; background: var(--card-background-color); color: var(--primary-text-color); font: inherit; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; }
+  .bbtn, .bsel { position: relative; height: 32px; border: 1px solid var(--hq-outline); border-radius: 10px; background: var(--card-background-color); color: var(--primary-text-color); font: inherit; font-size: 14px; font-weight: 400; line-height: 20px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; }
   .bsel { padding: 0 8px; width: auto; }
-  .bbtn.ic, .vbtn { padding: 0 8px; }
-  .bbtn.on, .vbtn.on { background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); border-color: var(--primary-color); color: var(--primary-color); }
-  .bbtn ha-icon, .vbtn ha-icon { --mdc-icon-size: 18px; }
-  .bcount { background: var(--primary-color); color: var(--text-primary-color, #fff); border-radius: 10px; font-size: 11px; padding: 0 7px; line-height: 18px; }
-  .vseg { display: inline-flex; }
-  .vseg .vbtn { border-radius: 0; margin-left: -1px; }
-  .vseg .vbtn:first-child { border-radius: 10px 0 0 10px; margin-left: 0; }
-  .vseg .vbtn:last-child { border-radius: 0 10px 10px 0; }
+  .bbtn.ic { padding: 0 8px; }
+  .bbtn:has(ha-icon) { padding-left: 8px; }
+  .bbtn.on { background: var(--hq-normal); border-color: var(--hq-normal); color: var(--primary-text-color); }
+  .bbtn ha-icon { --mdc-icon-size: 18px; }
+  .bcount { position: absolute; top: -4px; right: -4px; min-width: 16px; box-sizing: border-box; border-radius: 50%; font-size: 11px; line-height: 16px; text-align: center; padding: 0 2px; background: var(--primary-color); color: var(--text-primary-color, #fff); pointer-events: none; }
+  .vseg { display: inline-flex; gap: 1px; border-radius: 16px; overflow: hidden; flex: none; }
+  .vbtn { height: 32px; width: 40px; border: 0; padding: 0; background: var(--hq-normal); color: var(--hq-on-normal); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font: inherit; }
+  .vbtn.on { background: var(--hq-loud); color: var(--hq-on-loud); }
+  .vbtn:not(.on):hover { background: color-mix(in srgb, var(--hq-normal) 80%, var(--hq-loud)); }
+  .vbtn ha-icon { --mdc-icon-size: 20px; }
+  .vbtn.dir { width: 32px; border-radius: 10px; background: var(--card-background-color); border: 1px solid var(--hq-outline); color: var(--primary-text-color); }
   .bmore { position: relative; }
   .bmore summary { list-style: none; cursor: pointer; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--secondary-text-color); }
   .bmore summary::-webkit-details-marker { display: none; }
@@ -80,15 +84,15 @@ const STYLE = `
   .bmenu { position: absolute; right: 0; top: 42px; z-index: 6; min-width: 210px; background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.25); padding: 4px 0; }
   .bmenu button { display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: 0; color: inherit; font: inherit; padding: 10px 14px; cursor: pointer; text-align: left; }
   .bmenu button:hover { background: var(--secondary-background-color); }
-  .tbtn { background: none; border: 0; color: var(--primary-color); font: inherit; font-size: 13px; font-weight: 500; padding: 6px 8px; border-radius: 16px; cursor: pointer; }
+  .tbtn { background: none; border: 0; color: var(--primary-color); font: inherit; font-size: 14px; font-weight: 500; padding: 6px 12px; border-radius: 16px; cursor: pointer; }
   .tbtn:hover { background: color-mix(in srgb, var(--primary-color) 10%, transparent); }
   .tbtn.danger { color: var(--error-color, #db4437); }
   .fsec { border-top: 1px solid var(--divider-color); }
-  .fsec summary { list-style: none; cursor: pointer; padding: 0 16px; min-height: 48px; font-weight: 500; display: flex; align-items: center; gap: 10px; }
-  .fsec summary::before { content: "▾"; color: var(--secondary-text-color); font-size: 14px; transition: transform .15s; width: 14px; }
-  .fsec:not([open]) summary::before { transform: rotate(-90deg); }
+  .fsec summary { list-style: none; cursor: pointer; padding: 0 8px; min-height: 48px; font-weight: 500; display: flex; align-items: center; gap: 8px; color: var(--primary-text-color); }
+  .fchev { --mdc-icon-size: 24px; transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1); color: var(--secondary-text-color); }
+  .fsec[open] > summary .fchev { transform: rotate(180deg); }
   .fsec summary::-webkit-details-marker { display: none; }
-  .fit { display: flex; align-items: center; gap: 10px; padding: 5px 16px; cursor: pointer; }
+  .fit { display: flex; align-items: center; gap: 10px; padding: 5px 16px 5px 24px; cursor: pointer; }
   .fit:hover { background: var(--secondary-background-color); }
   .fit input { width: auto; margin: 0; }
   .fit span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -124,7 +128,7 @@ const STYLE = `
   .rtable { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--card-background-color); }
   .rtable th { text-align: left; font-weight: 500; font-size: 12px; color: var(--primary-text-color); padding: 0 16px; height: 56px; border-bottom: 1px solid var(--divider-color); white-space: nowrap; user-select: none; letter-spacing: .007em; }
   .rtable th[data-sort] { cursor: pointer; }
-  .rtable td { padding: 6px 16px; height: 52px; border-top: 1px solid var(--divider-color); font-size: 14px; }
+  .rtable td { padding: 6px 16px; height: 60px; border-top: 1px solid var(--divider-color); font-size: 14px; }
   .rtable tbody tr[data-open], .rtable tbody tr[data-pick] { cursor: pointer; }
   .rtable tbody tr[data-open]:hover, .rtable tbody tr[data-pick]:hover { background: color-mix(in srgb, var(--primary-text-color) 4%, transparent); }
   .rtable .c-pic { width: 44px; padding-right: 0; }
@@ -134,8 +138,8 @@ const STYLE = `
   .rtable tr.grow td { background: var(--primary-background-color); font-weight: 500; cursor: pointer; padding: 0 12px; height: 52px; }
   .rtable tr.grow ha-icon { --mdc-icon-size: 18px; vertical-align: -4px; margin-right: 4px; }
   .rtable tr.grow em { font-style: normal; font-weight: 400; color: var(--secondary-text-color); margin-left: 8px; font-size: 12px; }
-  .fabwrap { position: sticky; bottom: 16px; display: flex; justify-content: flex-end; pointer-events: none; padding: 0 16px; margin-top: -72px; height: 72px; align-items: flex-end; }
-  .fab { pointer-events: auto; display: inline-flex; align-items: center; gap: 12px; height: 56px; padding: 0 22px 0 18px; border: 0; border-radius: 28px; background: var(--primary-color); color: var(--text-primary-color, #fff); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,.28); }
+  .bcontent { padding-bottom: 88px; }
+  .fab { position: fixed; right: 16px; bottom: 16px; z-index: 5; display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 16px; border: 0; border-radius: 9999px; background: var(--hq-loud); color: var(--hq-on-loud); font: inherit; font-size: 16px; font-weight: 500; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
   .fab ha-icon { --mdc-icon-size: 24px; }
   .rcard.picked, .rrow.picked { outline: 3px solid var(--primary-color); }
   .rtable tr.picked td { background: color-mix(in srgb, var(--primary-color) 6%, transparent); }
@@ -152,7 +156,8 @@ const STYLE = `
     main { padding: 12px; }
     main.wide { padding: 0; }
     .btool { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
-    .bcontent.cards, .bcontent.rows { padding: 12px; }
+    .bcontent.cards, .bcontent.rows { padding: 12px 12px 88px; }
+    .rtable td { height: 64px; }
     .btool .lbl, .btool .bsel[id=br-sort] { display: none; }
     .btool .bsel { flex: 1 1 120px; min-width: 0; }
     .bsearch { flex-basis: 100%; order: -1; }
@@ -688,6 +693,7 @@ class HassRecipesPanel extends HTMLElement {
 
   _render() {
     const v = this._view;
+    this._fab = "";
     const dlgScroll = this.shadowRoot.querySelector(".dlgbody") ? this.shadowRoot.querySelector(".dlgbody").scrollTop : 0;
     let body;
     if (!this._loaded) body = `<div class="empty">Loading…</div>`;
@@ -708,7 +714,7 @@ class HassRecipesPanel extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>${STYLE}</style>
-      <div class="sticky">
+      <div class="cq"><div class="sticky">
         <header>
           ${
             this._narrow
@@ -725,7 +731,7 @@ class HassRecipesPanel extends HTMLElement {
         </header>
         <div id="timers" class="timers"></div>
       </div>
-      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main>`;
+      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<div class="error">${esc(this._error)}</div>` : ""}${body}</main></div>${this._fab || ""}`;
     this._timerSig = "";
     this._bind();
     this._autosizeAll();
