@@ -18,7 +18,7 @@ const STYLE = `
   * { box-sizing: border-box; }
   .cq { container-type: inline-size; min-height: 100%; }
   .sticky { position: sticky; top: 0; z-index: 2; }
-  header { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 16px; min-height: 56px; background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff); }
+  header { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 16px; min-height: 56px; border-bottom: 1px solid var(--divider-color); background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff); }
   .timers:empty { display: none; }
   .timers { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; background: var(--secondary-background-color); border-bottom: 1px solid var(--divider-color); }
   .timer { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 16px; background: var(--card-background-color); border: 1px solid var(--divider-color); font-size: 14px; }
@@ -50,7 +50,7 @@ const STYLE = `
   header .menu ha-icon { --mdc-icon-size: 24px; }
   main.wide { max-width: none; padding: 0; }
   main.wide > .notice, main.wide > .error { margin: 12px 16px; }
-  .bshell.with-pane { display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: stretch; }
+  .bshell.with-pane { display: grid; grid-template-columns: 250px minmax(0, 1fr); align-items: stretch; }
   .bmain { min-width: 0; }
   .btool { display: flex; gap: 12px; align-items: center; min-height: 56px; padding: 0 16px; background: var(--primary-background-color); border-bottom: 1px solid var(--divider-color); }
   .bulkbar { margin: 12px 16px 0; }
@@ -104,7 +104,7 @@ const STYLE = `
   .btool ha-dropdown { flex: none; }
   .vseg { display: inline-flex; gap: 1px; flex: none; }
   ha-expansion-panel.fsec { display: block; border-bottom: 1px solid var(--divider-color); --expansion-panel-summary-padding: 0 8px; --expansion-panel-content-padding: 0; }
-  .fsearch { padding: 4px 16px 8px; }
+  .fsearch { padding: 8px; }
   .fit > ha-icon { --mdc-icon-size: 24px; color: var(--secondary-text-color); flex: none; }
   .fit ha-checkbox { flex: none; }
   .fact { display: flex; flex-direction: column; align-items: flex-start; padding: 0 8px 8px 40px; }

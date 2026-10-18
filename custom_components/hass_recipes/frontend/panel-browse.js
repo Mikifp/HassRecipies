@@ -490,10 +490,18 @@ export default function (h) {
         this._render();
       });
       // the filters
+      // the checkbox reports its own change (a click on it also reaches the row, so the row ignores it)
       on("[data-fitem]", "click", (e) => {
+        if (e.target.closest("ha-checkbox")) return;
         const { fitem, value } = e.currentTarget.dataset;
         const set = this._sel[fitem];
         if (!set.delete(value)) set.add(value);
+        this._render();
+      });
+      on("[data-fitem] ha-checkbox", "change", (e) => {
+        const { fitem, value } = e.currentTarget.closest("[data-fitem]").dataset;
+        if (e.currentTarget.checked) this._sel[fitem].add(value);
+        else this._sel[fitem].delete(value);
         this._render();
       });
       this._fq = this._fq || {};
