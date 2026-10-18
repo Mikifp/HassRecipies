@@ -142,7 +142,7 @@ export default function (h) {
     _brTable(groups) {
       const { sort, dir, collapsed } = this._brPrefs();
       const arrow = (k) => (sort === k ? `<ha-icon class="sarrow" icon="mdi:arrow-${dir === "asc" ? "up" : "down"}"></ha-icon>` : "");
-      const head = `<tr><th class="c-pic"></th><th data-sort="name">${arrow("name")}Name</th><th class="c-hide">Category</th><th class="c-hide">Tools</th><th data-sort="time">${arrow("time")}Time</th><th data-sort="servings" class="c-hide">${arrow("servings")}Servings</th></tr>`;
+      const head = `<tr><th class="c-pic"></th><th data-sort="name"><span class="thl">${arrow("name")}Name</span></th><th class="c-hide">Category</th><th class="c-hide">Tools</th><th data-sort="time"><span class="thl">${arrow("time")}Time</span></th><th data-sort="servings" class="c-hide"><span class="thl">${arrow("servings")}Servings</span></th></tr>`;
       const rowFor = (r) => {
         const picked = this._picked.has(r.id);
         return `<tr class="${picked ? "picked" : ""}" ${this._select ? `data-pick="${esc(r.id)}"` : `data-open="${esc(r.id)}"`}>
@@ -154,7 +154,7 @@ export default function (h) {
         .map((g) => {
           const closed = g.key && collapsed.has(g.key);
           const gh = g.key
-            ? `<tr class="grow" data-group="${esc(g.key)}"><td colspan="6"><ha-icon icon="mdi:chevron-${closed ? "down" : "up"}"></ha-icon>${esc(g.title)}<em>${g.items.length}</em></td></tr>`
+            ? `<tr class="grow" data-group="${esc(g.key)}"><td colspan="6"><div class="gcell"><ha-icon icon="mdi:chevron-${closed ? "down" : "up"}"></ha-icon><span>${esc(g.title)}</span><em>${g.items.length}</em></div></td></tr>`
             : "";
           return gh + (closed ? "" : g.items.map(rowFor).join(""));
         })
@@ -167,18 +167,26 @@ export default function (h) {
       const b = this._brPrefs();
       const sec = (id, title, inner) =>
         `<details class="fsec" data-sec="${id}" ${b.secs.has(id) ? "open" : ""}><summary><ha-icon class="fchev" icon="mdi:chevron-down"></ha-icon>${title}</summary>${inner}</details>`;
+      const icons = { categories: "folder-outline", tools: "tools", tags: "tag-outline" };
+      this._fq = this._fq || {};
       const facet = (kind, label) => {
         const vals = values(kind);
         if (!vals.length) return "";
+        const q = (this._fq[kind] || "").toLowerCase();
+        const search =
+          vals.length > 6
+            ? `<div class="fsearch"><ha-icon icon="mdi:magnify"></ha-icon><input type="search" data-fsearch="${kind}" placeholder="Search" value="${esc(this._fq[kind] || "")}"></div>`
+            : "";
         return sec(
           kind,
           label,
-          vals
-            .map(
-              (v) =>
-                `<label class="fit"><input type="checkbox" data-fcb="${kind}" data-value="${esc(v)}" ${this._sel[kind].has(v) ? "checked" : ""}><span>${esc(v)}</span><em>${count(kind, v)}</em></label>`
-            )
-            .join("")
+          search +
+            vals
+              .map(
+                (v) =>
+                  `<label class="fit" ${q && !v.toLowerCase().includes(q) ? "hidden" : ""}><ha-icon icon="mdi:${icons[kind]}"></ha-icon><span>${esc(v)}</span><em>${count(kind, v)}</em><input type="checkbox" data-fcb="${kind}" data-value="${esc(v)}" ${this._sel[kind].has(v) ? "checked" : ""}></label>`
+              )
+              .join("")
         );
       };
       const filtersOn = this._search.trim() || Object.values(this._sel).some((set) => set.size);
@@ -194,9 +202,9 @@ export default function (h) {
         sec(
           "cookbooks",
           "Cookbooks",
-          `<div class="fit cbk ${this._cookbookId ? "" : "on"}" data-cookbook=""><span>All recipes</span><em>${this._recipes.length}</em></div>` +
+          `<div class="fit cbk ${this._cookbookId ? "" : "on"}" data-cookbook=""><ha-icon icon="mdi:book-multiple-outline"></ha-icon><span>All recipes</span><em>${this._recipes.length}</em></div>` +
             this._cookbooks
-              .map((c) => `<div class="fit cbk ${c.id === this._cookbookId ? "on" : ""}" data-cookbook="${esc(c.id)}"><span>${esc(c.name)}</span></div>`)
+              .map((c) => `<div class="fit cbk ${c.id === this._cookbookId ? "on" : ""}" data-cookbook="${esc(c.id)}"><ha-icon icon="mdi:book-open-page-variant-outline"></ha-icon><span>${esc(c.name)}</span></div>`)
               .join("") +
             cookbookActions
         ) +
@@ -363,6 +371,15 @@ export default function (h) {
       on("[data-edit]", "click", (e) => {
         e.stopPropagation();
         this._go({ name: "edit", id: e.currentTarget.dataset.edit });
+      });
+      on("input[data-fsearch]", "input", (e) => {
+        const kind = e.currentTarget.dataset.fsearch;
+        const q = e.currentTarget.value.trim().toLowerCase();
+        this._fq = this._fq || {};
+        this._fq[kind] = e.currentTarget.value;
+        e.currentTarget.closest(".fsec").querySelectorAll(".fit").forEach((it) => {
+          it.hidden = !!q && !it.textContent.toLowerCase().includes(q);
+        });
       });
       on("details[data-sec]", "toggle", (e) => {
         const d = e.currentTarget;
