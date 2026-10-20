@@ -326,12 +326,7 @@ export default function (h) {
       this._neApply(groups);
       this._formDirty = true;
       this._neFocus = focus;
-      // the page is rebuilt: keep it where it was
-      const top = this.scrollTop;
-      const pageTop = window.scrollY;
-      this._render();
-      this.scrollTop = top;
-      if (this._brCompact()) window.scrollTo(0, pageTop);
+      this._render(); // keeps the scroll itself (see _render)
     },
 
     _neFind(groups, uid, kind) {

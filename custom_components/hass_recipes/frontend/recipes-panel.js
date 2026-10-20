@@ -778,6 +778,10 @@ class HassRecipesPanel extends HTMLElement {
 
     const chrome = this._chrome(v);
     this._bottomBar = chrome.bottom;
+    // rebuilding the page must not throw the reader back to the top: keep the scroll while the same page is shown
+    const viewKey = `${v.name}/${v.id || ""}`;
+    const keep = this._scrollKey === viewKey && !this._scrollToCurrent ? { top: this.scrollTop, page: window.scrollY } : null;
+    this._scrollKey = viewKey;
     this.shadowRoot.innerHTML = `
       <style>${STYLE}</style>
       <div class="cq ${chrome.bottom ? "with-bar" : ""}"><div class="sticky">
@@ -786,6 +790,19 @@ class HassRecipesPanel extends HTMLElement {
       </div>
       <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<ha-alert alert-type="error">${esc(this._error)}</ha-alert>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
     this._timerSig = "";
+    if (keep) {
+      // the new page is only as tall as it will be once its elements have rendered, so put the scroll back again over the next frames
+      const restore = () => {
+        if (this._scrollKey !== viewKey) return;
+        if (this.scrollTop !== keep.top) this.scrollTop = keep.top;
+        if (window.scrollY !== keep.page) window.scrollTo(0, keep.page);
+      };
+      restore();
+      requestAnimationFrame(() => {
+        restore();
+        requestAnimationFrame(restore);
+      });
+    }
     this._bind();
     this._autosizeAll();
     this._renderTimers();
