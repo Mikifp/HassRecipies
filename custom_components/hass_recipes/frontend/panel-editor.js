@@ -190,7 +190,7 @@ export default function (h) {
           <ha-icon-button class="ne-handle" draggable="true" data-ne-drag="step" label="${esc(T("Drag to reorder"))}">${icon("drag-vertical")}</ha-icon-button>
           <span class="ne-n">${num}</span>
           <div class="ne-main">
-            <div class="ne-text" contenteditable="true" role="textbox" aria-multiline="true" data-ph="${esc(T("Describe what to do. Type @ to add an ingredient."))}">${textHtml}</div>
+            <div class="ne-text" contenteditable="true" role="textbox" aria-multiline="true" data-ph="${esc(T("Describe what to do. Type @ to add an ingredient. Shift+Enter for a new line."))}">${textHtml}</div>
             ${
               extras.length || (step.timers || []).length
                 ? `<div class="ne-extras">${extras
@@ -789,6 +789,13 @@ export default function (h) {
               this._nePick = null;
               return;
             }
+          }
+          if (e.key === "Enter" && e.shiftKey) {
+            // Shift+Enter: a line break inside the step
+            e.preventDefault();
+            document.execCommand("insertLineBreak");
+            this._formDirty = true;
+            return;
           }
           if (e.key === "Enter") {
             e.preventDefault();

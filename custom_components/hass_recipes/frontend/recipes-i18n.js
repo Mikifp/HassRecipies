@@ -99,7 +99,7 @@ const da = {
     Steps: "Trin",
     "Ingredient, e.g. 200 g butter": "Ingrediens, fx 200 g smør",
     Note: "Note",
-    "Describe what to do. Type @ to add an ingredient.": "Beskriv hvad der skal ske. Skriv @ for at tilføje en ingrediens.",
+    "Describe what to do. Type @ to add an ingredient. Shift+Enter for a new line.": "Beskriv hvad der skal ske. Skriv @ for at tilføje en ingrediens. Shift+Enter for ny linje.",
     "Add substitute": "Tilføj erstatning",
     "Delete ingredient": "Slet ingrediens",
     "Delete step": "Slet trin",

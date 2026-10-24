@@ -987,7 +987,7 @@ class HassRecipesCookCard extends RecipesBase {
         .progress { height: 4px; border-radius: 2px; background: var(--divider-color); margin: 8px 0 16px; overflow: hidden; }
         .progress i { display: block; height: 100%; background: var(--primary-color); }
         .section { text-transform: uppercase; letter-spacing: .06em; font-size: calc(12px * var(--hr-fs, 1)); color: var(--primary-color); margin-bottom: 6px; }
-        .text { font-size: calc(18px * var(--hr-fs, 1)); line-height: 1.45; font-weight: 500; margin-bottom: 12px; }
+        .text { font-size: calc(18px * var(--hr-fs, 1)); line-height: 1.45; font-weight: 500; margin-bottom: 12px; white-space: pre-line; }
         .text.done { opacity: .55; text-decoration: line-through; }
         .donebtn { margin-bottom: 12px; }
         .ings { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
