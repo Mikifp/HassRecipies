@@ -313,6 +313,18 @@ const STYLE = `
   .ing-qty { font-variant-numeric: tabular-nums; }
   .ing-note { color: var(--secondary-text-color); }
   .ing-paren { color: var(--secondary-text-color); }
+  .plan-cal { padding: var(--ha-space-4, 16px); }
+  .plan-legend { display: flex; gap: var(--ha-space-4, 16px); flex-wrap: wrap; padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px) 0; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .plan-key { display: inline-flex; align-items: center; gap: 6px; }
+  .plan-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .pdlg { display: flex; flex-direction: column; gap: var(--ha-space-3, 12px); min-width: min(380px, 80vw); }
+  .pd-slots { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
+  .pd-slots ha-assist-chip { cursor: pointer; }
+  .pd-results { max-height: 40vh; overflow-y: auto; }
+  .pd-thumb { width: 40px; height: 40px; border-radius: 8px; background: var(--secondary-background-color) center / cover; display: block; }
+  .pd-plain { display: flex; gap: var(--ha-space-2, 8px); align-items: center; }
+  .pd-plain ha-input { flex: 1; }
+  .pd-actions { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
   .ing-sub { color: var(--secondary-text-color); font-size: 12px; }
   .ing-comment { display: block; color: var(--secondary-text-color); font-size: 13px; font-style: italic; margin-top: 2px; }
   .ing-comment-input { margin-top: 4px; width: 100%; }
@@ -751,18 +763,24 @@ class HassRecipesPanel extends HTMLElement {
       `<div class="tabwrap" data-act="${act}"><ha-tab name="${esc(T(name))}" ${active ? "active" : ""} ${narrow ? "narrow" : ""}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon></ha-tab></div>`;
     const tabs = (narrow) =>
       tab("tab-list", "book-open-page-variant-outline", "Recipes", v.name === "list", narrow) + tab("plan", "calendar-month-outline", "Meal plan", v.name === "plan", narrow);
+    const planMenu =
+      v.name === "plan"
+        ? `<ha-dropdown id="plan-menu"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
+            ${this._canEdit !== false ? `<ha-dropdown-item value="plan-copy"><ha-icon slot="icon" icon="mdi:content-copy"></ha-icon>${esc(T("Copy last week"))}</ha-dropdown-item>` : ""}
+            <ha-dropdown-item value="plan-shop"><ha-icon slot="icon" icon="mdi:cart-outline"></ha-icon>${esc(T("Add this period to the shopping list"))}</ha-dropdown-item></ha-dropdown>`
+        : "";
     if (this._brCompact()) {
       return {
         header: `${iconBtn("leave", "arrow-left", "Back")}${
           v.name === "list"
             ? `<ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>`
-            : `<h1>${esc(T("Meal plan"))}</h1>`
+            : `<h1>${esc(T("Meal plan"))}</h1>${planMenu}`
         }`,
         bottom: `<nav class="bottomtabs">${tabs(true)}</nav>`,
       };
     }
     return {
-      header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : iconBtn("leave", "arrow-left", "Back")}<span class="hsp"></span><nav class="tabs">${tabs(false)}</nav><span class="hsp"></span>`,
+      header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : iconBtn("leave", "arrow-left", "Back")}<span class="hsp"></span><nav class="tabs">${tabs(false)}</nav><span class="hsp"></span>${planMenu}`,
       bottom: "",
     };
   }
@@ -771,13 +789,21 @@ class HassRecipesPanel extends HTMLElement {
     const v = this._view;
     this._fab = "";
     // on a phone Home Assistant scrolls the page, not this panel: stay out of the way so the top bar can stick to it
-    this.classList.toggle("compact", this._brCompact());
+    const compactNow = this._brCompact();
+    this.classList.toggle("compact", compactNow);
+    // on a cold load the page has no width yet: look again once it has one
+    this._compactSeen = compactNow;
+    if (!this._compactCheck) {
+      this._compactCheck = requestAnimationFrame(() => {
+        this._compactCheck = null;
+        if (this._loaded && this._brCompact() !== this._compactSeen) this._render();
+      });
+    }
     let body;
     if (!this._loaded) body = `<div class="empty">Loading…</div>`;
     else if (v.name === "detail" && this._recipe(v.id)) body = this._detailHtml(this._recipe(v.id));
     else if (v.name === "data") body = this._dataHtml();
     else if (v.name === "plan") {
-      this._ensurePlan();
       body = this._planHtml();
     }
     else if (v.name === "shop" && this._recipe(v.id)) body = this._shopHtml(this._recipe(v.id));
@@ -1041,15 +1067,9 @@ class HassRecipesPanel extends HTMLElement {
         this._planPending = id;
         this._go({ name: "plan", week: "" });
         break;
-      case "plan-prev":
-      case "plan-next":
-      case "plan-today": {
-        const monday = this._planMonday();
-        const next = act === "plan-today" ? new Date() : addDays(monday, act === "plan-prev" ? -7 : 7);
-        this._planAdd = null;
-        this._go({ name: "plan", week: act === "plan-today" ? "" : isoDate(mondayOf(next)) }, false, "replace");
+      case "plan-add-dialog":
+        this._planAddDialog(isoDate(new Date()));
         break;
-      }
       case "plan-shop":
         await this._planToShopping();
         break;

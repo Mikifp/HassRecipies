@@ -1,80 +1,334 @@
-/* Recipes panel: plan methods. Mixed into the panel class by recipes-panel.js. */
+/* Recipes panel: the meal plan, shown in Home Assistant's own calendar (ha-full-calendar). Mixed into the panel class by recipes-panel.js.
+ *
+ * Every planned meal is a calendar event on its day (the meal sets its time of day, which is not shown).
+ * The calendar's own header gives Today, previous / next and the month / week / day / list views;
+ * the page adds the dialogs for adding and editing a meal, drag and drop between days, and the menu
+ * actions (copy last week, add to the shopping list).
+ */
 export default function (h) {
-  const { esc, minutes, state, T, isoDate, addDays, mondayOf } = h;
+  const { esc, minutes, T, isoDate, addDays } = h;
+  const SLOTS = [
+    ["breakfast", "Breakfast", "--warning-color", "#ffa600", "08:00"],
+    ["lunch", "Lunch", "--success-color", "#4caf50", "12:00"],
+    ["dinner", "Dinner", "--primary-color", "#03a9f4", "18:00"],
+    ["snack", "Snack", "--purple-color", "#9c27b0", "15:00"],
+  ];
+  const slotLabel = (slot) => (SLOTS.find((s) => s[0] === slot) || [slot, slot])[1];
+  const VIEWS = ["dayGridMonth", "dayGridWeek", "dayGridDay", "listWeek"];
+  const VIEW_KEY = "hass_recipes_plan_view";
+
   return {
-    // ---- meal plan ----
-    /** Copy last week's meals onto the week on screen (meals already there are kept). */
-    async _planCopyLastWeek() {
-      const monday = this._planMonday();
+    // ---- the calendar ----
+    _planColor(slot) {
+      const s = SLOTS.find((x) => x[0] === slot) || SLOTS[2];
+      return getComputedStyle(this).getPropertyValue(s[2]).trim() || s[3];
+    },
+
+    /** The planned meals as calendar events. */
+    _planEvents() {
+      const list = this._planCalView === "listWeek";
+      return (this._planEntries || []).map((e) => {
+        const [, , , , time] = SLOTS.find((s) => s[0] === e.slot) || SLOTS[2];
+        const color = this._planColor(e.slot);
+        const name = e.title + (e.scale && e.scale !== 1 ? ` ×${e.scale}` : "");
+        return {
+          id: e.id,
+          title: list ? `${T(slotLabel(e.slot))}: ${name}` : name,
+          start: `${e.date}T${time}:00`,
+          end: `${e.date}T${String(parseInt(time, 10) + 1).padStart(2, "0")}:00:00`,
+          backgroundColor: color,
+          borderColor: color,
+          extendedProps: { slot: e.slot },
+        };
+      });
+    },
+
+    /** Put the meals in the calendar (it only takes events once it has been drawn). */
+    _planPush() {
+      const cal = this._planCal;
+      if (cal && cal.isConnected && cal.calendar) cal.events = this._planEvents();
+    },
+
+    /** Fetch the meals the calendar shows, and show them. */
+    async _planFetch() {
+      const r = this._planRange;
+      if (!r) return;
       try {
-        const res = await this._ws({
-          type: "hass_recipes/plan_copy",
-          source: isoDate(addDays(monday, -7)),
-          target: isoDate(monday),
-          days: 7,
-        });
-        this._planLoaded = null;
-        this._flash(res.added ? `Copied ${res.added} meals from last week.` : "Nothing new to copy from last week.");
+        const res = await this._ws({ type: "hass_recipes/plan_list", start: r.start, end: r.end });
+        if (this._planRange !== r) return; // the calendar moved on while this was loading
+        this._planEntries = res.entries;
+        this._planPush();
       } catch (err) {
         this._error = err.message || String(err);
         this._render();
       }
-    },
-    _planMonday() {
-      const w = this._view.name === "plan" && this._view.week ? new Date(`${this._view.week}T12:00:00`) : new Date();
-      return mondayOf(w);
-    },
-
-    /** Fetch the visible week when it changes, and repaint when it arrives. */
-    _ensurePlan() {
-      const start = isoDate(this._planMonday());
-      if (this._planLoaded === start || this._planLoading === start) return;
-      this._planLoading = start;
-      this._ws({ type: "hass_recipes/plan_list", start, end: isoDate(addDays(this._planMonday(), 6)) })
-        .then((res) => {
-          this._planEntries = res.entries;
-          this._planLoaded = start;
-        })
-        .catch((err) => {
-          this._error = err.message || String(err);
-        })
-        .finally(() => {
-          this._planLoading = null;
-          if (this._view.name === "plan") this._render();
-        });
-      this._subscribePlan();
     },
 
     _subscribePlan() {
       if (this._planSub || !this._hass) return;
       this._planSub = true;
       this._hass.connection
-        .subscribeEvents(() => {
-          this._planLoaded = null;
-          if (this._view.name === "plan") this._render();
-        }, "hass_recipes_meal_plan_changed")
+        .subscribeEvents(() => this._planFetch(), "hass_recipes_meal_plan_changed")
         .catch(() => (this._planSub = false));
     },
 
-    async _planChange(msg) {
+    /** Create the calendar in the page and hook the meal plan into it. */
+    async _planMount(root) {
+      const host = root.getElementById("plan-cal");
+      if (!host || !this._hass) return;
+      this._subscribePlan();
+      if (!customElements.get("ha-full-calendar") && window.loadCardHelpers) {
+        try {
+          const helpers = await window.loadCardHelpers();
+          await helpers.createCardElement({ type: "calendar", entities: [] });
+        } catch (_) { /* the wait below reports it */ }
+      }
       try {
-        await this._ws(msg);
+        await Promise.race([customElements.whenDefined("ha-full-calendar"), new Promise((_, no) => setTimeout(no, 5000))]);
+      } catch (_) {
+        host.innerHTML = `<ha-alert alert-type="warning">${esc(T("Home Assistant's calendar could not be loaded."))}</ha-alert>`;
+        return;
+      }
+      if (!host.isConnected) return; // the page was rebuilt while waiting
+      const compact = this._brCompact();
+      // the chosen view is remembered separately for a phone and a wide screen
+      const key = compact ? `${VIEW_KEY}_compact` : VIEW_KEY;
+      let initial = "";
+      try {
+        initial = localStorage.getItem(key) || "";
+      } catch (_) { /* ignore */ }
+      const cal = document.createElement("ha-full-calendar");
+      cal.hass = this._hass;
+      cal.narrow = compact;
+      cal.autoHeight = true;
+      cal.views = VIEWS;
+      cal.initialView = VIEWS.includes(this._planCalView) ? this._planCalView : VIEWS.includes(initial) ? initial : compact ? "listWeek" : "dayGridWeek";
+      this._planCalView = cal.initialView;
+      cal.addEventListener("view-changed", (e) => {
+        const { start, end, view } = e.detail;
+        this._planCalView = view;
+        try {
+          localStorage.setItem(key, view);
+        } catch (_) { /* ignore */ }
+        this._planRange = { start: isoDate(start), end: isoDate(addDays(end, -1)), view };
+        this._planCalDate = cal.calendar ? cal.calendar.getDate() : null;
+        this._planFetch();
+      });
+      host.appendChild(cal);
+      this._planCal = cal;
+      // wait for the calendar to be drawn, then take over its clicks and dragging
+      for (let i = 0; i < 50 && !cal.calendar; i++) await new Promise((r) => setTimeout(r, 100));
+      const fc = cal.calendar;
+      if (!fc) return;
+      const canEdit = this._canEdit !== false;
+      fc.setOption("displayEventTime", false);
+      fc.setOption("eventClick", (info) => this._planEntryDialog(info.event.id));
+      fc.setOption("dateClick", (info) => {
+        if (info.view.type === "dayGridMonth") return cal._handleDateClick(info); // like Home Assistant: open the day
+        if (canEdit) this._planAddDialog(info.dateStr.slice(0, 10));
+      });
+      fc.setOption("editable", canEdit);
+      fc.setOption("eventDurationEditable", false);
+      fc.setOption("eventDrop", async (info) => {
+        try {
+          await this._ws({ type: "hass_recipes/plan_update", entry_id: info.event.id, date: info.event.startStr.slice(0, 10) });
+        } catch (err) {
+          info.revert();
+          this._error = err.message || String(err);
+          this._render();
+        }
+      });
+      // the date the calendar was showing before the page was rebuilt
+      if (this._planCalDate) fc.gotoDate(this._planCalDate);
+      this._planPush();
+    },
+
+    // ---- dialogs (put on the page directly, so the calendar is not rebuilt) ----
+    _planDialog(title, html, bind) {
+      const dlg = document.createElement("ha-adaptive-dialog");
+      dlg.setAttribute("open", "");
+      dlg.setAttribute("flexcontent", "");
+      dlg.setAttribute("header-title", title);
+      dlg.innerHTML = `<div class="pdlg">${html}</div>`;
+      dlg.addEventListener("closed", (e) => {
+        if (e.target === dlg) dlg.remove();
+      });
+      this.shadowRoot.appendChild(dlg);
+      bind(dlg, () => (dlg.open = false));
+    },
+
+    _planSlotChips(slot) {
+      return `<div class="pd-slots">${SLOTS.map(
+        ([s, label]) => `<ha-assist-chip data-slot="${s}" label="${esc(T(label))}" ${s === slot ? "active" : ""}></ha-assist-chip>`
+      ).join("")}</div>`;
+    },
+
+    _planBindSlots(dlg, onPick) {
+      dlg.querySelectorAll("[data-slot]").forEach((chip) =>
+        chip.addEventListener("click", () => {
+          dlg.querySelectorAll("[data-slot]").forEach((c) => c.toggleAttribute("active", c === chip));
+          onPick(chip.dataset.slot);
+        })
+      );
+    },
+
+    _planResultsHtml(query) {
+      const q = (query || "").trim().toLowerCase();
+      const found = this._recipes
+        .filter((r) => !q || [r.name, ...(r.tags || []), ...(r.categories || [])].join(" ").toLowerCase().includes(q))
+        .slice(0, 30);
+      if (!found.length) return `<p class="muted pd-empty">${esc(T("No recipes match. Use the text box to add a plain meal."))}</p>`;
+      return found
+        .map(
+          (r) => `<ha-list-item-base interactive data-rid="${esc(r.id)}" headline="${esc(r.name)}" supporting-text="${esc(minutes(r.total_time) || "")}">
+            <span slot="start" class="pd-thumb" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></span></ha-list-item-base>`
+        )
+        .join("");
+    },
+
+    /** "Add a meal" for a day: pick a recipe (or type a plain meal) and the meal of the day. */
+    _planAddDialog(date) {
+      const pending = this._planPending ? this._recipe(this._planPending) : null;
+      let slot = "dinner";
+      const html = `
+        <ha-input id="pd-date" type="date" appearance="outlined" label="${esc(T("Day"))}" value="${esc(date)}"></ha-input>
+        ${this._planSlotChips(slot)}
+        ${
+          pending
+            ? `<p>${esc(T("Add"))} <strong>${esc(pending.name)}</strong></p><ha-button id="pd-confirm" size="m">${esc(T("Add to the meal plan"))}</ha-button>`
+            : `<ha-input-search id="pd-search" appearance="outlined" placeholder="${esc(T("Search recipes"))}"></ha-input-search>
+               <ha-list-base id="pd-results" class="pd-results">${this._planResultsHtml("")}</ha-list-base>
+               <div class="pd-plain"><ha-input id="pd-text" appearance="outlined" placeholder="${esc(T("…or a plain meal, e.g. Leftovers"))}"></ha-input>
+               <ha-button id="pd-text-add" appearance="filled">${esc(T("Add"))}</ha-button></div>`
+        }`;
+      this._planDialog(T("Add a meal"), html, (dlg, close) => {
+        const day = () => dlg.querySelector("#pd-date").value || date;
+        this._planBindSlots(dlg, (s) => (slot = s));
+        const add = async (extra) => {
+          close();
+          try {
+            await this._ws({ type: "hass_recipes/plan_add", date: day(), slot, ...extra });
+            if (pending) {
+              this._planPending = null;
+              this._flash("Added to the meal plan.");
+            }
+          } catch (err) {
+            this._error = err.message || String(err);
+            this._render();
+          }
+        };
+        if (pending) {
+          dlg.querySelector("#pd-confirm").addEventListener("click", () => add({ recipe_id: pending.id }));
+          return;
+        }
+        const results = dlg.querySelector("#pd-results");
+        results.addEventListener("click", (e) => {
+          const item = e.target.closest("[data-rid]");
+          if (item) add({ recipe_id: item.dataset.rid });
+        });
+        dlg.querySelector("#pd-search").addEventListener("input", (e) => (results.innerHTML = this._planResultsHtml(e.target.value)));
+        const text = dlg.querySelector("#pd-text");
+        const addText = () => text.value.trim() && add({ title: text.value.trim() });
+        dlg.querySelector("#pd-text-add").addEventListener("click", addText);
+        text.addEventListener("keydown", (e) => e.key === "Enter" && addText());
+        setTimeout(() => dlg.querySelector("#pd-search")?.focus?.(), 300);
+      });
+    },
+
+    /** A planned meal: move it to another day or meal, scale it, open or cook the recipe, or remove it. */
+    _planEntryDialog(id) {
+      const e = (this._planEntries || []).find((x) => x.id === id);
+      if (!e) return;
+      const canEdit = this._canEdit !== false;
+      const html = `
+        ${canEdit ? `<ha-input id="pe-date" type="date" appearance="outlined" label="${esc(T("Day"))}" value="${esc(e.date)}"></ha-input>${this._planSlotChips(e.slot)}` : `<p class="muted">${esc(e.date)} · ${esc(T(slotLabel(e.slot)))}</p>`}
+        ${e.recipe_exists && canEdit ? `<ha-input id="pe-scale" type="number" min="0.25" step="0.25" appearance="outlined" label="${esc(T("Scale"))} ×" placeholder="1" value="${e.scale ? esc(e.scale) : ""}"></ha-input>` : ""}
+        <div class="pd-actions">
+          ${e.recipe_exists ? `<ha-button id="pe-open" appearance="filled"><ha-icon slot="start" icon="mdi:book-open-page-variant-outline"></ha-icon>${esc(T("Open recipe"))}</ha-button>
+             <ha-button id="pe-cook" appearance="filled"><ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>${esc(T("Cook this"))}</ha-button>` : ""}
+          ${canEdit ? `<ha-button id="pe-del" appearance="plain" variant="danger"><ha-icon slot="start" icon="mdi:delete-outline"></ha-icon>${esc(T("Remove"))}</ha-button>` : ""}
+        </div>`;
+      this._planDialog(e.title, html, (dlg, close) => {
+        const update = async (fields) => {
+          try {
+            await this._ws({ type: "hass_recipes/plan_update", entry_id: id, ...fields });
+          } catch (err) {
+            this._error = err.message || String(err);
+            this._render();
+          }
+        };
+        this._planBindSlots(dlg, (slot) => update({ slot }));
+        dlg.querySelector("#pe-date")?.addEventListener("change", (ev) => ev.target.value && update({ date: ev.target.value }));
+        dlg.querySelector("#pe-scale")?.addEventListener("change", (ev) => {
+          const scale = parseFloat(ev.target.value);
+          update({ scale: scale > 0 ? scale : null });
+        });
+        dlg.querySelector("#pe-open")?.addEventListener("click", () => {
+          close();
+          this._go({ name: "detail", id: e.recipe_id });
+        });
+        dlg.querySelector("#pe-cook")?.addEventListener("click", async () => {
+          close();
+          try {
+            const state = await this._ws({ type: "hass_recipes/plan_cook", entry_id: id });
+            this._go({ name: "cook", id: state.recipe_id, step: 0 });
+          } catch (err) {
+            this._error = err.message || String(err);
+            this._render();
+          }
+        });
+        dlg.querySelector("#pe-del")?.addEventListener("click", async () => {
+          close();
+          try {
+            await this._ws({ type: "hass_recipes/plan_delete", entry_id: id });
+          } catch (err) {
+            this._error = err.message || String(err);
+            this._render();
+          }
+        });
+      });
+    },
+
+    // ---- actions on what the calendar shows ----
+    /** The days the calendar is on (not the padding of the month view): [first, last] as dates. */
+    _planPeriod() {
+      const fc = this._planCal && this._planCal.calendar;
+      if (!fc) return null;
+      return { first: fc.view.currentStart, last: addDays(fc.view.currentEnd, -1), type: fc.view.type };
+    },
+
+    /** Copy last week's meals onto the week on screen (meals already there are kept). */
+    async _planCopyLastWeek() {
+      const p = this._planPeriod();
+      if (!p || !["dayGridWeek", "listWeek"].includes(p.type)) {
+        this._flash("Switch to the week view to copy last week.");
+        return;
+      }
+      try {
+        const res = await this._ws({
+          type: "hass_recipes/plan_copy",
+          source: isoDate(addDays(p.first, -7)),
+          target: isoDate(p.first),
+          days: 7,
+        });
+        this._flash(res.added ? `Copied ${res.added} meals from last week.` : "Nothing new to copy from last week.");
       } catch (err) {
         this._error = err.message || String(err);
+        this._render();
       }
-      this._planLoaded = null; // the change event also reloads; this covers a missed event
-      this._render();
     },
 
     async _planToShopping() {
-      const start = isoDate(this._planMonday());
+      const p = this._planPeriod();
+      if (!p) return;
+      const days = Math.min(60, Math.round((p.last - p.first) / 864e5) + 1);
       const entity_id = this._shopEntity || "todo.shopping_list";
       try {
         const res = await this._hass.callWS({
           type: "call_service",
           domain: "hass_recipes",
           service: "add_plan_to_shopping_list",
-          service_data: { start, days: 7, entity_id },
+          service_data: { start: isoDate(p.first), days, entity_id },
           return_response: true,
         });
         const r = res.response || {};
@@ -85,201 +339,29 @@ export default function (h) {
       }
     },
 
-    _bindPlan(root, on) {
-      on("[data-plan-add]", "click", async (e) => {
-        const { date, slot } = e.currentTarget.dataset;
-        if (this._planPending) {
-          const recipe_id = this._planPending;
-          this._planPending = null;
-          await this._planChange({ type: "hass_recipes/plan_add", date, slot, recipe_id });
-          this._flash("Added to the meal plan.");
-          return;
-        }
-        this._planAdd = { date, slot };
-        this._planQuery = "";
-        this._render();
-        setTimeout(() => root.getElementById("plan-search")?.focus(), 30);
-      });
-      on("[data-plan-recipe]", "click", async (e) => {
-        const add = this._planAdd;
-        this._planAdd = null;
-        if (add) await this._planChange({ type: "hass_recipes/plan_add", ...add, recipe_id: e.currentTarget.dataset.planRecipe });
-      });
-      const text = root.getElementById("plan-text-add");
-      if (text) {
-        const submit = async () => {
-          const title = root.getElementById("plan-text").value.trim();
-          const add = this._planAdd;
-          if (!title || !add) return;
-          this._planAdd = null;
-          await this._planChange({ type: "hass_recipes/plan_add", ...add, title });
-        };
-        text.addEventListener("click", submit);
-        root.getElementById("plan-text").addEventListener("keydown", (e) => e.key === "Enter" && submit());
-      }
-      on("[data-plan-cancel]", "click", () => {
-        this._planAdd = null;
-        this._render();
-      });
-      on("[data-plan-del]", "click", (e) =>
-        this._planChange({ type: "hass_recipes/plan_delete", entry_id: e.currentTarget.dataset.planDel })
-      );
-      on("[data-plan-cook]", "click", async (e) => {
-        try {
-          const state = await this._ws({ type: "hass_recipes/plan_cook", entry_id: e.currentTarget.dataset.planCook });
-          this._go({ name: "cook", id: state.recipe_id, step: 0 });
-        } catch (err) {
-          this._error = err.message || String(err);
-          this._render();
-        }
-      });
-      on("[data-plan-scale]", "change", (e) => {
-        const scale = parseFloat(e.currentTarget.value);
-        this._planChange({
-          type: "hass_recipes/plan_update",
-          entry_id: e.currentTarget.dataset.planScale,
-          scale: scale > 0 ? scale : null,
-        });
-      });
-      // drag a meal onto another day or meal (not on touch screens: use the + and ✕ there)
-      on("[data-entry]", "dragstart", (e) => {
-        e.dataTransfer.setData("text/plain", e.currentTarget.dataset.entry);
-        e.dataTransfer.effectAllowed = "move";
-        e.currentTarget.classList.add("dragging");
-      });
-      on("[data-entry]", "dragend", (e) => e.currentTarget.classList.remove("dragging"));
-      on("[data-drop-date]", "dragover", (e) => {
-        e.preventDefault();
-        e.currentTarget.classList.add("drop");
-      });
-      on("[data-drop-date]", "dragleave", (e) => e.currentTarget.classList.remove("drop"));
-      on("[data-drop-date]", "drop", (e) => {
-        e.preventDefault();
-        e.currentTarget.classList.remove("drop");
-        const entry_id = e.dataTransfer.getData("text/plain");
-        const { dropDate: date, dropSlot: slot } = e.currentTarget.dataset;
-        if (entry_id) this._planChange({ type: "hass_recipes/plan_update", entry_id, date, slot });
-      });
-      const search = root.getElementById("plan-search");
-      if (search) {
-        search.addEventListener("input", () => {
-          this._planQuery = search.value;
-          const box = root.getElementById("plan-results");
-          if (box) {
-            box.innerHTML = this._planResultsHtml();
-            box.querySelectorAll("[data-plan-recipe]").forEach((b) =>
-              b.addEventListener("click", async (ev) => {
-                const add = this._planAdd;
-                this._planAdd = null;
-                if (add) await this._planChange({ type: "hass_recipes/plan_add", ...add, recipe_id: ev.currentTarget.dataset.planRecipe });
-              })
-            );
-          }
-        });
-      }
-    },
-
-    _planResultsHtml() {
-      const q = (this._planQuery || "").trim().toLowerCase();
-      const found = this._recipes
-        .filter((r) => !q || [r.name, ...(r.tags || []), ...(r.categories || [])].join(" ").toLowerCase().includes(q))
-        .slice(0, 12);
-      if (!found.length) return `<div class="muted">No recipes match. Use the text box to add a plain meal.</div>`;
-      return found
-        .map(
-          (r) => `<button class="plan-recipe" data-plan-recipe="${esc(r.id)}">
-            <span class="thumb" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></span>
-            <span>${esc(r.name)}<br><small class="muted">${esc(minutes(r.total_time) || "")}</small></span></button>`
-        )
-        .join("");
+    _bindPlan(root) {
+      if (this._view.name !== "plan") return;
+      const menu = root.getElementById("plan-menu");
+      if (menu) menu.addEventListener("wa-select", (e) => this._action(e.detail.item.value));
+      this._planMount(root);
     },
 
     _planHtml() {
-      const monday = this._planMonday();
-      const days = [...Array(7)].map((_, i) => addDays(monday, i));
-      const today = isoDate(new Date());
-      const lang = (this._hass && this._hass.language) || undefined;
-      const dayLabel = (d) => new Intl.DateTimeFormat(lang, { weekday: "short", day: "numeric", month: "short" }).format(d);
-      const rangeLabel = `${new Intl.DateTimeFormat(lang, { day: "numeric", month: "short" }).format(days[0])} – ${new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", year: "numeric" }).format(days[6])}`;
-      const entries = this._planLoaded === isoDate(monday) ? this._planEntries || [] : this._planEntries || [];
-      const SLOTS = [["breakfast", "Breakfast"], ["lunch", "Lunch"], ["dinner", "Dinner"], ["snack", "Snack"]];
       const pending = this._planPending ? this._recipe(this._planPending) : null;
-
-      const dayHtml = (d) => {
-        const iso = isoDate(d);
-        const slots = SLOTS.map(([slot, label]) => {
-          const here = entries.filter((e) => e.date === iso && e.slot === slot);
-          const items = here
-            .map((e) => {
-              const title = e.recipe_exists
-                ? `<a href="#" class="plan-title" data-open="${esc(e.recipe_id)}">${esc(e.title)}</a>`
-                : `<span class="plan-title">${esc(e.title)}</span>`;
-              const scaleBox = e.recipe_exists
-                ? `<label class="plan-scale" title="Scale">×<input type="number" min="0.25" step="0.25" value="${e.scale ? esc(e.scale) : ""}" placeholder="1" data-plan-scale="${esc(e.id)}"></label>`
-                : "";
-              return `<div class="plan-entry" draggable="true" data-entry="${esc(e.id)}" title="${esc(T("Drag to another day or meal"))}">${title}
-                <span class="plan-tools">${scaleBox}
-                  ${e.recipe_exists ? `<button class="mini" data-plan-cook="${esc(e.id)}" title="Cook this">🍳</button>` : ""}
-                  <button class="mini" data-plan-del="${esc(e.id)}" title="Remove">✕</button></span></div>`;
-            })
-            .join("");
-          return `<div class="plan-slot" data-drop-date="${iso}" data-drop-slot="${slot}"><div class="plan-slot-head"><span>${label}</span>
-            <button class="mini" data-plan-add data-date="${iso}" data-slot="${slot}" title="Add to ${label.toLowerCase()}">+</button></div>${items}</div>`;
-        }).join("");
-        return `<section class="plan-day ${iso === today ? "today" : ""}"><h3>${esc(dayLabel(d))}</h3>${slots}</section>`;
-      };
-
-      const adding = this._planAdd
-        ? `<div class="pane plan-picker">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-              <strong>Add to ${esc(this._planAdd.slot)} · ${esc(dayLabel(new Date(`${this._planAdd.date}T12:00:00`)))}</strong>
-              <button class="btn secondary" data-plan-cancel>Cancel</button></div>
-            <input id="plan-search" type="search" placeholder="Search recipes" value="${esc(this._planQuery || "")}">
-            <div id="plan-results" class="plan-results">${this._planResultsHtml()}</div>
-            <div class="plan-text"><input id="plan-text" placeholder="…or a plain meal, e.g. Leftovers"><button class="btn" id="plan-text-add">Add</button></div>
-          </div>`
-        : "";
+      if (this._canEdit !== false) {
+        this._fab = `<ha-button class="fab ${this._brCompact() ? "above-tabs" : ""}" size="l" data-act="plan-add-dialog"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("Add meal"))}</ha-button>`;
+      }
       return `
-        <style>
-          .plan-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
-          .plan-bar h2 { margin: 0 12px 0 0; font-size: 22px; font-weight: 500; }
-          .plan-range { min-width: 150px; text-align: center; font-weight: 500; }
-          .plan-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
-          @container (max-width: 900px) { .plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-          @container (max-width: 520px) { .plan-grid { grid-template-columns: minmax(0, 1fr); } }
-          .plan-day { border: 1px solid var(--divider-color); border-radius: 12px; padding: 8px 10px; background: var(--card-background-color); }
-          .plan-day.today { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
-          .plan-day h3 { margin: 0 0 6px; font-size: 14px; font-weight: 500; }
-          .plan-slot { border-top: 1px solid var(--divider-color); padding: 4px 0; min-height: 34px; }
-          .plan-slot-head { display: flex; justify-content: space-between; align-items: center; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--secondary-text-color); }
-          .plan-entry { display: flex; flex-direction: column; gap: 2px; padding: 3px 0; font-size: 14px; cursor: grab; }
-          .plan-entry.dragging { opacity: .4; }
-          .plan-slot.drop { background: color-mix(in srgb, var(--primary-color) 14%, transparent); border-radius: 6px; }
-          .plan-title { color: var(--primary-text-color); text-decoration: none; overflow-wrap: anywhere; }
-          a.plan-title { color: var(--primary-color); }
-          .plan-tools { display: flex; gap: 4px; align-items: center; }
-          .plan-scale { font-size: 12px; color: var(--secondary-text-color); display: flex; align-items: center; gap: 2px; }
-          .plan-scale input { width: 52px; padding: 1px 4px; font-size: 12px; }
-          .plan-picker { margin-bottom: 14px; display: grid; gap: 10px; }
-          .plan-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; max-height: 260px; overflow: auto; }
-          .plan-recipe { display: flex; gap: 8px; align-items: center; text-align: left; padding: 6px; border: 1px solid var(--divider-color); border-radius: 8px; background: none; color: inherit; font: inherit; cursor: pointer; }
-          .plan-recipe .thumb { width: 36px; height: 36px; border-radius: 6px; flex: none; background: var(--secondary-background-color) center / cover; }
-          .plan-text { display: flex; gap: 8px; }
-          .plan-banner { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--primary-color) 14%, transparent); display: flex; gap: 8px; align-items: center; justify-content: space-between; }
-        </style>
-        <div class="toolbar"><button class="btn secondary" data-act="back">← Back</button></div>
-        <div class="plan-bar">
-          <h2>Meal plan</h2>
-          <button class="btn secondary" data-act="plan-prev" title="Previous week">‹</button>
-          <span class="plan-range">${esc(rangeLabel)}</span>
-          <button class="btn secondary" data-act="plan-next" title="Next week">›</button>
-          <button class="btn secondary" data-act="plan-today">Today</button>
-          <button class="btn secondary" data-act="plan-copy" title="Copy last week's meals onto this week">Copy last week</button>
-          <button class="btn" data-act="plan-shop" title="Add the ingredients of this week's recipes to your shopping list">Add week to shopping list</button>
-        </div>
-        ${pending ? `<div class="plan-banner"><span>Pick a meal for <strong>${esc(pending.name)}</strong>: press + on a day.</span><button class="btn secondary" data-act="plan-cancel-pending">Cancel</button></div>` : ""}
-        ${adding}
-        <div class="plan-grid">${days.map(dayHtml).join("")}</div>`;
+        ${
+          pending
+            ? `<ha-alert alert-type="info">${esc(T("Pick a day for"))} <strong>${esc(pending.name)}</strong>: ${esc(T("click a day in the calendar."))}
+                <ha-button slot="action" size="s" appearance="plain" data-act="plan-cancel-pending">${esc(T("Cancel"))}</ha-button></ha-alert>`
+            : ""
+        }
+        <div class="plan-legend">${SLOTS.map(
+          ([s, label]) => `<span class="plan-key"><span class="plan-dot" style="background:${this._planColor(s)}"></span>${esc(T(label))}</span>`
+        ).join("")}</div>
+        <div id="plan-cal" class="plan-cal"></div>`;
     },
   };
 }
