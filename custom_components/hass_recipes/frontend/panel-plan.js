@@ -14,6 +14,13 @@ export default function (h) {
     ["snack", "Snack", "--purple-color", "#9c27b0", "15:00"],
   ];
   const slotLabel = (slot) => (SLOTS.find((s) => s[0] === slot) || [slot, slot])[1];
+  // category words that say which meal of the day a recipe is for (English and Danish)
+  const SLOT_WORDS = [
+    ["breakfast", ["morgenmad", "breakfast", "brunch"]],
+    ["lunch", ["frokost", "lunch"]],
+    ["dinner", ["aftensmad", "dinner", "hovedret", "middag"]],
+    ["snack", ["snack", "dessert", "desert", "mellemmåltid"]],
+  ];
   const VIEWS = ["dayGridMonth", "dayGridWeek", "dayGridDay", "listWeek"];
   const VIEW_KEY = "hass_recipes_plan_view";
   const OPEN_KEY = "hass_recipes_plan_cats";
@@ -148,7 +155,11 @@ export default function (h) {
         const day = dayAt(e);
         unlight();
         const recipe = this._recipe(id);
-        if (day && recipe) this._planDropDialog(day.date, recipe);
+        if (!day || !recipe) return;
+        // a recipe whose category says which meal it is for goes straight in; otherwise ask
+        const slot = this._planSlotFor(recipe);
+        if (slot) this._planAddQuick(day.date, slot, recipe);
+        else this._planDropDialog(day.date, recipe);
       });
       // wait for the calendar to be drawn, then take over its clicks and dragging
       for (let i = 0; i < 50 && !cal.calendar; i++) await new Promise((r) => setTimeout(r, 100));
@@ -223,7 +234,8 @@ export default function (h) {
     /** "Add a meal" for a day: pick a recipe (or type a plain meal) and the meal of the day. */
     _planAddDialog(date, recipeId = null) {
       const pending = recipeId ? this._recipe(recipeId) : this._planPending ? this._recipe(this._planPending) : null;
-      let slot = "dinner";
+      let slot = this._planSlotFor(pending) || "dinner";
+      let touched = false; // once a meal of the day is picked by hand, a recipe's category no longer chooses it
       const html = `
         <ha-input id="pd-date" type="date" appearance="outlined" label="${esc(T("Day"))}" value="${esc(date)}"></ha-input>
         ${this._planSlotChips(slot)}
@@ -237,7 +249,10 @@ export default function (h) {
         }`;
       this._planDialog(T("Add a meal"), html, (dlg, close) => {
         const day = () => dlg.querySelector("#pd-date").value || date;
-        this._planBindSlots(dlg, (s) => (slot = s));
+        this._planBindSlots(dlg, (s) => {
+          slot = s;
+          touched = true;
+        });
         const add = async (extra) => {
           close();
           try {
@@ -258,7 +273,9 @@ export default function (h) {
         const results = dlg.querySelector("#pd-results");
         results.addEventListener("click", (e) => {
           const item = e.target.closest("[data-rid]");
-          if (item) add({ recipe_id: item.dataset.rid });
+          if (!item) return;
+          if (!touched) slot = this._planSlotFor(this._recipe(item.dataset.rid)) || slot;
+          add({ recipe_id: item.dataset.rid });
         });
         dlg.querySelector("#pd-search").addEventListener("input", (e) => (results.innerHTML = this._planResultsHtml(e.target.value)));
         const text = dlg.querySelector("#pd-text");
@@ -367,6 +384,32 @@ export default function (h) {
         });
         const r = res.response || {};
         this._flash(`Added ${r.added?.length || 0} items from ${r.meals || 0} meals to ${entity_id}${r.skipped?.length ? ` (${r.skipped.length} already there)` : ""}.`);
+      } catch (err) {
+        this._error = err.message || String(err);
+        this._render();
+      }
+    },
+
+    /** The meal of the day a recipe's categories point to ("Aftensmad" is dinner), or null. */
+    _planSlotFor(recipe) {
+      for (const c of (recipe && recipe.categories) || []) {
+        const low = String(c).toLowerCase();
+        for (const [slot, words] of SLOT_WORDS) if (words.some((w) => low.includes(w))) return slot;
+      }
+      return null;
+    },
+
+    /** Add a recipe to a day and meal straight away, with an Undo. */
+    async _planAddQuick(date, slot, recipe) {
+      try {
+        const entry = await this._ws({ type: "hass_recipes/plan_add", date, slot, recipe_id: recipe.id });
+        const when = new Intl.DateTimeFormat((this._hass && this._hass.language) || undefined, { weekday: "short", day: "numeric", month: "short" }).format(
+          new Date(`${date}T12:00:00`)
+        );
+        this._flash(`${recipe.name} · ${T(slotLabel(slot))} · ${when}`, {
+          label: "Undo",
+          run: () => this._ws({ type: "hass_recipes/plan_delete", entry_id: entry.id }),
+        });
       } catch (err) {
         this._error = err.message || String(err);
         this._render();
