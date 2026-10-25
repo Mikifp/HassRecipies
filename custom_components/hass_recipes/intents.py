@@ -52,7 +52,7 @@ _TEXT = {
         "plan_nothing_to_cook": "There is no recipe planned for {slot} {day}.",
         "today": "today",
         "tomorrow": "tomorrow",
-        "slots": {"breakfast": "Breakfast", "lunch": "Lunch", "dinner": "Dinner", "snack": "Snack"},
+        "slots": {"breakfast": "Breakfast", "lunch": "Lunch", "dinner": "Dinner", "dessert": "Dessert", "snack": "Snack"},
     },
     "da": {
         "nothing": "Du har ikke valgt en opskrift endnu.",
@@ -77,7 +77,7 @@ _TEXT = {
         "plan_nothing_to_cook": "Der er ingen opskrift planlagt til {slot} {day}.",
         "today": "i dag",
         "tomorrow": "i morgen",
-        "slots": {"breakfast": "Morgenmad", "lunch": "Frokost", "dinner": "Aftensmad", "snack": "Mellemmåltid"},
+        "slots": {"breakfast": "Morgenmad", "lunch": "Frokost", "dinner": "Aftensmad", "dessert": "Dessert", "snack": "Mellemmåltid"},
     },
 }
 
@@ -262,14 +262,15 @@ class _PlanIntent(_CookingIntent):
         slot = _slot_value(intent_obj, "meal_slot", "dinner")
         day_word = _slot_value(intent_obj, "plan_day", "today")
         day = date.today() + timedelta(days=1 if day_word == "tomorrow" else 0)
-        slot_text = t["slots"].get(slot, slot).lower()
+        slot_name = plan.meal_name(language, slot)
+        slot_text = slot_name.lower()
         day_text = t["tomorrow"] if day_word == "tomorrow" else t["today"]
         entries = [e for e in plan.list(day, day) if e["slot"] == slot]
         response = intent_obj.create_response()
         if self.intent_type == INTENT_PLANNED_MEAL:
             if entries:
                 speech = t["plan_meal"].format(
-                    slot=t["slots"].get(slot, slot), day=day_text, titles=t["and"].join(e["title"] for e in entries)
+                    slot=slot_name, day=day_text, titles=t["and"].join(e["title"] for e in entries)
                 )
             else:
                 speech = t["plan_none"].format(slot=slot_text, day=day_text)

@@ -73,6 +73,14 @@ def test_entries_come_back_in_day_then_slot_order():
     ]
 
 
+def test_dessert_is_its_own_meal_between_dinner_and_snack():
+    _hass, _recipes, plan = _make()
+    plan.add("2026-10-12", "snack", title="Fruit")
+    plan.add("2026-10-12", "dessert", title="Ice cream")
+    plan.add("2026-10-12", "dinner", title="Roast")
+    assert [e["slot"] for e in plan.list("2026-10-12", "2026-10-12")] == ["dinner", "dessert", "snack"]
+
+
 def test_bad_input_is_rejected():
     _hass, recipes, plan = _make()
     for call in (
@@ -115,10 +123,66 @@ def test_update_move_clear_and_events():
     assert plan.delete(a["id"]) is False
     names = {n for n, _ in hass.bus.events}
     assert names == {"hass_recipes_meal_plan_changed"}
-    assert _Store.saved == {"entries": []}
+    assert _Store.saved["entries"] == []
 
 
 def test_week_runs_monday_to_sunday():
     _hass, _recipes, plan = _make()
     first, last = plan.week("2026-10-14")  # a Wednesday
     assert (first, last) == (date(2026, 10, 12), date(2026, 10, 18))
+
+
+def _meal(**kw):
+    return {"time": "12:00", "color": "blue", **kw}
+
+
+def test_the_meals_of_the_day_can_be_defined():
+    _hass, _recipes, plan = _make()
+    assert plan.slots() == ("breakfast", "lunch", "dinner", "dessert", "snack")
+    # rename a built-in one, add one of your own, drop two, and put them in a new order
+    got = plan.set_meals(
+        [
+            _meal(id="dinner", name="Supper", color="red", time="18:30", words=["Aftensmad ", "aftensmad", "main"]),
+            _meal(name="Elevenses", color="teal", time="11:00", minutes=20, words=["tea"]),
+            _meal(id="breakfast", time="07:00"),
+        ]
+    )
+    assert [m["name"] for m in got] == ["Supper", "Elevenses", ""]
+    assert got[0]["words"] == ["aftensmad", "main"] and got[0]["time"] == "18:30"
+    new_id = got[1]["id"]
+    assert plan.slots() == ("dinner", new_id, "breakfast")
+    plan.add("2026-10-12", new_id, title="Biscuits")
+    plan.add("2026-10-12", "breakfast", title="Porridge")
+    plan.add("2026-10-12", "dinner", title="Roast")
+    assert [e["title"] for e in plan.list("2026-10-12", "2026-10-12")] == ["Roast", "Biscuits", "Porridge"]
+    assert plan.meal_name("da", "dinner") == "Supper" and plan.meal_name("da", "breakfast") == "Morgenmad"
+    # the choice is saved with the plan and comes back
+    assert [m["id"] for m in _Store.saved["meals"]] == ["dinner", new_id, "breakfast"]
+
+
+def test_meals_in_use_cannot_be_removed_and_bad_meals_are_rejected():
+    _hass, _recipes, plan = _make()
+    plan.add("2026-10-12", "lunch", title="Soup")
+    keep = [_meal(id=m["id"]) for m in plan.meals() if m["id"] != "lunch"]
+    for bad in (
+        keep,  # lunch still has a meal planned in it
+        [],
+        [_meal(time="25:00", id="dinner")],
+        [_meal(time="noon", id="dinner")],
+        [_meal(color="mauve", id="dinner")],
+        [_meal(name="", id="mine")],  # a new meal needs a name
+        [_meal(id="dinner"), _meal(id="dinner")],
+    ):
+        try:
+            plan.set_meals(bad)
+        except plan_mod.MealPlanError:
+            continue
+        raise AssertionError(f"accepted {bad}")
+    assert len(plan.meals()) == 5
+    plan.clear("2026-10-12")
+    assert len(plan.set_meals(keep)) == 4
+    try:
+        plan.add("2026-10-12", "lunch", title="Soup")
+    except plan_mod.MealPlanError:
+        return
+    raise AssertionError("a removed meal was accepted")

@@ -111,6 +111,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_set_cooking,
         ws_timer_snooze,
         ws_plan_list,
+        ws_plan_meals_set,
         ws_plan_add,
         ws_plan_update,
         ws_plan_delete,
@@ -593,9 +594,36 @@ _DAY = vol.All(str, vol.Length(min=10, max=10))
 @callback
 def ws_plan_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     try:
-        connection.send_result(msg["id"], {"entries": _plan(hass).list(msg["start"], msg["end"])})
+        connection.send_result(
+            msg["id"], {"entries": _plan(hass).list(msg["start"], msg["end"]), "meals": _plan(hass).meals()}
+        )
     except MealPlanError as err:
         _plan_error(connection, msg["id"], err)
+
+
+_MEAL = vol.Schema(
+    {
+        vol.Optional("id"): vol.All(str, vol.Length(max=40)),
+        vol.Optional("name", default=""): vol.All(str, vol.Length(max=40)),
+        vol.Optional("color", default="blue"): str,
+        vol.Required("time"): str,
+        vol.Optional("minutes", default=60): vol.All(vol.Coerce(int), vol.Range(min=5, max=720)),
+        vol.Optional("words", default=[]): [vol.All(str, vol.Length(max=30))],
+    }
+)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/plan_meals_set", vol.Required("meals"): [_MEAL]})
+@callback
+@_edits
+def ws_plan_meals_set(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Replace the meals of the day (name, colour, time, category words), in the order given."""
+    try:
+        meals = _plan(hass).set_meals(msg["meals"])
+    except MealPlanError as err:
+        _plan_error(connection, msg["id"], err)
+        return
+    connection.send_result(msg["id"], {"meals": meals})
 
 
 @websocket_api.websocket_command(

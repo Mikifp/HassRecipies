@@ -59,7 +59,7 @@ def test_every_language_has_every_word():
     keys = set(loc._WORDS["en"])
     for code, table in loc._WORDS.items():
         assert set(table) == keys, code
-        assert set(table["slots"]) == {"breakfast", "lunch", "dinner", "snack"}, code
+        assert set(table["slots"]) == {"breakfast", "lunch", "dinner", "dessert", "snack"}, code
 
 
 def test_step_timer_specs_follow_the_language():

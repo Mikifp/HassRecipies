@@ -6,7 +6,7 @@ calendar dashboard and can trigger automations ("when dinner starts").
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.config_entries import ConfigEntry
@@ -16,16 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, EVENT_MEAL_PLAN_CHANGED
 from .entity import DEVICE_INFO
-from .localize import slot_name
-from .mealplan import MealPlan
-
-# slot -> (start, length in minutes)
-SLOT_TIMES: dict[str, tuple[time, int]] = {
-    "breakfast": (time(7, 30), 45),
-    "lunch": (time(12, 0), 60),
-    "snack": (time(15, 0), 30),
-    "dinner": (time(18, 0), 60),
-}
+from .mealplan import MealPlan, parse_time
 
 
 async def async_setup_entry(
@@ -34,8 +25,9 @@ async def async_setup_entry(
     async_add_entities([MealPlanCalendar(hass.data[f"{DOMAIN}_plan"])])
 
 
-def _event(entry: dict, language: str | None = None) -> CalendarEvent:
-    start_time, minutes = SLOT_TIMES[entry["slot"]]
+def _event(plan: MealPlan, entry: dict, language: str | None = None) -> CalendarEvent:
+    meal = plan.meal(entry["slot"]) or {"time": "12:00", "minutes": 60}
+    start_time, minutes = parse_time(meal["time"]), int(meal.get("minutes") or 60)
     start = dt_util.as_local(datetime.combine(date.fromisoformat(entry["date"]), start_time, dt_util.get_default_time_zone()))
     summary = entry["title"]
     return CalendarEvent(
@@ -43,7 +35,7 @@ def _event(entry: dict, language: str | None = None) -> CalendarEvent:
         end=start + timedelta(minutes=minutes),
         summary=summary,
         description=" · ".join(
-            part for part in (slot_name(language, entry["slot"]), entry.get("note") or "") if part
+            part for part in (plan.meal_name(language, entry["slot"]), entry.get("note") or "") if part
         ),
         uid=entry["id"],
     )
@@ -66,7 +58,7 @@ class MealPlanCalendar(CalendarEntity):
         now = dt_util.now()
         today = now.date()
         for entry in self._plan.list(today, today + timedelta(days=60)):
-            event = _event(entry, self.hass.config.language)
+            event = _event(self._plan, entry, self.hass.config.language)
             if event.end > now:
                 return event
         return None
@@ -76,7 +68,7 @@ class MealPlanCalendar(CalendarEntity):
     ) -> list[CalendarEvent]:
         first = dt_util.as_local(start_date).date() - timedelta(days=1)
         last = dt_util.as_local(end_date).date()
-        events = [_event(e, hass.config.language) for e in self._plan.list(first, last)]
+        events = [_event(self._plan, e, hass.config.language) for e in self._plan.list(first, last)]
         return [e for e in events if e.end > start_date and e.start < end_date]
 
     async def async_added_to_hass(self) -> None:

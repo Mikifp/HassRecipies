@@ -50,7 +50,7 @@ from .localize import words
 from .lovelace_resource import async_ensure_resource, async_remove_resource, resource_mode
 from .intents import async_install_sentences, async_remove_intents, async_setup_intents
 from .scraper import RecipeImportError, async_import_url
-from .mealplan import SLOTS, MealPlan, MealPlanError
+from .mealplan import MealPlan, MealPlanError
 from .shopping import (
     _base_servings,
     async_add_plan_to_shopping_list,
@@ -257,7 +257,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
             {
                 vol.Required("recipe"): str,
                 vol.Optional("date"): cv.date,
-                vol.Optional("slot", default="dinner"): vol.In(SLOTS),
+                vol.Optional("slot", default="dinner"): str,
                 vol.Optional("scale"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1000)),
                 vol.Optional("servings"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10000)),
                 vol.Optional("note"): vol.All(str, vol.Length(max=500)),
@@ -282,7 +282,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
             {
                 vol.Optional("start"): cv.date,
                 vol.Optional("end"): cv.date,
-                vol.Optional("slot"): vol.In(SLOTS),
+                vol.Optional("slot"): str,
             }
         ),
         supports_response=SupportsResponse.OPTIONAL,

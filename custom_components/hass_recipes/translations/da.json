@@ -91,7 +91,7 @@
         },
         "slot": {
           "name": "Måltid",
-          "description": "Morgenmad, frokost, aftensmad eller mellemmåltid."
+          "description": "Morgenmad, frokost, aftensmad, dessert eller mellemmåltid."
         },
         "scale": {
           "name": "Skala",

@@ -82,10 +82,12 @@ plan_meal:
       default: dinner
       selector:
         select:
+          custom_value: true
           options:
             - breakfast
             - lunch
             - dinner
+            - dessert
             - snack
     scale:
       required: false
@@ -121,10 +123,12 @@ clear_meal_plan:
       required: false
       selector:
         select:
+          custom_value: true
           options:
             - breakfast
             - lunch
             - dinner
+            - dessert
             - snack
 
 add_plan_to_shopping_list:

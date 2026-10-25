@@ -291,7 +291,7 @@ const STYLE = `
   .ne-timer ha-input.ne-tl { width: 150px; --ha-input-height: 40px; }
   .ne-pick { position: absolute; left: 0; right: 0; z-index: 5; margin-top: 2px; background: var(--card-background-color); border-radius: var(--ha-border-radius-lg, 12px); box-shadow: var(--ha-box-shadow-l, 0 4px 12px rgba(0,0,0,.25)); max-height: 260px; overflow: auto; }
   .ne-pick[hidden] { display: none; }
-  .ne-pick ha-list-item-base.on { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, transparent)); }
+  .ne-pick ha-list-item-button.on { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, transparent)); }
   .ne-body ha-button[data-ne-act] { margin-top: var(--ha-space-1, 4px); }
   ha-button.ne-add-section { align-self: stretch; }
   .ne-dragging { opacity: .4; }
@@ -313,6 +313,39 @@ const STYLE = `
   .ing-qty { font-variant-numeric: tabular-nums; }
   .ing-note { color: var(--secondary-text-color); }
   .ing-paren { color: var(--secondary-text-color); }
+  main.plan { max-width: none; padding: 0; }
+  .plan-page { display: flex; height: calc(100vh - 56px); }
+  :host(.compact) .plan-page { height: calc(100vh - 112px); }
+  .plan-pane { width: 280px; flex: none; box-sizing: border-box; border-right: 1px solid var(--divider-color); overflow-y: auto; background: var(--primary-background-color); display: flex; flex-direction: column; }
+  .plan-search { padding: var(--ha-space-3, 12px) var(--ha-space-3, 12px) 0; }
+  .plan-search ha-input-search { display: block; }
+  .plan-hint { margin: var(--ha-space-2, 8px) var(--ha-space-4, 16px); font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .plan-recs { flex: 1; }
+  .plan-recs ha-expansion-panel { --expansion-panel-summary-padding: 0 var(--ha-space-4, 16px); --expansion-panel-content-padding: 0; border-bottom: 1px solid var(--divider-color); display: block; }
+  .plan-cat { font-weight: 500; font-size: var(--ha-font-size-m, 14px); }
+  .plan-count { color: var(--secondary-text-color); font-weight: 400; margin-inline-start: 6px; }
+  .plan-rec { cursor: grab; }
+  .plan-rec .pd-thumb { width: 32px; height: 32px; }
+  .plan-legend { display: flex; flex-wrap: wrap; gap: var(--ha-space-3, 12px); padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px); border-top: 1px solid var(--divider-color); font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .plan-legend .plan-key { font-size: var(--ha-font-size-s, 12px); gap: 6px; }
+  .plan-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .plan-cal { flex: 1; min-height: 0; display: flex; }
+  .plan-cal ha-full-calendar { flex: 1; min-width: 0; height: 100%; }
+  .plan-key { display: inline-flex; align-items: center; gap: 12px; font-size: var(--ha-font-size-m, 14px); }
+  .plan-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .plan-main ha-alert { display: block; margin: var(--ha-space-2, 8px) var(--ha-space-4, 16px) 0; }
+  .pdlg { display: flex; flex-direction: column; gap: var(--ha-space-3, 12px); min-width: min(380px, 80vw); }
+  .pd-slots { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
+  .pd-slots ha-assist-chip { cursor: pointer; }
+  .pd-results { max-height: 40vh; overflow-y: auto; }
+  .pd-thumb { width: 40px; height: 40px; border-radius: 8px; background: var(--secondary-background-color) center / cover; display: block; }
+  .pd-plain { display: flex; gap: var(--ha-space-2, 8px); align-items: center; }
+  .pd-plain ha-input { flex: 1; }
+  .pm-list { display: flex; flex-direction: column; max-height: 55vh; overflow-y: auto; }
+  .pm-list ha-expansion-panel { display: block; border-bottom: 1px solid var(--divider-color); --expansion-panel-content-padding: 0 var(--ha-space-4, 16px); }
+  .pm-head { display: flex; align-items: center; gap: 12px; font-weight: 500; }
+  .pm-tools { justify-content: flex-end; }
+  .pd-actions { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
   .ing-sub { color: var(--secondary-text-color); font-size: 12px; }
   .ing-comment { display: block; color: var(--secondary-text-color); font-size: 13px; font-style: italic; margin-top: 2px; }
   .ing-comment-input { margin-top: 4px; width: 100%; }
@@ -751,18 +784,25 @@ class HassRecipesPanel extends HTMLElement {
       `<div class="tabwrap" data-act="${act}"><ha-tab name="${esc(T(name))}" ${active ? "active" : ""} ${narrow ? "narrow" : ""}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon></ha-tab></div>`;
     const tabs = (narrow) =>
       tab("tab-list", "book-open-page-variant-outline", "Recipes", v.name === "list", narrow) + tab("plan", "calendar-month-outline", "Meal plan", v.name === "plan", narrow);
+    const planMenu =
+      v.name === "plan"
+        ? `<ha-dropdown id="plan-menu"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
+            ${this._canEdit !== false ? `<ha-dropdown-item value="plan-copy"><ha-icon slot="icon" icon="mdi:content-copy"></ha-icon>${esc(T("Copy last week"))}</ha-dropdown-item>` : ""}
+            <ha-dropdown-item value="plan-shop"><ha-icon slot="icon" icon="mdi:cart-outline"></ha-icon>${esc(T("Add this period to the shopping list"))}</ha-dropdown-item>
+            ${this._canEdit !== false ? `<ha-dropdown-item value="plan-meals"><ha-icon slot="icon" icon="mdi:silverware-fork-knife"></ha-icon>${esc(T("Edit the meals of the day"))}</ha-dropdown-item>` : ""}</ha-dropdown>`
+        : "";
     if (this._brCompact()) {
       return {
         header: `${iconBtn("leave", "arrow-left", "Back")}${
           v.name === "list"
             ? `<ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>`
-            : `<h1>${esc(T("Meal plan"))}</h1>`
+            : `<h1>${esc(T("Meal plan"))}</h1>${planMenu}`
         }`,
         bottom: `<nav class="bottomtabs">${tabs(true)}</nav>`,
       };
     }
     return {
-      header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : iconBtn("leave", "arrow-left", "Back")}<span class="hsp"></span><nav class="tabs">${tabs(false)}</nav><span class="hsp"></span>`,
+      header: `${this._narrow ? iconBtn("menu", "menu", "Menu") : iconBtn("leave", "arrow-left", "Back")}<span class="hsp"></span><nav class="tabs">${tabs(false)}</nav><span class="hsp"></span>${planMenu}`,
       bottom: "",
     };
   }
@@ -771,13 +811,21 @@ class HassRecipesPanel extends HTMLElement {
     const v = this._view;
     this._fab = "";
     // on a phone Home Assistant scrolls the page, not this panel: stay out of the way so the top bar can stick to it
-    this.classList.toggle("compact", this._brCompact());
+    const compactNow = this._brCompact();
+    this.classList.toggle("compact", compactNow);
+    // on a cold load the page has no width yet: look again once it has one
+    this._compactSeen = compactNow;
+    if (!this._compactCheck) {
+      this._compactCheck = requestAnimationFrame(() => {
+        this._compactCheck = null;
+        if (this._loaded && this._brCompact() !== this._compactSeen) this._render();
+      });
+    }
     let body;
     if (!this._loaded) body = `<div class="empty">Loading…</div>`;
     else if (v.name === "detail" && this._recipe(v.id)) body = this._detailHtml(this._recipe(v.id));
     else if (v.name === "data") body = this._dataHtml();
     else if (v.name === "plan") {
-      this._ensurePlan();
       body = this._planHtml();
     }
     else if (v.name === "shop" && this._recipe(v.id)) body = this._shopHtml(this._recipe(v.id));
@@ -801,7 +849,7 @@ class HassRecipesPanel extends HTMLElement {
         <header>${chrome.header}</header>
         <div id="timers" class="timers"></div>
       </div>
-      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<ha-alert alert-type="error">${esc(this._error)}</ha-alert>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
+      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}${v.name === "plan" ? " plan" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<ha-alert alert-type="error">${esc(this._error)}</ha-alert>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
     this._timerSig = "";
     if (keep) {
       // the new page is only as tall as it will be once its elements have rendered, so put the scroll back again over the next frames
@@ -1041,15 +1089,12 @@ class HassRecipesPanel extends HTMLElement {
         this._planPending = id;
         this._go({ name: "plan", week: "" });
         break;
-      case "plan-prev":
-      case "plan-next":
-      case "plan-today": {
-        const monday = this._planMonday();
-        const next = act === "plan-today" ? new Date() : addDays(monday, act === "plan-prev" ? -7 : 7);
-        this._planAdd = null;
-        this._go({ name: "plan", week: act === "plan-today" ? "" : isoDate(mondayOf(next)) }, false, "replace");
+      case "plan-meals":
+        this._planMealsDialog();
         break;
-      }
+      case "plan-add-dialog":
+        this._planAddDialog(isoDate(new Date()));
+        break;
       case "plan-shop":
         await this._planToShopping();
         break;
