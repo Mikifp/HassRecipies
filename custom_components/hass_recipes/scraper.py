@@ -233,6 +233,118 @@ def _html_lists(page: str) -> tuple[list[str], list[str]]:
     return parser.ingredients, parser.instructions
 
 
+class _GroupExtractor(HTMLParser):
+    """Ingredient groups ("For the dough", "Frosting") as recipe plugins print them in the page.
+
+    schema.org lists the ingredients flat, so the group names only exist in the HTML. Understands
+    WP Recipe Maker (``wprm-recipe-ingredient-group``) and the Tasty Recipes / Mediavine Create
+    cards, where a heading inside the ingredients box starts a group.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.groups: list[dict[str, Any]] = []
+        self._stack: list[tuple[str, str | None]] = []
+        self._buf: list[str] = []
+        self._box = 0  # depth inside a Tasty / Create ingredients box
+        self._wprm = 0  # depth inside a WP Recipe Maker ingredient group
+
+    def _group(self) -> dict[str, Any]:
+        if not self.groups:
+            self.groups.append({"name": "", "items": []})
+        return self.groups[-1]
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _VOID:
+            return
+        classes = (dict(attrs).get("class") or "").lower().split()
+        kind: str | None = None
+        if "wprm-recipe-ingredient-group" in classes:
+            self.groups.append({"name": "", "items": []})
+            self._wprm += 1
+            kind = "wprm"
+        elif self._wprm and ("wprm-recipe-group-name" in classes or "wprm-recipe-ingredient-group-name" in classes):
+            kind = "name"
+        elif self._wprm and tag == "li" and "wprm-recipe-ingredient" in classes:
+            kind = "item"
+        elif any(c in ("tasty-recipes-ingredients", "mv-create-ingredients") for c in classes):
+            self._box += 1
+            kind = "box"
+        elif self._box and tag in ("h3", "h4", "h5") and "wprm-recipe-ingredient-group" not in classes:
+            kind = "name"
+            last = self.groups[-1] if self.groups else None
+            if not last or last["items"] or last["name"]:
+                self.groups.append({"name": "", "items": []})
+        elif self._box and tag == "li":
+            kind = "item"
+        self._stack.append((tag, kind))
+        if kind in ("name", "item"):
+            self._buf = []
+
+    def handle_endtag(self, tag: str) -> None:
+        for i in range(len(self._stack) - 1, -1, -1):
+            if self._stack[i][0] == tag:
+                popped = self._stack[i:]
+                del self._stack[i:]
+                break
+        else:
+            return
+        for _, kind in reversed(popped):
+            if kind == "box":
+                self._box -= 1
+            elif kind == "wprm":
+                self._wprm -= 1
+            elif kind in ("name", "item"):
+                text = re.sub(r"\s+", " ", html.unescape("".join(self._buf))).strip()
+                self._buf = []
+                if not text:
+                    continue
+                group = self._group()
+                if kind == "name":
+                    group["name"] = text.rstrip(":").strip()
+                else:
+                    group["items"].append(text)
+
+    def handle_data(self, data: str) -> None:
+        if any(kind in ("name", "item") for _, kind in self._stack):
+            self._buf.append(data)
+
+
+def _ingredient_groups(page: str) -> list[dict[str, Any]]:
+    parser = _GroupExtractor()
+    try:
+        parser.feed(page)
+    except Exception:  # noqa: BLE001 - malformed HTML must never break an import
+        return []
+    return [g for g in parser.groups if g["items"]]
+
+
+def _apply_groups(recipe: dict[str, Any], groups: list[dict[str, Any]]) -> None:
+    """Put the page's ingredient group names into the flat ingredient list as "## name" headings.
+
+    Only when the page lists exactly the ingredients we have, so every item can be placed. Step
+    sections that line up with the groups one-to-one take the groups' names, so a section is
+    called the same in both lists.
+    """
+    ingredients = [i for i in recipe.get("ingredients") or [] if not str(i).startswith("## ")]
+    if not any(g["name"] for g in groups) or sum(len(g["items"]) for g in groups) != len(ingredients):
+        return
+    merged: list[str] = []
+    at = 0
+    for g in groups:
+        if g["name"]:
+            merged.append(f"## {g['name']}")
+        merged.extend(ingredients[at : at + len(g["items"])])
+        at += len(g["items"])
+    recipe["ingredients"] = merged
+    names = [g["name"] for g in groups if g["name"]]
+    steps = recipe.get("instructions") or []
+    sections = [i for i, st in enumerate(steps) if isinstance(st, dict) and st.get("section")]
+    if len(sections) == len(names):
+        for i, name in zip(sections, names):
+            steps[i] = {**steps[i], "text": name}
+
+
 _SERVING_WORDS = {
     "serving", "servings", "portion", "portions", "person", "persons", "people",
     "personer", "port", "porter", "portioner", "pers", "pers.", "servings.",
@@ -325,8 +437,14 @@ def _merge(primary: dict[str, Any] | None, fallback: dict[str, Any] | None, url:
     ):
         mine = own.get(key) or []
         if any(is_section(i) for i in mine):
-            plain = lambda items: [i if isinstance(i, str) else i.get("text") for i in items if not is_section(i)]  # noqa: E731
-            if plain(mine) == plain(merged.get(key, [])):
+            titles = {(i if isinstance(i, str) else i.get("text", "")).removeprefix("## ").casefold() for i in mine if is_section(i)}
+
+            def plain(items: list[Any], skip: set[str] = frozenset()) -> list[str]:
+                texts = [i if isinstance(i, str) else i.get("text") for i in items if not is_section(i)]
+                return [t for t in texts if str(t).casefold() not in skip]
+
+            # recipe-scrapers lists a section's name as a step of its own: look past those
+            if plain(mine) == plain(merged.get(key, []), titles):
                 merged[key] = mine
     merged.setdefault("name", "Imported recipe")
     merged["source_url"] = url
@@ -340,6 +458,8 @@ def parse_page(page: str, url: str) -> dict[str, Any]:
     except RecipeImportError:
         own = None
     recipe = _merge(_scrapers_parse(page, url), own, url)
+    if not any(str(i).startswith("## ") for i in recipe.get("ingredients") or []):
+        _apply_groups(recipe, _ingredient_groups(page))
     # a step that names an ingredient links to it, so the panel can show it as a chip in the text
     if link_ingredients is not None:
         recipe["instructions"] = link_ingredients(recipe.get("ingredients") or [], recipe.get("instructions") or [])
