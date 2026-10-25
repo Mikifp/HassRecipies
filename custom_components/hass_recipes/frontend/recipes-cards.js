@@ -1371,11 +1371,20 @@ class HassRecipesPlanCard extends RecipesBase {
         end: isoLocal(days[days.length - 1]),
       });
       this._entries = res.entries;
+      this._meals = res.meals || null; // the meals of the day as the user defined them
       this._error = "";
     } catch (err) {
       this._error = err.message || "Could not load the meal plan";
     }
     this._render();
+  }
+  /** A meal of the day by name: the user's own, or the built-in one in the card's language. */
+  _mealName(slot) {
+    const m = (this._meals || []).find((x) => x.id === slot);
+    if (m && m.name) return m.name;
+    const key = `slot_${slot}`;
+    const text = this._t(key);
+    return text === key ? slot : text;
   }
   _dayLabel(d, i) {
     if (i === 0) return this._t("plan_today");
@@ -1386,7 +1395,8 @@ class HassRecipesPlanCard extends RecipesBase {
   _render() {
     if (!this._config) return;
     const title = this._config.title ?? this._t("plan_title");
-    const slots = Array.isArray(this._config.slots) && this._config.slots.length ? this._config.slots : PLAN_SLOTS;
+    const known = this._meals ? this._meals.map((m) => m.id) : PLAN_SLOTS;
+    const slots = Array.isArray(this._config.slots) && this._config.slots.length ? this._config.slots : known;
     let body;
     if (this._error) body = `<div class="empty">${esc(this._error)}</div>`;
     else if (!this._entries) body = `<div class="empty">${esc(this._t("loading"))}</div>`;
@@ -1400,7 +1410,7 @@ class HassRecipesPlanCard extends RecipesBase {
             ? here
                 .map((e) => {
                   const img = e.image ? `style="background-image:url('${esc(e.image)}')"` : "";
-                  const meta = [this._t(`slot_${e.slot}`), e.total_time ? minutes(e.total_time) : "", e.note].filter(Boolean).join(" · ");
+                  const meta = [this._mealName(e.slot), e.total_time ? minutes(e.total_time) : "", e.note].filter(Boolean).join(" · ");
                   const playable = e.recipe_exists;
                   return `<div class="meal${playable ? " go" : ""}" ${playable ? `data-meal="${esc(e.id)}" data-recipe="${esc(e.recipe_id)}" tabindex="0"` : ""}>
                     <div class="thumb" ${img}>${e.image ? "" : '<ha-icon icon="mdi:silverware-fork-knife"></ha-icon>'}</div>
@@ -1485,6 +1495,10 @@ class HassRecipesCardEditor extends HTMLElement {
         tags: uniq("tags"),
       };
     } catch (_) { /* the form still works with free text */ }
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      this._meals = (await this._hass.callWS({ type: "hass_recipes/plan_list", start: today, end: today })).meals || null;
+    } catch (_) { /* the built-in meals are listed */ }
     this._paint();
   }
   _schema() {
@@ -1526,7 +1540,10 @@ class HassRecipesCardEditor extends HTMLElement {
               select: {
                 multiple: true,
                 mode: "list",
-                options: ["breakfast", "lunch", "dinner", "dessert", "snack"].map((v) => ({ value: v, label: t(`slot_${v}`) })),
+                options: (this._meals || ["breakfast", "lunch", "dinner", "dessert", "snack"].map((id) => ({ id }))).map((m) => ({
+                  value: m.id,
+                  label: m.name || (t(`slot_${m.id}`) === `slot_${m.id}` ? m.id : t(`slot_${m.id}`)),
+                })),
               },
             },
           },

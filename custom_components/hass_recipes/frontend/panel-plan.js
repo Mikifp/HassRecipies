@@ -7,45 +7,61 @@
  */
 export default function (h) {
   const { esc, minutes, T, isoDate, addDays } = h;
-  const SLOTS = [
-    ["breakfast", "Breakfast", "--warning-color", "#ffa600", "08:00"],
-    ["lunch", "Lunch", "--success-color", "#4caf50", "12:00"],
-    ["dinner", "Dinner", "--primary-color", "#03a9f4", "18:00"],
-    ["dessert", "Dessert", "--pink-color", "#e91e63", "19:30"],
-    ["snack", "Snack", "--purple-color", "#9c27b0", "15:00"],
+  // The meals of the day (the server keeps the user's own; these are what it starts with). A meal with no name
+  // of its own is one of these and is named in the user's language.
+  const BUILTIN = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", dessert: "Dessert", snack: "Snack" };
+  const DEFAULT_MEALS = [
+    { id: "breakfast", name: "", color: "amber", time: "07:30", minutes: 45, words: ["morgenmad", "breakfast", "brunch"] },
+    { id: "lunch", name: "", color: "green", time: "12:00", minutes: 60, words: ["frokost", "lunch"] },
+    { id: "dinner", name: "", color: "blue", time: "18:00", minutes: 60, words: ["aftensmad", "dinner", "hovedret", "middag"] },
+    { id: "dessert", name: "", color: "pink", time: "19:30", minutes: 30, words: ["dessert", "desert", "efterret", "nachspeise"] },
+    { id: "snack", name: "", color: "purple", time: "15:00", minutes: 30, words: ["snack", "mellemmåltid"] },
   ];
-  const slotLabel = (slot) => (SLOTS.find((s) => s[0] === slot) || [slot, slot])[1];
-  // category words that say which meal of the day a recipe is for (English and Danish)
-  const SLOT_WORDS = [
-    ["breakfast", ["morgenmad", "breakfast", "brunch"]],
-    ["lunch", ["frokost", "lunch"]],
-    ["dinner", ["aftensmad", "dinner", "hovedret", "middag"]],
-    ["dessert", ["dessert", "desert", "efterret", "nachspeise"]],
-    ["snack", ["snack", "mellemmåltid"]],
-  ];
+  // the colours of Home Assistant's own colour picker, with a fallback for themes that do not define them
+  const COLOR_FALLBACK = {
+    red: "#f44336", pink: "#e91e63", purple: "#926bc7", "deep-purple": "#6e41ab", indigo: "#3f51b5", blue: "#2196f3",
+    "light-blue": "#03a9f4", cyan: "#00bcd4", teal: "#009688", green: "#4caf50", "light-green": "#8bc34a", lime: "#cddc39",
+    yellow: "#ffeb3b", amber: "#ffc107", orange: "#ff9800", "deep-orange": "#ff6f22", brown: "#795548", "light-grey": "#bdbdbd",
+    grey: "#9e9e9e", "dark-grey": "#606060", "blue-grey": "#607d8b", black: "#000000", white: "#ffffff",
+  };
   const VIEWS = ["dayGridMonth", "dayGridWeek", "dayGridDay", "listWeek"];
   const VIEW_KEY = "hass_recipes_plan_view";
   const OPEN_KEY = "hass_recipes_plan_cats";
 
   return {
     // ---- the calendar ----
+    /** The meals of the day, in order. */
+    _planMeals() {
+      return this._planMealList || DEFAULT_MEALS;
+    },
+
+    /** The name of a meal: its own, or the built-in one in the user's language. */
+    _planLabel(slot) {
+      const m = this._planMeals().find((x) => x.id === slot);
+      return (m && m.name) || (BUILTIN[slot] ? T(BUILTIN[slot]) : slot);
+    },
+
     _planColor(slot) {
-      const s = SLOTS.find((x) => x[0] === slot) || SLOTS[2];
-      return getComputedStyle(this).getPropertyValue(s[2]).trim() || s[3];
+      const m = this._planMeals().find((x) => x.id === slot);
+      const name = (m && m.color) || "blue";
+      return getComputedStyle(this).getPropertyValue(`--${name}-color`).trim() || COLOR_FALLBACK[name] || COLOR_FALLBACK.blue;
     },
 
     /** The planned meals as calendar events. */
     _planEvents() {
       const list = this._planCalView === "listWeek";
       return (this._planEntries || []).map((e) => {
-        const [, , , , time] = SLOTS.find((s) => s[0] === e.slot) || SLOTS[2];
+        const meal = this._planMeals().find((m) => m.id === e.slot) || { time: "12:00", minutes: 60 };
+        const time = meal.time;
+        const [hh, mm] = time.split(":").map(Number);
+        const endMin = Math.min(hh * 60 + mm + (meal.minutes || 60), 24 * 60 - 1);
         const color = this._planColor(e.slot);
         const name = e.title + (e.scale && e.scale !== 1 ? ` ×${e.scale}` : "");
         return {
           id: e.id,
-          title: list ? `${T(slotLabel(e.slot))}: ${name}` : name,
+          title: list ? `${this._planLabel(e.slot)}: ${name}` : name,
           start: `${e.date}T${time}:00`,
-          end: `${e.date}T${String(parseInt(time, 10) + 1).padStart(2, "0")}:${time.slice(3)}:00`,
+          end: `${e.date}T${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}:00`,
           backgroundColor: color,
           borderColor: color,
           extendedProps: { slot: e.slot },
@@ -67,6 +83,7 @@ export default function (h) {
         const res = await this._ws({ type: "hass_recipes/plan_list", start: r.start, end: r.end });
         if (this._planRange !== r) return; // the calendar moved on while this was loading
         this._planEntries = res.entries;
+        if (res.meals) this._planMealList = res.meals;
         this._planPush();
       } catch (err) {
         this._error = err.message || String(err);
@@ -205,9 +222,9 @@ export default function (h) {
     },
 
     _planSlotChips(slot) {
-      return `<div class="pd-slots">${SLOTS.map(
-        ([s, label]) => `<ha-assist-chip data-slot="${s}" label="${esc(T(label))}" ${s === slot ? "active" : ""}></ha-assist-chip>`
-      ).join("")}</div>`;
+      return `<div class="pd-slots">${this._planMeals()
+        .map((m) => `<ha-assist-chip data-slot="${esc(m.id)}" label="${esc(this._planLabel(m.id))}" ${m.id === slot ? "active" : ""}></ha-assist-chip>`)
+        .join("")}</div>`;
     },
 
     _planBindSlots(dlg, onPick) {
@@ -294,7 +311,7 @@ export default function (h) {
       if (!e) return;
       const canEdit = this._canEdit !== false;
       const html = `
-        ${canEdit ? `<ha-input id="pe-date" type="date" appearance="outlined" label="${esc(T("Day"))}" value="${esc(e.date)}"></ha-input>${this._planSlotChips(e.slot)}` : `<p class="muted">${esc(e.date)} · ${esc(T(slotLabel(e.slot)))}</p>`}
+        ${canEdit ? `<ha-input id="pe-date" type="date" appearance="outlined" label="${esc(T("Day"))}" value="${esc(e.date)}"></ha-input>${this._planSlotChips(e.slot)}` : `<p class="muted">${esc(e.date)} · ${esc(this._planLabel(e.slot))}</p>`}
         ${e.recipe_exists && canEdit ? `<ha-input id="pe-scale" type="number" min="0.25" step="0.25" appearance="outlined" label="${esc(T("Scale"))} ×" placeholder="1" value="${e.scale ? esc(e.scale) : ""}"></ha-input>` : ""}
         <div class="pd-actions">
           ${e.recipe_exists ? `<ha-button id="pe-open" appearance="filled"><ha-icon slot="start" icon="mdi:book-open-page-variant-outline"></ha-icon>${esc(T("Open recipe"))}</ha-button>
@@ -337,6 +354,125 @@ export default function (h) {
           } catch (err) {
             this._error = err.message || String(err);
             this._render();
+          }
+        });
+      });
+    },
+
+    // ---- the meals of the day: define them ----
+    _planMealsDialog() {
+      const model = this._planMeals().map((m) => ({ ...m, words: [...(m.words || [])] }));
+      let open = -1; // the meal that is open for editing
+      const html = `<div id="pm-list" class="pm-list"></div>
+        <ha-alert id="pm-err" alert-type="error" hidden></ha-alert>
+        <div class="pd-actions">
+          <ha-button id="pm-add" appearance="plain"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("Add a meal of the day"))}</ha-button>
+          <span style="flex:1"></span>
+          <ha-button id="pm-save" appearance="filled">${esc(T("Save"))}</ha-button>
+        </div>`;
+      this._planDialog(T("Meals of the day"), html, (dlg, close) => {
+        const list = dlg.querySelector("#pm-list");
+        const err = dlg.querySelector("#pm-err");
+        const schema = [
+          { name: "name", selector: { text: {} } },
+          { name: "time", selector: { time: {} } },
+          { name: "color", selector: { ui_color: { include_state: false, include_none: false } } },
+          { name: "words", selector: { text: { multiple: true } } },
+        ];
+        const labels = {
+          name: "Name",
+          time: "Time in the calendar",
+          color: "Colour",
+          words: "Categories that choose this meal",
+        };
+        const title = (m) => `${m.name || (BUILTIN[m.id] ? T(BUILTIN[m.id]) : T("New meal"))} · ${m.time}`;
+        const draw = () => {
+          list.textContent = "";
+          model.forEach((m, i) => {
+            const panel = document.createElement("ha-expansion-panel");
+            panel.setAttribute("left-chevron", "");
+            if (i === open) panel.setAttribute("expanded", "");
+            const head = document.createElement("div");
+            head.slot = "header";
+            head.className = "pm-head";
+            head.innerHTML = `<span class="plan-dot"></span><span class="pm-title"></span>`;
+            const dot = head.querySelector(".plan-dot");
+            const setHead = () => {
+              dot.style.background = getComputedStyle(this).getPropertyValue(`--${m.color}-color`).trim() || COLOR_FALLBACK[m.color] || COLOR_FALLBACK.blue;
+              head.querySelector(".pm-title").textContent = title(m);
+            };
+            setHead();
+            panel.appendChild(head);
+            const form = document.createElement("ha-form");
+            form.hass = this._hass;
+            form.schema = schema;
+            form.data = { name: m.name, time: `${m.time}:00`, color: m.color, words: m.words };
+            form.computeLabel = (sc) => T(labels[sc.name] || sc.name);
+            form.computeHelper = (sc) =>
+              sc.name === "name" && BUILTIN[m.id] ? T("Leave empty to use the standard name") : sc.name === "words" ? T("A recipe in one of these categories goes to this meal") : "";
+            form.addEventListener("value-changed", (e) => {
+              e.stopPropagation();
+              const v = e.detail.value || {};
+              form.data = v;
+              m.name = String(v.name || "").trim();
+              m.time = String(v.time || m.time).slice(0, 5);
+              m.color = v.color || m.color;
+              m.words = (v.words || []).map((w) => String(w).trim()).filter(Boolean);
+              setHead();
+            });
+            panel.appendChild(form);
+            const tools = document.createElement("div");
+            tools.className = "pd-actions pm-tools";
+            const btn = (icon, label, fn, extra = "") => {
+              const b = document.createElement("ha-icon-button");
+              b.label = label;
+              if (extra) b.setAttribute("disabled", "");
+              b.innerHTML = `<ha-icon icon="mdi:${icon}"></ha-icon>`;
+              b.addEventListener("click", fn);
+              tools.appendChild(b);
+            };
+            btn("arrow-up", T("Move up"), () => {
+              [model[i - 1], model[i]] = [model[i], model[i - 1]];
+              open = i - 1;
+              draw();
+            }, i === 0 ? "x" : "");
+            btn("arrow-down", T("Move down"), () => {
+              [model[i + 1], model[i]] = [model[i], model[i + 1]];
+              open = i + 1;
+              draw();
+            }, i === model.length - 1 ? "x" : "");
+            btn("delete-outline", T("Delete"), () => {
+              model.splice(i, 1);
+              open = -1;
+              draw();
+            }, model.length === 1 ? "x" : "");
+            panel.appendChild(tools);
+            panel.addEventListener("expanded-changed", (e) => {
+              if (e.target === panel) open = e.detail.expanded ? i : open === i ? -1 : open;
+            });
+            list.appendChild(panel);
+          });
+        };
+        draw();
+        dlg.querySelector("#pm-add").addEventListener("click", () => {
+          model.push({ id: "", name: "", color: "teal", time: "12:00", minutes: 60, words: [] });
+          open = model.length - 1;
+          draw();
+        });
+        dlg.querySelector("#pm-save").addEventListener("click", async () => {
+          err.hidden = true;
+          try {
+            const res = await this._ws({
+              type: "hass_recipes/plan_meals_set",
+              meals: model.map((m) => ({ ...(m.id ? { id: m.id } : {}), name: m.name, color: m.color, time: m.time, minutes: m.minutes || 60, words: m.words })),
+            });
+            this._planMealList = res.meals;
+            close();
+            this._planPush();
+            this._render();
+          } catch (e) {
+            err.textContent = e.message || String(e);
+            err.hidden = false;
           }
         });
       });
@@ -396,7 +532,7 @@ export default function (h) {
     _planSlotFor(recipe) {
       for (const c of (recipe && recipe.categories) || []) {
         const low = String(c).toLowerCase();
-        for (const [slot, words] of SLOT_WORDS) if (words.some((w) => low.includes(w))) return slot;
+        for (const m of this._planMeals()) if ((m.words || []).some((w) => low.includes(w))) return m.id;
       }
       return null;
     },
@@ -408,7 +544,7 @@ export default function (h) {
         const when = new Intl.DateTimeFormat((this._hass && this._hass.language) || undefined, { weekday: "short", day: "numeric", month: "short" }).format(
           new Date(`${date}T12:00:00`)
         );
-        this._flash(`${recipe.name} · ${T(slotLabel(slot))} · ${when}`, {
+        this._flash(`${recipe.name} · ${this._planLabel(slot)} · ${when}`, {
           label: "Undo",
           run: () => this._ws({ type: "hass_recipes/plan_delete", entry_id: entry.id }),
         });
@@ -505,9 +641,11 @@ export default function (h) {
         new Date(`${date}T12:00:00`)
       );
       const html = `<p class="plan-hint">${esc(recipe.name)} · ${esc(when)}</p>
-        <ha-list-base>${SLOTS.map(
-          ([s, label]) => `<ha-list-item-button data-slot="${s}" headline="${esc(T(label))}"><span slot="start" class="plan-dot" style="background:${this._planColor(s)}"></span></ha-list-item-button>`
-        ).join("")}</ha-list-base>`;
+        <ha-list-base>${this._planMeals()
+          .map(
+            (m) => `<ha-list-item-button data-slot="${esc(m.id)}" headline="${esc(this._planLabel(m.id))}"><span slot="start" class="plan-dot" style="background:${this._planColor(m.id)}"></span></ha-list-item-button>`
+          )
+          .join("")}</ha-list-base>`;
       this._planDialog(T("Add to the meal plan"), html, (dlg, close) => {
         dlg.querySelector("ha-list-base").addEventListener("click", async (e) => {
           const item = e.target.closest("[data-slot]");
@@ -542,9 +680,9 @@ export default function (h) {
             <div class="plan-search"><ha-input-search id="plan-q" appearance="outlined" placeholder="${esc(T("Search recipes"))}" value="${esc(this._planQuery || "")}"></ha-input-search></div>
             <p class="plan-hint">${esc(T("Drag a recipe onto a day in the calendar."))}</p>
             <div id="plan-recs" class="plan-recs">${this._planCatsHtml(this._planQuery || "")}</div>
-            <div class="plan-legend">${SLOTS.map(
-              ([s, label]) => `<span class="plan-key"><span class="plan-dot" style="background:${this._planColor(s)}"></span>${esc(T(label))}</span>`
-            ).join("")}</div>
+            <div class="plan-legend">${this._planMeals()
+              .map((m) => `<span class="plan-key"><span class="plan-dot" style="background:${this._planColor(m.id)}"></span>${esc(this._planLabel(m.id))}</span>`)
+              .join("")}</div>
           </aside>`;
       return `<div class="plan-page">${pane}
         <div class="plan-main">

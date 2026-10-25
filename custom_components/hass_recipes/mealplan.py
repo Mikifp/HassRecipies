@@ -6,18 +6,38 @@ recipe's name, so deleting a recipe leaves the day's plan readable.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+import copy
+from datetime import date, time, timedelta
 from typing import Any
+import re
 import uuid
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import EVENT_MEAL_PLAN_CHANGED, MEALPLAN_STORAGE_KEY, STORAGE_VERSION
+from .localize import slot_name
 from .store import RecipeStore
 
-SLOTS = ("breakfast", "lunch", "dinner", "dessert", "snack")
 MAX_RANGE_DAYS = 400
+MAX_MEALS = 12
+
+# The meals of the day. The user can rename, add, remove and reorder them; the built-in ones have no name
+# of their own, so they are shown in the language of the user. ``words`` are what a recipe's categories
+# are matched against to choose the meal ("aftensmad" is dinner). Colours are the names Home Assistant's
+# own colour picker uses.
+DEFAULT_MEALS: tuple[dict[str, Any], ...] = (
+    {"id": "breakfast", "name": "", "color": "amber", "time": "07:30", "minutes": 45, "words": ["morgenmad", "breakfast", "brunch"]},
+    {"id": "lunch", "name": "", "color": "green", "time": "12:00", "minutes": 60, "words": ["frokost", "lunch"]},
+    {"id": "dinner", "name": "", "color": "blue", "time": "18:00", "minutes": 60, "words": ["aftensmad", "dinner", "hovedret", "middag"]},
+    {"id": "dessert", "name": "", "color": "pink", "time": "19:30", "minutes": 30, "words": ["dessert", "desert", "efterret", "nachspeise"]},
+    {"id": "snack", "name": "", "color": "purple", "time": "15:00", "minutes": 30, "words": ["snack", "mellemmåltid"]},
+)
+COLORS = frozenset(
+    "red pink purple deep-purple indigo blue light-blue cyan teal green light-green lime yellow amber orange "
+    "deep-orange brown light-grey grey dark-grey blue-grey black white".split()
+)
+_TIME = re.compile(r"^(\d{1,2}):(\d{2})(?::\d{2})?$")
 
 
 class MealPlanError(ValueError):
@@ -33,10 +53,11 @@ def parse_date(value: str | date) -> date:
         raise MealPlanError(f"Not a valid date: {value!r} (use YYYY-MM-DD)") from err
 
 
-def check_slot(slot: str) -> str:
-    if slot not in SLOTS:
-        raise MealPlanError(f"Unknown meal slot {slot!r}; use one of {', '.join(SLOTS)}")
-    return slot
+def parse_time(value: Any) -> time:
+    match = _TIME.match(str(value).strip())
+    if not match or int(match.group(1)) > 23 or int(match.group(2)) > 59:
+        raise MealPlanError(f"Not a valid time: {value!r} (use HH:MM)")
+    return time(int(match.group(1)), int(match.group(2)))
 
 
 class MealPlan:
@@ -45,14 +66,81 @@ class MealPlan:
         self._recipes = recipes
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, MEALPLAN_STORAGE_KEY)
         self._entries: dict[str, dict[str, Any]] = {}
+        self._meals: list[dict[str, Any]] = copy.deepcopy(list(DEFAULT_MEALS))
 
     async def async_load(self) -> None:
         data = await self._store.async_load()
         self._entries = {e["id"]: e for e in (data or {}).get("entries", [])}
+        if (data or {}).get("meals"):
+            self._meals = data["meals"]
+
+    def _save(self) -> None:
+        self._store.async_delay_save(lambda: {"entries": list(self._entries.values()), "meals": self._meals}, 1)
 
     def _changed(self, day: str | None = None) -> None:
-        self._store.async_delay_save(lambda: {"entries": list(self._entries.values())}, 1)
+        self._save()
         self._hass.bus.async_fire(EVENT_MEAL_PLAN_CHANGED, {"date": day})
+
+    # ---- the meals of the day ----
+    def meals(self) -> list[dict[str, Any]]:
+        return copy.deepcopy(self._meals)
+
+    def slots(self) -> tuple[str, ...]:
+        return tuple(m["id"] for m in self._meals)
+
+    def meal(self, slot: str) -> dict[str, Any] | None:
+        return next((m for m in self._meals if m["id"] == slot), None)
+
+    def meal_name(self, language: str | None, slot: str) -> str:
+        """The name of a meal: its own, or the built-in one in the user's language."""
+        meal = self.meal(slot)
+        return (meal or {}).get("name") or slot_name(language, slot)
+
+    def check_slot(self, slot: str) -> str:
+        if self.meal(slot) is None:
+            raise MealPlanError(f"Unknown meal {slot!r}; use one of {', '.join(self.slots())}")
+        return slot
+
+    def set_meals(self, meals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Replace the meals of the day (their order is the order they are listed in)."""
+        if not 1 <= len(meals) <= MAX_MEALS:
+            raise MealPlanError(f"Have between 1 and {MAX_MEALS} meals")
+        clean: list[dict[str, Any]] = []
+        for raw in meals:
+            clock = parse_time(raw.get("time", "12:00"))
+            color = str(raw.get("color") or "blue")
+            if color not in COLORS:
+                raise MealPlanError(f"Not a colour: {color!r}")
+            meal_id = str(raw.get("id") or uuid.uuid4().hex[:8])
+            if any(m["id"] == meal_id for m in clean):
+                raise MealPlanError(f"Two meals share the id {meal_id!r}")
+            words = []
+            for word in raw.get("words") or []:
+                word = str(word).strip().casefold()
+                if word and word not in words:
+                    words.append(word)
+            builtin = next((m for m in DEFAULT_MEALS if m["id"] == meal_id), None)
+            name = str(raw.get("name") or "").strip()
+            if not name and builtin is None:
+                raise MealPlanError("Give every new meal a name")
+            clean.append(
+                {
+                    "id": meal_id,
+                    "name": name,
+                    "color": color,
+                    "time": f"{clock.hour:02d}:{clock.minute:02d}",
+                    "minutes": int(raw.get("minutes") or 60),
+                    "words": words[:12],
+                }
+            )
+        gone = {m["id"] for m in self._meals} - {m["id"] for m in clean}
+        for meal_id in gone:
+            used = sum(1 for e in self._entries.values() if e["slot"] == meal_id)
+            if used:
+                raise MealPlanError(f"{used} planned meals are in {self.meal_name(None, meal_id)}: move or remove them first")
+        self._meals = clean
+        self._changed(None)
+        return self.meals()
 
     def _public(self, entry: dict[str, Any]) -> dict[str, Any]:
         """The entry as clients see it: the live recipe name wins over the stored one."""
@@ -73,7 +161,8 @@ class MealPlan:
             raise MealPlanError(f"Ask for at most {MAX_RANGE_DAYS} days at a time")
         lo, hi = first.isoformat(), last.isoformat()
         chosen = [e for e in self._entries.values() if lo <= e["date"] <= hi]
-        chosen.sort(key=lambda e: (e["date"], SLOTS.index(e["slot"]), e["title"].casefold()))
+        order = {m["id"]: i for i, m in enumerate(self._meals)}
+        chosen.sort(key=lambda e: (e["date"], order.get(e["slot"], len(order)), e["title"].casefold()))
         return [self._public(e) for e in chosen]
 
     def get(self, entry_id: str) -> dict[str, Any] | None:
@@ -90,7 +179,7 @@ class MealPlan:
         note: str = "",
     ) -> dict[str, Any]:
         day = parse_date(day).isoformat()
-        check_slot(slot)
+        self.check_slot(slot)
         recipe = self._recipes.get(recipe_id) if recipe_id else None
         if recipe_id and recipe is None:
             raise MealPlanError(f"Recipe not found: {recipe_id}")
@@ -118,7 +207,7 @@ class MealPlan:
         if fields.get("date") is not None:
             entry["date"] = parse_date(fields["date"]).isoformat()
         if fields.get("slot") is not None:
-            entry["slot"] = check_slot(fields["slot"])
+            entry["slot"] = self.check_slot(fields["slot"])
         if "scale" in fields:
             entry["scale"] = float(fields["scale"]) if fields["scale"] else None
         if fields.get("note") is not None:

@@ -341,6 +341,10 @@ const STYLE = `
   .pd-thumb { width: 40px; height: 40px; border-radius: 8px; background: var(--secondary-background-color) center / cover; display: block; }
   .pd-plain { display: flex; gap: var(--ha-space-2, 8px); align-items: center; }
   .pd-plain ha-input { flex: 1; }
+  .pm-list { display: flex; flex-direction: column; max-height: 55vh; overflow-y: auto; }
+  .pm-list ha-expansion-panel { display: block; border-bottom: 1px solid var(--divider-color); --expansion-panel-content-padding: 0 var(--ha-space-4, 16px); }
+  .pm-head { display: flex; align-items: center; gap: 12px; font-weight: 500; }
+  .pm-tools { justify-content: flex-end; }
   .pd-actions { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
   .ing-sub { color: var(--secondary-text-color); font-size: 12px; }
   .ing-comment { display: block; color: var(--secondary-text-color); font-size: 13px; font-style: italic; margin-top: 2px; }
@@ -784,7 +788,8 @@ class HassRecipesPanel extends HTMLElement {
       v.name === "plan"
         ? `<ha-dropdown id="plan-menu"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
             ${this._canEdit !== false ? `<ha-dropdown-item value="plan-copy"><ha-icon slot="icon" icon="mdi:content-copy"></ha-icon>${esc(T("Copy last week"))}</ha-dropdown-item>` : ""}
-            <ha-dropdown-item value="plan-shop"><ha-icon slot="icon" icon="mdi:cart-outline"></ha-icon>${esc(T("Add this period to the shopping list"))}</ha-dropdown-item></ha-dropdown>`
+            <ha-dropdown-item value="plan-shop"><ha-icon slot="icon" icon="mdi:cart-outline"></ha-icon>${esc(T("Add this period to the shopping list"))}</ha-dropdown-item>
+            ${this._canEdit !== false ? `<ha-dropdown-item value="plan-meals"><ha-icon slot="icon" icon="mdi:silverware-fork-knife"></ha-icon>${esc(T("Edit the meals of the day"))}</ha-dropdown-item>` : ""}</ha-dropdown>`
         : "";
     if (this._brCompact()) {
       return {
@@ -1083,6 +1088,9 @@ class HassRecipesPanel extends HTMLElement {
       case "plan-this":
         this._planPending = id;
         this._go({ name: "plan", week: "" });
+        break;
+      case "plan-meals":
+        this._planMealsDialog();
         break;
       case "plan-add-dialog":
         this._planAddDialog(isoDate(new Date()));
