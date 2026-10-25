@@ -57,6 +57,8 @@ lists:
         out: "lunch"
       - in: "(dinner|supper|tea)"
         out: "dinner"
+      - in: "(dessert|desserts)"
+        out: "dessert"
       - in: "(snack|snacks)"
         out: "snack"
   plan_day:

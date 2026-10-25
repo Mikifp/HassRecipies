@@ -25,6 +25,7 @@ SLOT_TIMES: dict[str, tuple[time, int]] = {
     "lunch": (time(12, 0), 60),
     "snack": (time(15, 0), 30),
     "dinner": (time(18, 0), 60),
+    "dessert": (time(19, 30), 30),
 }
 
 

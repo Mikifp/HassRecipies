@@ -52,7 +52,7 @@ _TEXT = {
         "plan_nothing_to_cook": "There is no recipe planned for {slot} {day}.",
         "today": "today",
         "tomorrow": "tomorrow",
-        "slots": {"breakfast": "Breakfast", "lunch": "Lunch", "dinner": "Dinner", "snack": "Snack"},
+        "slots": {"breakfast": "Breakfast", "lunch": "Lunch", "dinner": "Dinner", "dessert": "Dessert", "snack": "Snack"},
     },
     "da": {
         "nothing": "Du har ikke valgt en opskrift endnu.",
@@ -77,7 +77,7 @@ _TEXT = {
         "plan_nothing_to_cook": "Der er ingen opskrift planlagt til {slot} {day}.",
         "today": "i dag",
         "tomorrow": "i morgen",
-        "slots": {"breakfast": "Morgenmad", "lunch": "Frokost", "dinner": "Aftensmad", "snack": "Mellemmåltid"},
+        "slots": {"breakfast": "Morgenmad", "lunch": "Frokost", "dinner": "Aftensmad", "dessert": "Dessert", "snack": "Mellemmåltid"},
     },
 }
 

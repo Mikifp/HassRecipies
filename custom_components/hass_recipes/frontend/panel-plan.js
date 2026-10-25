@@ -11,6 +11,7 @@ export default function (h) {
     ["breakfast", "Breakfast", "--warning-color", "#ffa600", "08:00"],
     ["lunch", "Lunch", "--success-color", "#4caf50", "12:00"],
     ["dinner", "Dinner", "--primary-color", "#03a9f4", "18:00"],
+    ["dessert", "Dessert", "--pink-color", "#e91e63", "19:30"],
     ["snack", "Snack", "--purple-color", "#9c27b0", "15:00"],
   ];
   const slotLabel = (slot) => (SLOTS.find((s) => s[0] === slot) || [slot, slot])[1];
@@ -19,7 +20,8 @@ export default function (h) {
     ["breakfast", ["morgenmad", "breakfast", "brunch"]],
     ["lunch", ["frokost", "lunch"]],
     ["dinner", ["aftensmad", "dinner", "hovedret", "middag"]],
-    ["snack", ["snack", "dessert", "desert", "mellemmåltid"]],
+    ["dessert", ["dessert", "desert", "efterret", "nachspeise"]],
+    ["snack", ["snack", "mellemmåltid"]],
   ];
   const VIEWS = ["dayGridMonth", "dayGridWeek", "dayGridDay", "listWeek"];
   const VIEW_KEY = "hass_recipes_plan_view";
@@ -43,7 +45,7 @@ export default function (h) {
           id: e.id,
           title: list ? `${T(slotLabel(e.slot))}: ${name}` : name,
           start: `${e.date}T${time}:00`,
-          end: `${e.date}T${String(parseInt(time, 10) + 1).padStart(2, "0")}:00:00`,
+          end: `${e.date}T${String(parseInt(time, 10) + 1).padStart(2, "0")}:${time.slice(3)}:00`,
           backgroundColor: color,
           borderColor: color,
           extendedProps: { slot: e.slot },

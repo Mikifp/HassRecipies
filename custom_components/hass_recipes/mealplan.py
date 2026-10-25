@@ -16,7 +16,7 @@ from homeassistant.helpers.storage import Store
 from .const import EVENT_MEAL_PLAN_CHANGED, MEALPLAN_STORAGE_KEY, STORAGE_VERSION
 from .store import RecipeStore
 
-SLOTS = ("breakfast", "lunch", "dinner", "snack")
+SLOTS = ("breakfast", "lunch", "dinner", "dessert", "snack")
 MAX_RANGE_DAYS = 400
 
 

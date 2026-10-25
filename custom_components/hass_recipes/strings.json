@@ -91,7 +91,7 @@
         },
         "slot": {
           "name": "Meal",
-          "description": "Breakfast, lunch, dinner or snack."
+          "description": "Breakfast, lunch, dinner, dessert or snack."
         },
         "scale": {
           "name": "Scale",

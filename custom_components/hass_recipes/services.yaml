@@ -86,6 +86,7 @@ plan_meal:
             - breakfast
             - lunch
             - dinner
+            - dessert
             - snack
     scale:
       required: false
@@ -125,6 +126,7 @@ clear_meal_plan:
             - breakfast
             - lunch
             - dinner
+            - dessert
             - snack
 
 add_plan_to_shopping_list:

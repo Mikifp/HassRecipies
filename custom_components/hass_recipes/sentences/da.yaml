@@ -58,6 +58,8 @@ lists:
         out: "lunch"
       - in: "(aftensmad|middag)"
         out: "dinner"
+      - in: "(dessert|desserter|efterret)"
+        out: "dessert"
       - in: "(snack|mellemmåltid)"
         out: "snack"
   plan_day:

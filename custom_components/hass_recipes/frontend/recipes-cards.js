@@ -75,6 +75,7 @@ const I18N = {
     slot_breakfast: "Breakfast",
     slot_lunch: "Lunch",
     slot_dinner: "Dinner",
+    slot_dessert: "Dessert",
     slot_snack: "Snack",
     cook_planned: "Cook this",
     // editor
@@ -163,6 +164,7 @@ const I18N = {
     slot_breakfast: "Morgenmad",
     slot_lunch: "Frokost",
     slot_dinner: "Aftensmad",
+    slot_dessert: "Dessert",
     slot_snack: "Mellemmåltid",
     cook_planned: "Lav denne",
     ed_days: "Antal dage",
@@ -1325,7 +1327,7 @@ class HassRecipesKitchenCard extends HassRecipesCookCard {
 /* ---- meal plan ------------------------------------------------------------ */
 const isoLocal = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const PLAN_SLOTS = ["breakfast", "lunch", "dinner", "snack"];
+const PLAN_SLOTS = ["breakfast", "lunch", "dinner", "dessert", "snack"];
 
 class HassRecipesPlanCard extends RecipesBase {
   getGridOptions() {
@@ -1524,7 +1526,7 @@ class HassRecipesCardEditor extends HTMLElement {
               select: {
                 multiple: true,
                 mode: "list",
-                options: ["breakfast", "lunch", "dinner", "snack"].map((v) => ({ value: v, label: t(`slot_${v}`) })),
+                options: ["breakfast", "lunch", "dinner", "dessert", "snack"].map((v) => ({ value: v, label: t(`slot_${v}`) })),
               },
             },
           },

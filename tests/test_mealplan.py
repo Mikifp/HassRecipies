@@ -73,6 +73,14 @@ def test_entries_come_back_in_day_then_slot_order():
     ]
 
 
+def test_dessert_is_its_own_meal_between_dinner_and_snack():
+    _hass, _recipes, plan = _make()
+    plan.add("2026-10-12", "snack", title="Fruit")
+    plan.add("2026-10-12", "dessert", title="Ice cream")
+    plan.add("2026-10-12", "dinner", title="Roast")
+    assert [e["slot"] for e in plan.list("2026-10-12", "2026-10-12")] == ["dinner", "dessert", "snack"]
+
+
 def test_bad_input_is_rejected():
     _hass, recipes, plan = _make()
     for call in (
