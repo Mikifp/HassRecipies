@@ -157,7 +157,7 @@ const STYLE = `
   .rd-step { --ha-list-item-headline-line-clamp: none; }
   .rd-num { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--secondary-background-color); color: var(--secondary-text-color); border: 1px solid var(--divider-color); font-size: 12px; box-sizing: border-box; --mdc-icon-size: 16px; }
   .rd-step.done .rd-num { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
-  .rd-text { display: block; line-height: 1.9; white-space: normal; }
+  .rd-text { display: block; line-height: 1.9; white-space: pre-line; }
   .rd-step.done .rd-text { opacity: .55; text-decoration: line-through; }
   .rd-extra { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-top: 4px; }
   header .main-title { flex: 1; min-width: 0; margin-inline-start: var(--ha-space-6, 24px); line-height: 1.2; }
@@ -321,6 +321,7 @@ const STYLE = `
   .step-num { flex: none; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--secondary-text-color); background: var(--secondary-background-color); border: 1px solid var(--divider-color); margin-top: 1px; }
   .step-body { flex: 1; min-width: 0; }
   .step-item.done .step-num { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
+  .step-text, .cook-text { white-space: pre-line; }
   .step-item.done .step-text { text-decoration: line-through; opacity: .55; }
   .cook-text[data-step-toggle] { cursor: pointer; }
   .cook-section { text-transform: uppercase; letter-spacing: .06em; font-size: .85rem; color: var(--primary-color); margin-top: 6px; }
@@ -373,7 +374,7 @@ const STYLE = `
   .cstep.current { border-left-color: var(--primary-color); box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,.18)); }
   .cstep-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary-text-color); margin-bottom: 6px; }
   .cstep .tick { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--divider-color); display: flex; align-items: center; justify-content: center; font-size: 13px; }
-  .cstep-text { font-size: 1.25rem; line-height: 1.55; }
+  .cstep-text { font-size: 1.25rem; line-height: 1.55; white-space: pre-line; }
   .cstep.done { border-left-color: var(--success-color, #43a047); }
   .cstep.done .cstep-text { text-decoration: line-through; opacity: .5; }
   .cstep.done .tick { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
@@ -545,6 +546,7 @@ class HassRecipesPanel extends HTMLElement {
       this._tags = res.tags;
       this._canEdit = res.can_edit !== false;
       this._cookbooks = res.cookbooks || [];
+      this._aiAvail = !!res.ai_available;
       this._cookingId = res.cooking_recipe_id || null;
       if (this._cookbookId && !this._cookbooks.some((c) => c.id === this._cookbookId)) this._cookbookId = null;
       this._error = "";

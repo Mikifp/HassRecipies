@@ -392,6 +392,7 @@ export default function (h) {
           <ha-list-base>
             ${item("new-manual", "pencil-outline", "Create new recipe", "Start with an empty recipe from scratch")}
             ${item("new-url", "link-variant", "Import from a URL", "Fetch a recipe from a web page")}
+            ${item("new-url", "text-box-outline", "Import from text", "A typed recipe, a video transcript, Recipe JSON or page source")}
           </ha-list-base>
         </ha-adaptive-dialog>`;
     },

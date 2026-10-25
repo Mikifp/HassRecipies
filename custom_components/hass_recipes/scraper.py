@@ -17,6 +17,17 @@ try:
 except ImportError:  # loaded on its own (tests): importing a page then leaves the steps unlinked
     link_ingredients = None
 
+try:
+    from .textimport import parse_text
+except ImportError:  # loaded on its own (tests)
+    import importlib.util as _ilu
+    from pathlib import Path as _Path
+
+    _spec = _ilu.spec_from_file_location("hass_recipes_textimport", _Path(__file__).with_name("textimport.py"))
+    _mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    parse_text = _mod.parse_text
+
 _LD_JSON = re.compile(
     r"<script[^>]+type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
     re.DOTALL | re.IGNORECASE,
@@ -395,6 +406,45 @@ def recipe_from_node(node: dict[str, Any], page: str, url: str) -> dict[str, Any
         "total_time": _minutes(node.get("totalTime")),
         "source_url": url,
     }
+
+
+def parse_pasted(text: str, url: str = "") -> dict[str, Any]:
+    """Whatever the user pasted: page source, schema.org Recipe JSON, or plain text (a recipe or a transcript)."""
+    text = text.strip()
+    url = url.strip()
+    if not text:
+        raise RecipeImportError("Paste something to import")
+    if text[0] in "{[":
+        try:
+            data = json.loads(text)
+        except ValueError:
+            data = None
+        if data is not None:
+            node = _find_recipe(data)
+            if node is None:
+                raise RecipeImportError("No schema.org Recipe found in that JSON")
+            recipe = recipe_from_node(node, "", url or _text(node.get("url")))
+            if not recipe["ingredients"] and not recipe["instructions"]:
+                raise RecipeImportError("That Recipe has no ingredients or instructions")
+            if link_ingredients is not None:
+                recipe["instructions"] = link_ingredients(recipe["ingredients"], recipe["instructions"])
+            return recipe
+    if re.search(r"<\s*(?:!doctype|html|head|body|script|div|ul|ol|li|p)\b", text[:200000], re.IGNORECASE):
+        return parse_page(text, url)
+    try:
+        recipe = parse_text(text, url)
+    except ValueError as err:
+        raise RecipeImportError(str(err)) from err
+    if link_ingredients is not None:
+        recipe["instructions"] = link_ingredients(recipe["ingredients"], recipe["instructions"])
+    return recipe
+
+
+async def async_import_text(text: str, url: str = "") -> dict[str, Any]:
+    """Parse pasted page source, Recipe JSON or plain text into a recipe preview."""
+    if len(text) > _MAX_BYTES:
+        raise RecipeImportError("That text is too large")
+    return await asyncio.get_running_loop().run_in_executor(None, parse_pasted, text, url)
 
 
 async def async_import_html(page: str, url: str = "") -> dict[str, Any]:

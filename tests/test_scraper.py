@@ -79,3 +79,100 @@ def test_import_pasted_html_without_recipe():
     except scraper.RecipeImportError:
         return
     raise AssertionError("expected RecipeImportError")
+
+
+def test_pasted_schema_json():
+    import json
+
+    doc = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "Recipe",
+                "name": "Soup",
+                "recipeIngredient": ["1 l stock", "2 carrots"],
+                "recipeInstructions": [{"@type": "HowToStep", "text": "Boil the stock."}],
+                "recipeYield": "4 servings",
+                "totalTime": "PT30M",
+            }
+        ],
+    }
+    r = scraper.parse_pasted(json.dumps(doc), "https://example.com/soup")
+    assert r["name"] == "Soup"
+    assert r["ingredients"] == ["1 l stock", "2 carrots"]
+    assert r["total_time"] == 30
+    assert r["source_url"] == "https://example.com/soup"
+    # a bare Recipe object works too
+    assert scraper.parse_pasted(json.dumps(doc["@graph"][0]))["name"] == "Soup"
+
+
+def test_pasted_json_without_recipe():
+    try:
+        scraper.parse_pasted('{"@type": "Person", "name": "x"}')
+    except scraper.RecipeImportError:
+        return
+    raise AssertionError("expected RecipeImportError")
+
+
+TEXT_RECIPE = """Banana bread
+A moist loaf.
+
+Ingredients
+- 3 ripe bananas
+- 200 g flour
+
+Instructions
+1. Mash the bananas.
+2. Mix in the flour.
+3. Bake for 50 minutes.
+
+Notes
+Keeps for three days.
+"""
+
+
+def test_pasted_text_with_headings():
+    r = scraper.parse_pasted(TEXT_RECIPE)
+    assert r["name"] == "Banana bread"
+    assert r["ingredients"] == ["3 ripe bananas", "200 g flour"]
+    assert [s["text"] if isinstance(s, dict) else s for s in r["instructions"]] == [
+        "Mash the bananas.",
+        "Mix in the flour.",
+        "Bake for 50 minutes.",
+    ]
+    assert "A moist loaf." in r["description"] and "three days" in r["description"]
+
+
+def test_pasted_danish_headings():
+    r = scraper.parse_pasted("Pandekager\n\nIngredienser:\n2 dl mel\n3 æg\n\nFremgangsmåde:\nPisk det hele sammen.\nSteg dem.")
+    assert r["ingredients"] == ["2 dl mel", "3 æg"]
+    assert len(r["instructions"]) == 2
+
+
+TRANSCRIPT = """0:00
+[Music]
+0:05
+today we are making pancakes you need 200 g flour and 2 eggs
+0:12
+and 3 dl milk. Whisk everything together until smooth.
+0:20
+Fry them in butter for two minutes on each side.
+"""
+
+
+def test_pasted_transcript():
+    r = scraper.parse_pasted(TRANSCRIPT)
+    texts = [s["text"] if isinstance(s, dict) else s for s in r["instructions"]]
+    assert texts and "0:05" not in " ".join(texts) and "[Music]" not in " ".join(texts)
+    assert "200 g flour" in r["ingredients"]
+    assert "2 eggs" in r["ingredients"]
+    assert "3 dl milk" in r["ingredients"]
+    assert not any("minutes" in i for i in r["ingredients"])
+
+
+def test_pasted_text_too_short():
+    try:
+        scraper.parse_pasted("hello")
+    except scraper.RecipeImportError:
+        return
+    raise AssertionError("expected RecipeImportError")

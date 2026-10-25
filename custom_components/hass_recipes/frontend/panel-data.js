@@ -1,6 +1,6 @@
 /* Recipes panel: data methods. Mixed into the panel class by recipes-panel.js. */
 export default function (h) {
-  const { esc } = h;
+  const { esc, T } = h;
   return {
     // ---- export / import / migrate ----
     /** Deleted recipes that can still be brought back. */
@@ -171,11 +171,17 @@ export default function (h) {
           </form>
         </div>
         <div class="panel" style="margin-top:16px">
-          <h2>Import from page source</h2>
-          <p class="muted">Some sites refuse automated requests (error 403). Open the recipe in your browser, view the page source (Ctrl+U), select all, copy, and paste it here.</p>
+          <h2>Import from text</h2>
+          <p class="muted">Paste a typed-up recipe, a video transcript (for example copied from YouTube), schema.org Recipe JSON, or a page's source (Ctrl+U in your browser, for sites that refuse automated requests with error 403). Recipes with Ingredients and Instructions headings are split at them; other text becomes steps, with amounts like "200 g butter" picked out as ingredients. Review the draft before saving.</p>
           <form id="import-html">
-            <div class="field"><textarea name="html" rows="5" required placeholder="&lt;html&gt;…"></textarea></div>
+            <div class="field"><textarea name="html" rows="8" required placeholder="${esc(T("Paste text, a transcript, Recipe JSON or page source"))}"></textarea></div>
             <div class="field"><input name="url" type="url" placeholder="Recipe URL (optional, kept as the source)"></div>
+            ${
+              this._aiAvail
+                ? `<div class="field"><ha-formfield label="${esc(T("Tidy with AI"))}"><ha-switch id="import-ai" ${this._importAi === false ? "" : "checked"}></ha-switch></ha-formfield>
+                    <p class="muted">${esc(T("Uses the AI set up in Home Assistant (AI Task) to read the text. If it fails, the basic reading is used."))}</p></div>`
+                : `<p class="muted">${esc(T("Set up an AI such as Google Gemini in Home Assistant to tidy imported text with AI."))}</p>`
+            }
             <div class="actions"><button class="btn" type="submit" id="import-html-btn">Import</button></div>
           </form>
         </div>`;
@@ -188,8 +194,17 @@ export default function (h) {
       btn.disabled = true;
       btn.textContent = "Importing…";
       try {
-        this._draft = await this._ws({ type: "hass_recipes/import_html", html: fd.get("html"), url: String(fd.get("url") || "").trim() });
+        const sw = this.shadowRoot.getElementById("import-ai");
+        const ai = !!(sw && sw.checked);
+        if (sw) this._importAi = ai;
+        if (ai) btn.textContent = T("Reading with AI…");
+        this._draft = await this._ws({ type: "hass_recipes/import_text", text: fd.get("html"), url: String(fd.get("url") || "").trim(), ai });
+        const aiError = this._draft.ai_error;
         this._go({ name: "edit" });
+        if (aiError) {
+          this._error = `${T("The AI could not tidy this, so the basic reading is shown.")} ${aiError}`;
+          this._render();
+        }
       } catch (err) {
         this._error = err.message || String(err);
         this._render();
