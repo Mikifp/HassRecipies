@@ -16,6 +16,7 @@ export default function (h) {
   const slotLabel = (slot) => (SLOTS.find((s) => s[0] === slot) || [slot, slot])[1];
   const VIEWS = ["dayGridMonth", "dayGridWeek", "dayGridDay", "listWeek"];
   const VIEW_KEY = "hass_recipes_plan_view";
+  const HIDDEN_KEY = "hass_recipes_plan_hidden";
 
   return {
     // ---- the calendar ----
@@ -24,10 +25,23 @@ export default function (h) {
       return getComputedStyle(this).getPropertyValue(s[2]).trim() || s[3];
     },
 
+    /** The meals of the day that are ticked off in the pane (remembered). */
+    _planHidden() {
+      if (!this._planHide) {
+        try {
+          this._planHide = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]"));
+        } catch (_) {
+          this._planHide = new Set();
+        }
+      }
+      return this._planHide;
+    },
+
     /** The planned meals as calendar events. */
     _planEvents() {
       const list = this._planCalView === "listWeek";
-      return (this._planEntries || []).map((e) => {
+      const hidden = this._planHidden();
+      return (this._planEntries || []).filter((e) => !hidden.has(e.slot)).map((e) => {
         const [, , , , time] = SLOTS.find((s) => s[0] === e.slot) || SLOTS[2];
         const color = this._planColor(e.slot);
         const name = e.title + (e.scale && e.scale !== 1 ? ` ×${e.scale}` : "");
@@ -100,7 +114,6 @@ export default function (h) {
       const cal = document.createElement("ha-full-calendar");
       cal.hass = this._hass;
       cal.narrow = compact;
-      cal.autoHeight = true;
       cal.views = VIEWS;
       cal.initialView = VIEWS.includes(this._planCalView) ? this._planCalView : VIEWS.includes(initial) ? initial : compact ? "listWeek" : "dayGridWeek";
       this._planCalView = cal.initialView;
@@ -339,8 +352,20 @@ export default function (h) {
       }
     },
 
-    _bindPlan(root) {
+    _bindPlan(root, on) {
       if (this._view.name !== "plan") return;
+      // the meals of the day in the pane: Home Assistant's own check list items, like the calendars on its Calendar page
+      on("ha-check-list-item[data-pslot]", "request-selected", (e) => {
+        if (!e.detail || e.detail.source !== "interaction") return;
+        const slot = e.currentTarget.dataset.pslot;
+        const hidden = this._planHidden();
+        if (e.detail.selected) hidden.delete(slot);
+        else hidden.add(slot);
+        try {
+          localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden]));
+        } catch (_) { /* ignore */ }
+        this._planPush();
+      });
       const menu = root.getElementById("plan-menu");
       if (menu) menu.addEventListener("wa-select", (e) => this._action(e.detail.item.value));
       this._planMount(root);
@@ -351,17 +376,23 @@ export default function (h) {
       if (this._canEdit !== false) {
         this._fab = `<ha-button class="fab ${this._brCompact() ? "above-tabs" : ""}" size="l" data-act="plan-add-dialog"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("Add meal"))}</ha-button>`;
       }
-      return `
-        ${
-          pending
-            ? `<ha-alert alert-type="info">${esc(T("Pick a day for"))} <strong>${esc(pending.name)}</strong>: ${esc(T("click a day in the calendar."))}
-                <ha-button slot="action" size="s" appearance="plain" data-act="plan-cancel-pending">${esc(T("Cancel"))}</ha-button></ha-alert>`
-            : ""
-        }
-        <div class="plan-legend">${SLOTS.map(
-          ([s, label]) => `<span class="plan-key"><span class="plan-dot" style="background:${this._planColor(s)}"></span>${esc(T(label))}</span>`
-        ).join("")}</div>
-        <div id="plan-cal" class="plan-cal"></div>`;
+      const hidden = this._planHidden();
+      const pane = this._brCompact()
+        ? ""
+        : `<aside class="plan-pane"><ha-list>${SLOTS.map(
+            ([s, label]) => `<ha-check-list-item left data-pslot="${s}" ${hidden.has(s) ? "" : "selected"}>
+              <span class="plan-key"><span class="plan-dot" style="background:${this._planColor(s)}"></span>${esc(T(label))}</span></ha-check-list-item>`
+          ).join("")}</ha-list></aside>`;
+      return `<div class="plan-page">${pane}
+        <div class="plan-main">
+          ${
+            pending
+              ? `<ha-alert alert-type="info">${esc(T("Pick a day for"))} <strong>${esc(pending.name)}</strong>: ${esc(T("click a day in the calendar."))}
+                  <ha-button slot="action" size="s" appearance="plain" data-act="plan-cancel-pending">${esc(T("Cancel"))}</ha-button></ha-alert>`
+              : ""
+          }
+          <div id="plan-cal" class="plan-cal"></div>
+        </div></div>`;
     },
   };
 }

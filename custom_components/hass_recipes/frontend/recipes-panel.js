@@ -313,10 +313,16 @@ const STYLE = `
   .ing-qty { font-variant-numeric: tabular-nums; }
   .ing-note { color: var(--secondary-text-color); }
   .ing-paren { color: var(--secondary-text-color); }
-  .plan-cal { padding: var(--ha-space-4, 16px); }
-  .plan-legend { display: flex; gap: var(--ha-space-4, 16px); flex-wrap: wrap; padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px) 0; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
-  .plan-key { display: inline-flex; align-items: center; gap: 6px; }
+  main.plan { max-width: none; padding: 0; }
+  .plan-page { display: flex; height: calc(100vh - 56px); }
+  :host(.compact) .plan-page { height: calc(100vh - 112px); }
+  .plan-pane { width: 250px; flex: none; box-sizing: border-box; border-right: 1px solid var(--divider-color); overflow-y: auto; background: var(--primary-background-color); }
+  .plan-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .plan-cal { flex: 1; min-height: 0; display: flex; }
+  .plan-cal ha-full-calendar { flex: 1; min-width: 0; height: 100%; }
+  .plan-key { display: inline-flex; align-items: center; gap: 12px; font-size: var(--ha-font-size-m, 14px); }
   .plan-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .plan-main ha-alert { display: block; margin: var(--ha-space-2, 8px) var(--ha-space-4, 16px) 0; }
   .pdlg { display: flex; flex-direction: column; gap: var(--ha-space-3, 12px); min-width: min(380px, 80vw); }
   .pd-slots { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
   .pd-slots ha-assist-chip { cursor: pointer; }
@@ -827,7 +833,7 @@ class HassRecipesPanel extends HTMLElement {
         <header>${chrome.header}</header>
         <div id="timers" class="timers"></div>
       </div>
-      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<ha-alert alert-type="error">${esc(this._error)}</ha-alert>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
+      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}${v.name === "plan" ? " plan" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<ha-alert alert-type="error">${esc(this._error)}</ha-alert>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
     this._timerSig = "";
     if (keep) {
       // the new page is only as tall as it will be once its elements have rendered, so put the scroll back again over the next frames
