@@ -14,12 +14,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
 from .access import can_edit
+from .ai import async_tidy, available as ai_available
 from .const import DOMAIN, SIGNAL_TIMERS
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .images import MAX_IMAGE_BYTES, image_url
+from .ingredients import link_ingredients
 from .mealplan import MealPlanError
 from .migrate import from_mealie
-from .scraper import RecipeImportError, async_import_html, async_import_url
+from .scraper import RecipeImportError, async_import_html, async_import_text, async_import_url
 from .store import RecipeStore
 
 _STEP = vol.Schema(
@@ -120,6 +122,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_import_url,
         ws_import_urls,
         ws_import_html,
+        ws_import_text,
         ws_bulk_update,
         ws_bulk_delete,
         ws_cookbook_create,
@@ -147,6 +150,7 @@ def ws_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
             "cooking_step": store.cooking_step,
             "cooking_scale": store.cooking_scale,
             "can_edit": can_edit(hass, connection.user),
+            "ai_available": ai_available(hass),
         },
     )
 
@@ -337,6 +341,42 @@ async def ws_import_html(
     except RecipeImportError as err:
         connection.send_error(msg["id"], "import_failed", str(err))
         return
+    connection.send_result(msg["id"], data)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/import_text",
+        vol.Required("text"): vol.All(str, vol.Length(min=1)),
+        vol.Optional("url", default=""): str,
+        # tidy the text with the AI set up in Home Assistant (AI Task); the plain reading is the fallback
+        vol.Optional("ai", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_import_text(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Read a recipe out of pasted page source, schema.org Recipe JSON or plain text (nothing is saved)."""
+    data = None
+    ai_error = ""
+    if msg["ai"]:
+        if not can_edit(hass, connection.user):
+            connection.send_error(msg["id"], "unauthorized", _DENIED)
+            return
+        try:
+            data = await async_tidy(hass, msg["text"], msg["url"].strip())
+            data["instructions"] = link_ingredients(data["ingredients"], data["instructions"])
+        except RecipeImportError as err:
+            ai_error = str(err)
+    if data is None:
+        try:
+            data = await async_import_text(msg["text"], msg["url"])
+        except RecipeImportError as err:
+            connection.send_error(msg["id"], "import_failed", f"{ai_error} {err}".strip())
+            return
+        if ai_error:
+            data["ai_error"] = ai_error
     connection.send_result(msg["id"], data)
 
 

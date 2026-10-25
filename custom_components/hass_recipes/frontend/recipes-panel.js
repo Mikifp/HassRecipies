@@ -546,6 +546,7 @@ class HassRecipesPanel extends HTMLElement {
       this._tags = res.tags;
       this._canEdit = res.can_edit !== false;
       this._cookbooks = res.cookbooks || [];
+      this._aiAvail = !!res.ai_available;
       this._cookingId = res.cooking_recipe_id || null;
       if (this._cookbookId && !this._cookbooks.some((c) => c.id === this._cookbookId)) this._cookbookId = null;
       this._error = "";
