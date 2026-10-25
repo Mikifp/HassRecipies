@@ -16,7 +16,7 @@ export default function (h) {
   const slotLabel = (slot) => (SLOTS.find((s) => s[0] === slot) || [slot, slot])[1];
   const VIEWS = ["dayGridMonth", "dayGridWeek", "dayGridDay", "listWeek"];
   const VIEW_KEY = "hass_recipes_plan_view";
-  const HIDDEN_KEY = "hass_recipes_plan_hidden";
+  const OPEN_KEY = "hass_recipes_plan_cats";
 
   return {
     // ---- the calendar ----
@@ -25,23 +25,10 @@ export default function (h) {
       return getComputedStyle(this).getPropertyValue(s[2]).trim() || s[3];
     },
 
-    /** The meals of the day that are ticked off in the pane (remembered). */
-    _planHidden() {
-      if (!this._planHide) {
-        try {
-          this._planHide = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]"));
-        } catch (_) {
-          this._planHide = new Set();
-        }
-      }
-      return this._planHide;
-    },
-
     /** The planned meals as calendar events. */
     _planEvents() {
       const list = this._planCalView === "listWeek";
-      const hidden = this._planHidden();
-      return (this._planEntries || []).filter((e) => !hidden.has(e.slot)).map((e) => {
+      return (this._planEntries || []).map((e) => {
         const [, , , , time] = SLOTS.find((s) => s[0] === e.slot) || SLOTS[2];
         const color = this._planColor(e.slot);
         const name = e.title + (e.scale && e.scale !== 1 ? ` ×${e.scale}` : "");
@@ -129,6 +116,40 @@ export default function (h) {
       });
       host.appendChild(cal);
       this._planCal = cal;
+      // recipes dragged in from the pane: highlight the day under the pointer, and ask for the meal when dropped
+      const dayAt = (e) => {
+        const cell = e.composedPath().find((n) => n.getAttribute && n.getAttribute("data-date"));
+        return cell ? { cell, date: cell.getAttribute("data-date").slice(0, 10) } : null;
+      };
+      let lit = null;
+      const unlight = () => {
+        if (lit) lit.style.outline = "";
+        lit = null;
+      };
+      cal._unlight = unlight;
+      cal.addEventListener("dragover", (e) => {
+        if (!e.dataTransfer || ![...e.dataTransfer.types].includes("application/x-hass-recipe")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        const day = dayAt(e);
+        if (!day || day.cell === lit) return;
+        unlight();
+        lit = day.cell;
+        lit.style.outline = "2px solid var(--primary-color)";
+        lit.style.outlineOffset = "-2px";
+      });
+      cal.addEventListener("dragleave", (e) => {
+        if (!cal.contains(e.relatedTarget) && e.relatedTarget !== null) unlight();
+      });
+      cal.addEventListener("drop", (e) => {
+        const id = e.dataTransfer && e.dataTransfer.getData("application/x-hass-recipe");
+        if (!id) return;
+        e.preventDefault();
+        const day = dayAt(e);
+        unlight();
+        const recipe = this._recipe(id);
+        if (day && recipe) this._planDropDialog(day.date, recipe);
+      });
       // wait for the calendar to be drawn, then take over its clicks and dragging
       for (let i = 0; i < 50 && !cal.calendar; i++) await new Promise((r) => setTimeout(r, 100));
       const fc = cal.calendar;
@@ -200,8 +221,8 @@ export default function (h) {
     },
 
     /** "Add a meal" for a day: pick a recipe (or type a plain meal) and the meal of the day. */
-    _planAddDialog(date) {
-      const pending = this._planPending ? this._recipe(this._planPending) : null;
+    _planAddDialog(date, recipeId = null) {
+      const pending = recipeId ? this._recipe(recipeId) : this._planPending ? this._recipe(this._planPending) : null;
       let slot = "dinner";
       const html = `
         <ha-input id="pd-date" type="date" appearance="outlined" label="${esc(T("Day"))}" value="${esc(date)}"></ha-input>
@@ -221,7 +242,7 @@ export default function (h) {
           close();
           try {
             await this._ws({ type: "hass_recipes/plan_add", date: day(), slot, ...extra });
-            if (pending) {
+            if (pending && !recipeId) {
               this._planPending = null;
               this._flash("Added to the meal plan.");
             }
@@ -352,20 +373,114 @@ export default function (h) {
       }
     },
 
+    // ---- the category pane: recipes to drag onto the calendar ----
+    _planOpenCats() {
+      if (!this._planOpen) {
+        try {
+          this._planOpen = new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]"));
+        } catch (_) {
+          this._planOpen = new Set();
+        }
+      }
+      return this._planOpen;
+    },
+
+    /** The recipes by category (a recipe is listed under each of its categories), as expansion panels. */
+    _planCatsHtml(query) {
+      const q = (query || "").trim().toLowerCase();
+      const none = T("Uncategorized");
+      const groups = new Map();
+      for (const r of this._recipes) {
+        if (q && ![r.name, ...(r.tags || []), ...(r.categories || [])].join(" ").toLowerCase().includes(q)) continue;
+        for (const c of r.categories && r.categories.length ? r.categories : [none]) {
+          if (!groups.has(c)) groups.set(c, []);
+          groups.get(c).push(r);
+        }
+      }
+      if (!groups.size) return `<p class="plan-hint">${esc(T("No recipes match."))}</p>`;
+      const open = this._planOpenCats();
+      const names = [...groups.keys()].sort((a, b) => (a === none) - (b === none) || a.localeCompare(b, undefined, { sensitivity: "base" }));
+      return names
+        .map((name) => {
+          const list = groups.get(name).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+          return `<ha-expansion-panel left-chevron data-cat="${esc(name)}" ${q || open.has(name) ? "expanded" : ""}>
+            <div slot="header" class="plan-cat">${esc(name)} <span class="plan-count">${list.length}</span></div>
+            ${list
+              .map(
+                (r) => `<ha-list-item-base interactive draggable="true" class="plan-rec" data-rid="${esc(r.id)}" headline="${esc(r.name)}" supporting-text="${esc(minutes(r.total_time) || "")}">
+                  <span slot="start" class="pd-thumb" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></span></ha-list-item-base>`
+              )
+              .join("")}
+          </ha-expansion-panel>`;
+        })
+        .join("");
+    },
+
+    _planBindPane(root) {
+      const box = root.getElementById("plan-recs");
+      if (!box) return;
+      const bindOpen = () =>
+        box.querySelectorAll("ha-expansion-panel[data-cat]").forEach((panel) =>
+          panel.addEventListener("expanded-changed", (e) => {
+            if (e.target !== panel || (this._planQuery || "").trim()) return;
+            const open = this._planOpenCats();
+            if (e.detail.expanded) open.add(panel.dataset.cat);
+            else open.delete(panel.dataset.cat);
+            try {
+              localStorage.setItem(OPEN_KEY, JSON.stringify([...open]));
+            } catch (_) { /* ignore */ }
+          })
+        );
+      bindOpen();
+      // a drag that ends anywhere else leaves no highlighted day behind
+      box.addEventListener("dragend", () => this._planCal && this._planCal._unlight && this._planCal._unlight());
+      box.addEventListener("dragstart", (e) => {
+        const item = e.target.closest && e.target.closest("[data-rid]");
+        if (!item) return;
+        e.dataTransfer.setData("application/x-hass-recipe", item.dataset.rid);
+        e.dataTransfer.effectAllowed = "copy";
+      });
+      // a click on a recipe adds it too (the touch-friendly way): ask for the day
+      box.addEventListener("click", (e) => {
+        const item = e.target.closest && e.target.closest("[data-rid]");
+        if (item && this._canEdit !== false) this._planAddDialog(isoDate(new Date()), item.dataset.rid);
+      });
+      const search = root.getElementById("plan-q");
+      if (search)
+        search.addEventListener("input", () => {
+          this._planQuery = search.value;
+          box.innerHTML = this._planCatsHtml(this._planQuery);
+          bindOpen();
+        });
+    },
+
+    /** Dropping a recipe on a day: one click picks the meal of the day. */
+    _planDropDialog(date, recipe) {
+      const when = new Intl.DateTimeFormat((this._hass && this._hass.language) || undefined, { weekday: "long", day: "numeric", month: "long" }).format(
+        new Date(`${date}T12:00:00`)
+      );
+      const html = `<p class="plan-hint">${esc(recipe.name)} · ${esc(when)}</p>
+        <ha-list-base>${SLOTS.map(
+          ([s, label]) => `<ha-list-item-base interactive data-slot="${s}" headline="${esc(T(label))}"><span slot="start" class="plan-dot" style="background:${this._planColor(s)}"></span></ha-list-item-base>`
+        ).join("")}</ha-list-base>`;
+      this._planDialog(T("Add to the meal plan"), html, (dlg, close) => {
+        dlg.querySelector("ha-list-base").addEventListener("click", async (e) => {
+          const item = e.target.closest("[data-slot]");
+          if (!item) return;
+          close();
+          try {
+            await this._ws({ type: "hass_recipes/plan_add", date, slot: item.dataset.slot, recipe_id: recipe.id });
+          } catch (err) {
+            this._error = err.message || String(err);
+            this._render();
+          }
+        });
+      });
+    },
+
     _bindPlan(root, on) {
       if (this._view.name !== "plan") return;
-      // the meals of the day in the pane: Home Assistant's own check list items, like the calendars on its Calendar page
-      on("ha-check-list-item[data-pslot]", "request-selected", (e) => {
-        if (!e.detail || e.detail.source !== "interaction") return;
-        const slot = e.currentTarget.dataset.pslot;
-        const hidden = this._planHidden();
-        if (e.detail.selected) hidden.delete(slot);
-        else hidden.add(slot);
-        try {
-          localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden]));
-        } catch (_) { /* ignore */ }
-        this._planPush();
-      });
+      this._planBindPane(root);
       const menu = root.getElementById("plan-menu");
       if (menu) menu.addEventListener("wa-select", (e) => this._action(e.detail.item.value));
       this._planMount(root);
@@ -376,13 +491,16 @@ export default function (h) {
       if (this._canEdit !== false) {
         this._fab = `<ha-button class="fab ${this._brCompact() ? "above-tabs" : ""}" size="l" data-act="plan-add-dialog"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("Add meal"))}</ha-button>`;
       }
-      const hidden = this._planHidden();
       const pane = this._brCompact()
         ? ""
-        : `<aside class="plan-pane"><ha-list>${SLOTS.map(
-            ([s, label]) => `<ha-check-list-item left data-pslot="${s}" ${hidden.has(s) ? "" : "selected"}>
-              <span class="plan-key"><span class="plan-dot" style="background:${this._planColor(s)}"></span>${esc(T(label))}</span></ha-check-list-item>`
-          ).join("")}</ha-list></aside>`;
+        : `<aside class="plan-pane">
+            <div class="plan-search"><ha-input-search id="plan-q" appearance="outlined" placeholder="${esc(T("Search recipes"))}" value="${esc(this._planQuery || "")}"></ha-input-search></div>
+            <p class="plan-hint">${esc(T("Drag a recipe onto a day in the calendar."))}</p>
+            <div id="plan-recs" class="plan-recs">${this._planCatsHtml(this._planQuery || "")}</div>
+            <div class="plan-legend">${SLOTS.map(
+              ([s, label]) => `<span class="plan-key"><span class="plan-dot" style="background:${this._planColor(s)}"></span>${esc(T(label))}</span>`
+            ).join("")}</div>
+          </aside>`;
       return `<div class="plan-page">${pane}
         <div class="plan-main">
           ${

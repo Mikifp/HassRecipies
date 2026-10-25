@@ -214,6 +214,8 @@ const da = {
     "Import from URL": "Importér fra URL",
     "Import from text": "Importér fra tekst",
     Day: "Dag",
+    "Drag a recipe onto a day in the calendar.": "Træk en opskrift hen på en dag i kalenderen.",
+    Uncategorized: "Uden kategori",
     "Add a meal": "Tilføj et måltid",
     "Add to the meal plan": "Føj til madplanen",
     "Open recipe": "Åbn opskrift",

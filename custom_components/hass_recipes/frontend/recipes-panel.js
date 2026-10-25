@@ -316,7 +316,18 @@ const STYLE = `
   main.plan { max-width: none; padding: 0; }
   .plan-page { display: flex; height: calc(100vh - 56px); }
   :host(.compact) .plan-page { height: calc(100vh - 112px); }
-  .plan-pane { width: 250px; flex: none; box-sizing: border-box; border-right: 1px solid var(--divider-color); overflow-y: auto; background: var(--primary-background-color); }
+  .plan-pane { width: 280px; flex: none; box-sizing: border-box; border-right: 1px solid var(--divider-color); overflow-y: auto; background: var(--primary-background-color); display: flex; flex-direction: column; }
+  .plan-search { padding: var(--ha-space-3, 12px) var(--ha-space-3, 12px) 0; }
+  .plan-search ha-input-search { display: block; }
+  .plan-hint { margin: var(--ha-space-2, 8px) var(--ha-space-4, 16px); font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .plan-recs { flex: 1; }
+  .plan-recs ha-expansion-panel { --expansion-panel-summary-padding: 0 var(--ha-space-4, 16px); --expansion-panel-content-padding: 0; border-bottom: 1px solid var(--divider-color); display: block; }
+  .plan-cat { font-weight: 500; font-size: var(--ha-font-size-m, 14px); }
+  .plan-count { color: var(--secondary-text-color); font-weight: 400; margin-inline-start: 6px; }
+  .plan-rec { cursor: grab; }
+  .plan-rec .pd-thumb { width: 32px; height: 32px; }
+  .plan-legend { display: flex; flex-wrap: wrap; gap: var(--ha-space-3, 12px); padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px); border-top: 1px solid var(--divider-color); font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .plan-legend .plan-key { font-size: var(--ha-font-size-s, 12px); gap: 6px; }
   .plan-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .plan-cal { flex: 1; min-height: 0; display: flex; }
   .plan-cal ha-full-calendar { flex: 1; min-width: 0; height: 100%; }
