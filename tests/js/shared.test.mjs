@@ -20,6 +20,14 @@ test("parseNumber and formatNumber", () => {
   assert.equal(s.formatNumber(2), "2");
 });
 
+test("amounts in parentheses scale with the ingredient", () => {
+  assert.equal(s.scaleIngredient("100 g sukker (100 ml)", 2), "200 g sukker (200 ml)");
+  assert.equal(s.scaleIngredient("2 dl mel (ca. 120 g)", 1.5), "3 dl mel (ca. 180 g)");
+  assert.equal(s.scaleIngredient("1 tsk salt (fint)", 2), "2 tsk salt (fint)");
+  assert.equal(s.scaleParen("ca. 120 g", 2), "ca. 240 g");
+  assert.equal(s.scaleParen("100 ml", 1), "100 ml");
+});
+
 test("scaleIngredient", () => {
   assert.equal(s.scaleIngredient("200 g mel", 2), "400 g mel");
   assert.equal(s.scaleIngredient("1/2 tsk salt", 3), "1½ tsk salt");

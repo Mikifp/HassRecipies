@@ -57,7 +57,7 @@ const ingredientHtml = (r, i, k, mode) => {
   const p = (r.parsed_ingredients || [])[i];
   const subs = (p && (p.substitutes || (p.substitute ? [p.substitute] : []))) || [];
   const a = ingParts(p, main, k, mode);
-  let html = `<span class="ing-main">${a.qty ? `<span class="ing-qty">${esc(a.qty)}</span> ` : ""}<strong>${esc(a.food)}</strong>${a.note ? `<span class="ing-note">, ${esc(a.note)}</span>` : ""}</span>`;
+  let html = `<span class="ing-main">${a.qty ? `<span class="ing-qty">${esc(a.qty)}</span> ` : ""}<strong>${esc(a.food)}</strong>${a.paren ? ` <span class="ing-paren">${esc(a.paren)}</span>` : ""}${a.note ? `<span class="ing-note">, ${esc(a.note)}</span>` : ""}</span>`;
   if (a.sub) html += `<small class="ing-sub">${esc(a.sub)}</small>`;
   alts.forEach((altText, n) => {
     const b = ingParts(subs[n], altText, k, mode);
@@ -68,10 +68,15 @@ const ingredientHtml = (r, i, k, mode) => {
 };
 
 /** Compact "amount food" pill for the ingredients a step uses. */
-const ingredientChipHtml = (r, i, k, mode) => {
+const ingredientChipHtml = (r, i, k, mode, tick = null, alt = false) => {
   const [main] = splitSub(r.ingredients[i] ?? "");
   const a = ingParts((r.parsed_ingredients || [])[i], main, k, mode);
-  return `<span class="ing-chip">${a.qty ? `<span class="q">${esc(a.qty)}</span>` : ""}<b>${esc(a.food)}</b></span>`;
+  // optionally the other way the recipe gives the amount: as written ("2 dl") or in brackets ("(100 ml)")
+  const other = alt ? a.sub || a.paren : "";
+  const body = `${a.qty ? `<span class="q">${esc(a.qty)}</span>` : ""}<b>${esc(a.food)}</b>${other ? `<span class="alt">${esc(other)}</span>` : ""}`;
+  // with `tick` ({ key, done }) the chip can be ticked off while cooking
+  if (!tick) return `<span class="ing-chip">${body}</span>`;
+  return `<span class="ing-chip tick ${tick.done ? "done" : ""}" data-chip="${esc(tick.key)}" role="checkbox" aria-checked="${tick.done}" tabindex="0">${tick.done ? `<ha-icon icon="mdi:check"></ha-icon>` : ""}${body}</span>`;
 };
 
 const PROGRESS_KEY = "hass_recipes_progress";

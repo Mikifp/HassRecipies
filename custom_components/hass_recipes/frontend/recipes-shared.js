@@ -45,8 +45,8 @@ export const formatNumber = (n) => {
   return String(Math.round(n * 100) / 100);
 };
 
-export const scaleIngredient = (text, k) => {
-  if (k === 1) return text;
+/** Scale the amount at the start of `text` ("200 g", "1½-2 dl"); text without one is returned as it is. */
+const scaleLeading = (text, k) => {
   const m = text.match(LEADING_QTY);
   if (!m) return text;
   const a = parseNumber(m[1]);
@@ -58,6 +58,22 @@ export const scaleIngredient = (text, k) => {
     out += m[2] + formatNumber(b * k);
   }
   return out + text.slice(m[0].length);
+};
+
+const APPROX = /^\s*(?:ca\.?|circa|approx\.?|about|[~≈])\s*/i;
+
+/** A parenthetical amount scales with the ingredient: "ca. 120 g" -> "ca. 240 g" at 2x. */
+export const scaleParen = (text, k) => {
+  if (k === 1) return text;
+  const head = (text.match(APPROX) || [""])[0];
+  return head + scaleLeading(text.slice(head.length), k);
+};
+
+export const scaleIngredient = (text, k) => {
+  if (k === 1) return text;
+  const out = scaleLeading(text, k);
+  // "100 g sugar (100 ml)": the amount in the parentheses is scaled too
+  return out.replace(/\(([^)]*)\)/g, (all, inner) => `(${scaleParen(inner, k)})`);
 };
 
 export const baseServings = (servings) => {
@@ -184,12 +200,13 @@ export const ingredientText = (r, i, k, mode) => {
   const countable = p && p.approximate && (p.unit === null || COUNT_AS_ITEMS.has(p.unit));
   if (mode === "grams" && p && p.quantity !== null && !countable) {
     const food = p.food + (p.note ? `, ${p.note}` : "");
+    const tail = p.paren_basis ? "" : (p.parens || []).map((t) => ` (${scaleParen(t, k)})`).join("");
     const tilde = p.approximate ? "≈ " : "";
     if (p.grams !== null) {
       const hi = p.grams_max !== null ? `–${fmtGrams(p.grams_max * k)}` : "";
-      return `${tilde}${fmtGrams(p.grams * k)}${hi} g ${food}`;
+      return `${tilde}${fmtGrams(p.grams * k)}${hi} g ${food}${tail}`;
     }
-    if (p.ml !== null) return `${fmtGrams(p.ml * k)} ml ${food}`;
+    if (p.ml !== null) return `${fmtGrams(p.ml * k)} ml ${food}${tail}`;
   }
   return scaleIngredient(text, k);
 };
@@ -199,10 +216,12 @@ export const ingredientText = (r, i, k, mode) => {
  * grams were substituted) a faded "as written" amount, e.g. "10 g" + "sukker" + "1¾ cups".
  */
 export const ingParts = (p, text, k, mode) => {
-  if (!p || p.quantity === null || p.quantity === undefined) return { qty: "", food: text, note: "", sub: "" };
+  if (!p || p.quantity === null || p.quantity === undefined) return { qty: "", food: text, note: "", sub: "", paren: "" };
   const range = (a, b) => formatNumber(a * k) + (b !== null && b !== undefined ? `–${formatNumber(b * k)}` : "");
   const orig = range(p.quantity, p.quantity_max) + (p.unit_text ? ` ${p.unit_text}` : "");
-  const base = { food: p.food, note: p.note || "" };
+  // parenthetical amounts ("100 g sugar (100 ml)") follow the scale; not shown when the grams came from them
+  const paren = mode === "grams" && p.paren_basis ? "" : (p.parens || []).map((t) => `(${scaleParen(t, k)})`).join(" ");
+  const base = { food: p.food, note: p.note || "", paren };
   const countable = p.approximate && (p.unit === null || COUNT_AS_ITEMS.has(p.unit));
   if (mode === "grams" && !countable) {
     const tilde = p.approximate ? "≈ " : "";

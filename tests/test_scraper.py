@@ -176,3 +176,45 @@ def test_pasted_text_too_short():
     except scraper.RecipeImportError:
         return
     raise AssertionError("expected RecipeImportError")
+
+
+GROUPED = """
+<html><head><script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Recipe","name":"Buns",
+ "recipeIngredient":["360 grams flour","3 large eggs","120 grams powdered sugar","7 ounces cheese"],
+ "recipeInstructions":[
+  {"@type":"HowToSection","name":"For the Dough","itemListElement":[
+    {"@type":"HowToStep","text":"Mix the flour and eggs."},{"@type":"HowToStep","text":"Bake."}]},
+  {"@type":"HowToSection","name":"For the Topping","itemListElement":[
+    {"@type":"HowToStep","text":"Cream the sugar and cheese."}]}]}
+</script></head><body>
+<div class="wprm-recipe-ingredient-group"><h4 class="wprm-recipe-group-name wprm-recipe-ingredient-group-name">Brioche Dough</h4>
+ <ul><li class="wprm-recipe-ingredient"><span>360</span> <span>grams</span> <span>flour</span></li>
+ <li class="wprm-recipe-ingredient"><span>3</span> <span>large</span> <span>eggs</span></li></ul></div>
+<div class="wprm-recipe-ingredient-group"><h4 class="wprm-recipe-group-name wprm-recipe-ingredient-group-name">Frosting</h4>
+ <ul><li class="wprm-recipe-ingredient">120 grams powdered sugar</li>
+ <li class="wprm-recipe-ingredient">7 ounces cheese</li></ul></div>
+<div class="wprm-recipe-instruction-group"><h4 class="wprm-recipe-group-name wprm-recipe-instruction-group-name">For the Dough</h4></div>
+</body></html>
+"""
+
+
+def test_ingredient_groups_come_from_the_page():
+    r = scraper.parse_page(GROUPED, "https://example.com/buns")
+    assert r["ingredients"] == [
+        "## Brioche Dough",
+        "360 grams flour",
+        "3 large eggs",
+        "## Frosting",
+        "120 grams powdered sugar",
+        "7 ounces cheese",
+    ]
+    sections = [s["text"] for s in r["instructions"] if isinstance(s, dict) and s.get("section")]
+    # step sections that line up with the groups take the groups' names
+    assert sections == ["Brioche Dough", "Frosting"]
+
+
+def test_ingredient_groups_ignored_when_items_do_not_match():
+    page = GROUPED.replace('<li class="wprm-recipe-ingredient">7 ounces cheese</li>', "")
+    r = scraper.parse_page(page, "https://example.com/buns")
+    assert not any(str(i).startswith("## ") for i in r["ingredients"])

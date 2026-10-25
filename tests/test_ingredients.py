@@ -249,3 +249,25 @@ def test_steps_that_already_have_links_are_left_alone():
     out = ing.link_ingredients(["1 egg", "1 dl milk"], [{"text": "Add the milk and egg.", "ingredients": [0]}, "Pour milk."])
     assert out[0]["ingredients"] == [0]
     assert out[1]["ingredients"] == [1]
+
+
+def test_parenthetical_amount_is_kept_and_scaled():
+    p = ing.parse_ingredient("100 g sukker (100 ml)")
+    assert p["parens"] == ["100 ml"]
+    # the amount written in grams stays the basis; the bracket is only another measure
+    assert p["grams"] == 100 and not p["paren_basis"]
+    assert ing.format_ingredient(p, 1) == "100 g sukker (100 ml)"
+    assert ing.format_ingredient(p, 2) == "200 g sukker (200 ml)"
+    assert ing.format_ingredient(p, 2, mode="original") == "200 g sukker (200 ml)"
+
+
+def test_parenthetical_with_prefix_and_ranges():
+    p = ing.parse_ingredient("2 dl mel (ca. 120 g)")
+    assert p["parens"] == ["ca. 120 g"]
+    # a volume told in grams by the brackets: the written weight beats a density guess
+    assert p["grams"] == 120.0 and p["paren_basis"]
+    assert ing.format_ingredient(p, 2) == "240 g mel"
+    assert ing.scale_paren("ca. 120 g", 1.5) == "ca. 180 g"
+    assert ing.scale_paren("1-2 stk", 2) == "2–4 stk"
+    # a remark that does not start with an amount is not an amount
+    assert ing.parse_ingredient("1 tsk salt (fint)")["parens"] == []

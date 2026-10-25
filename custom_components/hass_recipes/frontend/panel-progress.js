@@ -17,11 +17,13 @@ export default function (h) {
       if (entry && Date.now() - (entry.t || 0) > 2 * 864e5) entry = null;
       this._checked = new Set((entry && entry.ing) || []);
       this._doneSteps = new Set((entry && entry.steps) || []);
+      this._doneChips = new Set((entry && entry.chips) || []);
       // A recipe whose steps were all completed (e.g. by timers) starts fresh next time.
       const r = id ? this._recipe(id) : null;
       if (r && this._allDone(r)) {
         this._checked = new Set();
         this._doneSteps = new Set();
+        this._doneChips = new Set();
         this._saveProgress();
       }
     },
@@ -49,6 +51,7 @@ export default function (h) {
         if (!cur || cur.id !== r.id || !this._allDone(cur)) return; // user un-ticked something
         this._checked = new Set();
         this._doneSteps = new Set();
+        this._doneChips = new Set();
         this._saveProgress();
         this._flash("All steps done. Checks cleared for next time.");
       }, 1500);
@@ -57,6 +60,14 @@ export default function (h) {
     _setStepDone(n, done) {
       if (done) this._doneSteps.add(n);
       else this._doneSteps.delete(n);
+      // a step that is done has all its ingredients ticked; one that is not has none
+      const r = this._recipe(this._view.id);
+      if (r && r.instructions[n] !== undefined) {
+        for (const i of this._stepChipIngredients(r, normStep(r.instructions[n]))) {
+          if (done) this._doneChips.add(`${n}:${i}`);
+          else this._doneChips.delete(`${n}:${i}`);
+        }
+      }
       this._saveProgress();
       this._checkAllDone();
       this._scrollToCurrent = this._view.name === "cook" && !this._cookFocus;
@@ -80,6 +91,10 @@ export default function (h) {
     _markStepDoneFor(recipeId, step) {
       if (this._view.id === recipeId) {
         this._doneSteps.add(step);
+        const r = this._recipe(recipeId);
+        if (r && r.instructions[step] !== undefined) {
+          for (const i of this._stepChipIngredients(r, normStep(r.instructions[step]))) this._doneChips.add(`${step}:${i}`);
+        }
         this._saveProgress();
         this._checkAllDone();
         return;
@@ -124,8 +139,8 @@ export default function (h) {
       const all = this._readProgress();
       const now = Date.now();
       for (const key of Object.keys(all)) if (now - (all[key].t || 0) > 2 * 864e5) delete all[key];
-      if (this._checked.size || this._doneSteps.size) {
-        all[id] = { ing: [...this._checked], steps: [...this._doneSteps], t: now };
+      if (this._checked.size || this._doneSteps.size || this._doneChips.size) {
+        all[id] = { ing: [...this._checked], steps: [...this._doneSteps], chips: [...this._doneChips], t: now };
       } else {
         delete all[id];
       }

@@ -239,6 +239,11 @@ const STYLE = `
   ol.steps li { margin-bottom: 12px; line-height: 1.5; }
   .step-ings { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 10px 0 2px; }
   .ing-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 3px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; background: color-mix(in srgb, var(--primary-color) 9%, transparent); border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent); }
+  .ing-chip .alt { color: var(--secondary-text-color); font-size: .9em; }
+  .ing-chip.tick { cursor: pointer; user-select: none; }
+  .ing-chip.tick:hover { filter: brightness(.95); }
+  .ing-chip.done { opacity: .55; text-decoration: line-through; }
+  .ing-chip ha-icon { --mdc-icon-size: 14px; align-self: center; margin-inline-end: -2px; text-decoration: none; }
   .ing-chip .q { color: var(--secondary-text-color); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .ing-chip b { font-weight: 500; }
   .cook-sections { display: flex; gap: 8px; margin-top: 14px; }
@@ -307,6 +312,7 @@ const STYLE = `
   .ing-text { display: flex; flex-direction: column; }
   .ing-qty { font-variant-numeric: tabular-nums; }
   .ing-note { color: var(--secondary-text-color); }
+  .ing-paren { color: var(--secondary-text-color); }
   .ing-sub { color: var(--secondary-text-color); font-size: 12px; }
   .ing-comment { display: block; color: var(--secondary-text-color); font-size: 13px; font-style: italic; margin-top: 2px; }
   .ing-comment-input { margin-top: 4px; width: 100%; }
@@ -429,6 +435,7 @@ class HassRecipesPanel extends HTMLElement {
     this._narrow = false;
     this._scale = 1;
     this._checked = new Set();
+    this._doneChips = new Set(); // "step:ingredient" chips ticked off while cooking
     this._form = null;
     this._timers = [];
     this._skew = 0; // server clock minus browser clock, ms
@@ -445,6 +452,10 @@ class HassRecipesPanel extends HTMLElement {
     this._doneSteps = new Set();
     this._tab = "ingredients"; // narrow layout: which pane of the recipe is showing
     this._notice = "";
+    this._chipAlt = false; // chips in the steps also show the amount in the other unit
+    try {
+      this._chipAlt = localStorage.getItem("hass_recipes_chipalt") === "1";
+    } catch (_) { /* ignore */ }
     this._cookFocus = false; // false: whole recipe at once (Mealie style); true: one step at a time
     try {
       this._cookFocus = localStorage.getItem("hass_recipes_cookfocus") === "1";
@@ -727,7 +738,7 @@ class HassRecipesPanel extends HTMLElement {
           <ha-dropdown id="rd-menu"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
             ${canEdit ? item("plan-this", "calendar-plus", "Add to meal plan") : ""}${item("shop", "cart-outline", "Add to shopping list")}
             ${item("dashboard-recipe", cooking ? "view-dashboard" : "view-dashboard-outline", cooking ? "Remove from the dashboard cook card" : "Show on the dashboard cook card")}
-            ${canEdit ? item("edit", "pencil-outline", "Edit") : ""}${this._checked.size || this._doneSteps.size ? item("progress-reset", "restore", "Clear checks") : ""}
+            ${canEdit ? item("edit", "pencil-outline", "Edit") : ""}${this._checked.size || this._doneSteps.size || this._doneChips.size ? item("progress-reset", "restore", "Clear checks") : ""}
             ${canEdit ? item("delete", "delete-outline", "Delete recipe", 'variant="danger"') : ""}</ha-dropdown>`,
         bottom: "",
       };
@@ -896,6 +907,28 @@ class HassRecipesPanel extends HTMLElement {
       this._saveProgress();
     });
 
+    // an ingredient chip in a step is ticked off by itself; all of a step's chips ticked ticks the step
+    const tickChip = (e) => {
+      e.stopPropagation();
+      const [n, i] = e.currentTarget.dataset.chip.split(":").map(Number);
+      this._toggleChip(n, i);
+    };
+    // the switch for the other unit in the chips: its own change event, so that clicking the switch or its label does the same
+    on("ha-switch[data-chipalt]", "change", (e) => {
+      this._chipAlt = e.currentTarget.checked;
+      try {
+        localStorage.setItem("hass_recipes_chipalt", this._chipAlt ? "1" : "0");
+      } catch (_) { /* ignore */ }
+      this._render();
+    });
+    on("[data-chip]", "click", tickChip);
+    on("[data-chip]", "keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        tickChip(e);
+      }
+    });
+
     on("[data-timer-key]", "click", (e) => {
       const r = this._recipe(this._view.id);
       const d = e.currentTarget.dataset;
@@ -905,7 +938,7 @@ class HassRecipesPanel extends HTMLElement {
     const toggleStep = (n) => this._setStepDone(n, !this._doneSteps.has(n));
     on("[data-step-toggle]", "click", (e) => {
       // links and the timer button inside a step keep their own behaviour
-      if (e.target.closest("button, a, input, ha-button, ha-icon-button")) return;
+      if (e.target.closest("button, a, input, ha-button, ha-icon-button, [data-chip]")) return;
       const sel = this.shadowRoot.getSelection ? this.shadowRoot.getSelection() : document.getSelection();
       if (sel && String(sel).trim()) return; // the user is selecting text, not tapping
       toggleStep(+e.currentTarget.dataset.stepToggle);
@@ -1054,6 +1087,7 @@ class HassRecipesPanel extends HTMLElement {
       case "progress-reset":
         this._checked = new Set();
         this._doneSteps = new Set();
+        this._doneChips = new Set();
         this._saveProgress();
         this._render();
         break;

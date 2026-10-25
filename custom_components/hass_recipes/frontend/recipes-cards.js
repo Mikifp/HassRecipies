@@ -946,7 +946,7 @@ class HassRecipesCookCard extends RecipesBase {
             const a = partsOf(i);
             const on = progress.ing.has(i);
             return `<label class="irow${on ? " on" : ""}"><input type="checkbox" data-ing="${i}" ${on ? "checked" : ""}>
-              <span class="itext">${a.qty ? `<span class="q">${esc(a.qty)}</span> ` : ""}<b>${esc(a.food)}</b>${
+              <span class="itext">${a.qty ? `<span class="q">${esc(a.qty)}</span> ` : ""}<b>${esc(a.food)}</b>${a.paren ? ` <span class="muted">${esc(a.paren)}</span>` : ""}${
                 a.note ? `<span class="muted">, ${esc(a.note)}</span>` : ""
               }${a.sub ? ` <span class="muted sub">${esc(a.sub)}</span>` : ""}${commentOf(i) ? `<span class="muted cmt">${esc(commentOf(i))}</span>` : ""}${altsOf(i)
                 .map((alt) => `<span class="muted alt">${esc(this._t("or"))} ${esc(alt)}</span>`)
