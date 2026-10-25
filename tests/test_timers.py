@@ -247,6 +247,45 @@ def _stop_without_position(old, new, ended_ago=None):
     return state
 
 
+def test_a_chime_alone_is_played_as_the_long_alarm_so_there_is_something_to_stop():
+    state = {}
+
+    async def scenario(hass, mgr, timer):
+        mgr._finish(timer["id"])
+        await _real_sleep(0.05)
+        state["urls"] = [c[2]["media_content_id"] for c in _plays(hass)]
+        state["clip_end_in"] = mgr._clip_end - hass.loop.time()
+        mgr.dismiss(timer["id"])
+
+    _run(BASE, scenario)
+    assert state["urls"] and all(u.endswith("/alarm_long.wav") for u in state["urls"])
+    assert state["clip_end_in"] > 10  # the whole long alarm is ahead of us, not three seconds
+
+
+def test_the_chime_before_speech_stays_short():
+    state = {}
+
+    async def scenario(hass, mgr, timer):
+        mgr._finish(timer["id"])
+        await _real_sleep(0.1)
+        state["urls"] = [c[2]["media_content_id"] for c in _plays(hass)]
+        mgr.dismiss(timer["id"])
+
+    _run({**BASE, "speaker_sound": "both"}, scenario)
+    assert state["urls"] and all(u.endswith("/alarm.wav") for u in state["urls"])
+
+
+def test_the_long_alarm_file_is_the_chime_repeated():
+    import io
+    import wave
+
+    sound = importlib.import_module("hr_t.alarm_sound")
+    with wave.open(io.BytesIO(sound.long_wav())) as clip:
+        seconds = clip.getnframes() / clip.getframerate()
+    assert abs(seconds - sound.LONG_SECONDS) < 0.01
+    assert sound.LONG_SECONDS > 3 * sound.CHIME_SECONDS
+
+
 def test_a_speaker_that_reports_no_position_is_still_noticed_when_stopped():
     # the chime has just started (our clock says it has about 3 s left): stopping it dismisses the alarm
     assert _stop_without_position("playing", "idle")["timers"] == 0

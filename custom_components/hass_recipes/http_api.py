@@ -15,6 +15,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 
 from .access import can_edit
+from .alarm_sound import long_wav
 from .const import DOMAIN
 from .images import MAX_IMAGE_BYTES, ImageStore, id_from_url, image_url
 from .migrate import MigrationError, parse_upload
@@ -133,6 +134,21 @@ class RecipesAlarmView(HomeAssistantView):
     async def get(self, request: web.Request) -> web.StreamResponse:
         path = Path(__file__).parent / "sounds" / "alarm.wav"
         return web.FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
+
+
+class RecipesLongAlarmView(HomeAssistantView):
+    """GET /api/hass_recipes/alarm_long.wav: the chime several times over, so a speaker keeps sounding.
+
+    Public for the same reason as the single chime.
+    """
+
+    url = "/api/hass_recipes/alarm_long.wav"
+    name = "api:hass_recipes:alarm_long"
+    requires_auth = False
+
+    async def get(self, request: web.Request) -> web.StreamResponse:
+        body = await request.app[KEY_HASS].async_add_executor_job(long_wav)
+        return web.Response(body=body, content_type="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
 
 
 class RecipesImageView(HomeAssistantView):

@@ -39,6 +39,7 @@ from .const import (
 )
 from .http_api import (
     RecipesAlarmView,
+    RecipesLongAlarmView,
     RecipesExportView,
     RecipesImageView,
     RecipesImportView,
@@ -120,6 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
             RecipesUploadImageView(),
             RecipesImageView(),
             RecipesAlarmView(),
+            RecipesLongAlarmView(),
         ):
             hass.http.register_view(view)
         hass.data[f"{DOMAIN}_view"] = True

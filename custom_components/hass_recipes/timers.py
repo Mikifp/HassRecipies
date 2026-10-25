@@ -22,8 +22,10 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 
+from .alarm_sound import CHIME_SECONDS, LONG_SECONDS
 from .localize import words
 from .const import (
+    ALARM_LONG_PATH,
     ALARM_PATH,
     CONF_ALARM_MINUTES,
     CONF_ALARM_REPEAT,
@@ -51,7 +53,7 @@ _EARLY_STOP_SECONDS = 1.5
 _CALL_GRACE_SECONDS = 4.0
 _START_GRACE_SECONDS = 1.2
 # The bundled chime (sounds/alarm.wav) lasts this long
-_CHIME_SECONDS = 3.2
+_CHIME_SECONDS = CHIME_SECONDS
 
 
 class TimerManager:
@@ -247,9 +249,11 @@ class TimerManager:
         options = self._get_options()
         repeat = options.get(CONF_ALARM_REPEAT, True)
         limit = float(options.get(CONF_ALARM_MINUTES) or 5) * 60
-        pause = {SOUND_CHIME: 5.0, SOUND_SPEECH: 8.0, SOUND_BOTH: 6.0}.get(
+        pause = {SOUND_CHIME: 3.0, SOUND_SPEECH: 8.0, SOUND_BOTH: 6.0}.get(
             options.get(CONF_SPEAKER_SOUND) or SOUND_CHIME, 5.0
         )
+        # a chime on its own is played as the long alarm, which has to finish before it is played again
+        clip = LONG_SECONDS if (options.get(CONF_SPEAKER_SOUND) or SOUND_CHIME) == SOUND_CHIME else 0.0
         started = self._hass.loop.time()
         unwatch = self._watch_speakers()
         try:
@@ -258,7 +262,7 @@ class TimerManager:
                     return  # misconfigured: do not hammer a broken speaker
                 if not repeat:
                     return
-                await asyncio.sleep(pause)
+                await asyncio.sleep(clip + pause)
                 if timer_id not in self._timers or self._hass.loop.time() - started > limit:
                     return
         except asyncio.CancelledError:
@@ -316,7 +320,8 @@ class TimerManager:
         self._clip_end = None
         try:
             if mode in (SOUND_CHIME, SOUND_BOTH):
-                url = async_process_play_media_url(self._hass, ALARM_PATH)
+                long = mode == SOUND_CHIME  # with speech after it, the short chime keeps the wait short
+                url = async_process_play_media_url(self._hass, ALARM_LONG_PATH if long else ALARM_PATH)
                 await self._hass.services.async_call(
                     "media_player",
                     "play_media",
@@ -326,7 +331,7 @@ class TimerManager:
                 )
                 now = self._hass.loop.time()
                 self._grace_until = now + _START_GRACE_SECONDS
-                self._clip_end = now + _CHIME_SECONDS
+                self._clip_end = now + (LONG_SECONDS if long else _CHIME_SECONDS)
             if mode == SOUND_BOTH:
                 await asyncio.sleep(3.5)  # let the chime finish before speaking
                 self._grace_until = self._hass.loop.time() + _CALL_GRACE_SECONDS
