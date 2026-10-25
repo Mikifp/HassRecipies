@@ -94,15 +94,38 @@ export default function (h) {
     },
 
     /** A step's text with the ingredients it names as chips, and chips for the ones it does not name. */
-    _stepTextParts(r, s, k) {
-      const idx = s.ingredients.filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]));
+    _stepTextParts(r, s, k, n) {
+      const idx = this._stepChipIngredients(r, s);
       const items = idx.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main }));
-      const { html, placed } = stepTextHtml(s.text, items, (i) => ingredientChipHtml(r, i, k, this._units));
+      const chip = (i) => ingredientChipHtml(r, i, k, this._units, { key: `${n}:${i}`, done: this._doneChips.has(`${n}:${i}`) });
+      const { html, placed } = stepTextHtml(s.text, items, chip);
       const links = idx
         .filter((i) => !placed.has(i))
-        .map((i) => ingredientChipHtml(r, i, k, this._units))
+        .map(chip)
         .join("");
       return { html, links };
+    },
+
+    /** The ingredients a step names, which can be ticked off one by one. */
+    _stepChipIngredients(r, s) {
+      return s.ingredients.filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]));
+    },
+
+    /** Tick (or untick) one ingredient chip of a step; a step whose chips are all ticked is done. */
+    _toggleChip(n, i) {
+      const r = this._recipe(this._view.id);
+      if (!r) return;
+      const s = normStep(r.instructions[n]);
+      const key = `${n}:${i}`;
+      if (this._doneChips.has(key)) this._doneChips.delete(key);
+      else this._doneChips.add(key);
+      const chips = this._stepChipIngredients(r, s);
+      const all = chips.length > 0 && chips.every((c) => this._doneChips.has(`${n}:${c}`));
+      if (all) this._doneSteps.add(n);
+      else this._doneSteps.delete(n);
+      this._saveProgress();
+      this._checkAllDone();
+      this._render();
     },
 
     _stepsHtml(r, k) {
@@ -113,7 +136,7 @@ export default function (h) {
           if (s.section) return `<div class="step-section">${esc(s.text)}</div>`;
           num += 1;
           const done = this._doneSteps.has(n);
-          const { html: textHtml, links } = this._stepTextParts(r, s, k);
+          const { html: textHtml, links } = this._stepTextParts(r, s, k, n);
           return `<div class="step-item ${done ? "done" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}" tabindex="0" title="${done ? "Mark as not done" : "Tap to mark as done"}">
             <span class="step-num">${done ? "✓" : num}</span>
             <div class="step-body"><div class="step-text">${textHtml}</div>
@@ -215,7 +238,7 @@ export default function (h) {
       // The heading this step sits under, if any.
       let section = "";
       for (const x of r.instructions.map(normStep).slice(0, st.i)) if (x.section) section = x.text;
-      const { html: textHtml, links } = this._stepTextParts(r, st, k);
+      const { html: textHtml, links } = this._stepTextParts(r, st, k, st.i);
       const running = this._timerRunning(`${r.id}:${st.i}`);
       const last = n === steps.length - 1;
       const done = this._doneSteps.has(st.i);
@@ -277,7 +300,7 @@ export default function (h) {
           if (st.section) return `<h3 class="csection" data-sec="${n}">${esc(st.text)}</h3>`;
           num += 1;
           const done = this._doneSteps.has(n);
-          const { html: textHtml, links } = this._stepTextParts(r, st, k);
+          const { html: textHtml, links } = this._stepTextParts(r, st, k, n);
           const running = this._timerRunning(`${r.id}:${n}`);
           return `<div class="cstep ${done ? "done" : ""} ${n === firstOpen ? "current" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}" tabindex="0">
             <div class="cstep-head"><span>Step ${num}</span><span class="tick">${done ? "✓" : ""}</span></div>
@@ -371,7 +394,7 @@ export default function (h) {
 
     _rdStepHtml(r, k, { s, n, num }) {
       const done = this._doneSteps.has(n);
-      const { html: textHtml, links } = this._stepTextParts(r, s, k);
+      const { html: textHtml, links } = this._stepTextParts(r, s, k, n);
       const timers = timerSpecs(r, n, num, s.timers || [], state.language)
         .map((sp) => {
           const running = this._timerRunning(sp.key);
