@@ -19,6 +19,10 @@ _FRACTION_RE = re.compile(r"(\d+)?\s*([" + "".join(_FRACTIONS) + r"])")
 _NUM = r"(?:\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?)"
 _QTY = re.compile(rf"^\s*(?P<a>{_NUM})(?:\s*(?:-|–|—|to\s)\s*(?P<b>{_NUM}))?(?![\d/])")
 _PAREN = re.compile(r"\(([^)]*)\)")
+# a parenthetical amount may start with "ca." / "~": "(ca. 120 g)"
+_APPROX = re.compile(r"^\s*(?:ca\.?|circa|approx\.?|about|[~≈])\s*", re.IGNORECASE)
+# units whose own amount is exact: a parenthetical beside them is only another way of saying it
+_OWN_METRIC = frozenset({"g", "kg", "mg", "ml", "cl", "dl", "l"})
 _FL_OZ = re.compile(r"^\s*(fl(?:uid)?\.?\s*(?:oz|ounces?)\.?)\s*", re.IGNORECASE)
 # A unit is a whole word. Any letter counts (not just a-z), otherwise "2 løg" would read
 # the "l" of "løg" as litres and leave "øg" as the food.
@@ -395,6 +399,8 @@ def _parse_line(line: str) -> dict[str, Any]:
         "substitute": None,
         "substitutes": [],
         "comment": "",
+        "parens": [],  # parenthetical amounts such as "100 ml" in "100 g sugar (100 ml)": scaled along with the amount
+        "paren_basis": False,  # True when the grams / ml come from such a parenthetical
     }
     text = _expand_fractions(line.strip())
     m = _QTY.match(text)
@@ -428,6 +434,14 @@ def _parse_line(line: str) -> dict[str, Any]:
     food, _, note = cleaned.partition(",")
     food = food.strip(" .;:") or line.strip()
     paren_metric = _metric(" ".join(parens))
+    amounts = [p.strip() for p in parens if _QTY.match(_APPROX.sub("", p))]
+
+    # The amount in the brackets gives the grams / ml, unless the main unit already says it exactly:
+    # "100 g sugar (100 ml)" is 100 g, but "2 dl flour (ca. 120 g)" is better told by the 120 g.
+    own = UNITS.get(unit) if unit in _OWN_METRIC else None
+    paren_basis = bool(paren_metric) and not per_unit and not (
+        own and (own[0] == "weight" or (paren_metric and paren_metric[0] == "ml"))
+    )
 
     def amount(q: float) -> tuple[float | None, float | None, bool]:
         """(grams, ml, approximate) for quantity ``q``."""
@@ -436,7 +450,7 @@ def _parse_line(line: str) -> dict[str, Any]:
         if per_unit:
             kind, val = per_unit
             grams, ml = (val * q, None) if kind == "g" else (None, val * q)
-        elif paren_metric:
+        elif paren_basis:
             kind, val = paren_metric
             scaled = val * q / quantity if quantity else val
             grams, ml = (scaled, None) if kind == "g" else (None, scaled)
@@ -472,6 +486,8 @@ def _parse_line(line: str) -> dict[str, Any]:
         unit_text=unit_text,
         food=food,
         note=note.strip(" ."),
+        parens=amounts,
+        paren_basis=paren_basis,
         grams=_round(grams),
         ml=_round(ml),
         approximate=approx,
@@ -510,6 +526,20 @@ def _format_grams(g: float) -> str:
     return f"{round(g, 1):g}"
 
 
+def scale_paren(text: str, scale: float) -> str:
+    """Scale the amount a parenthetical starts with: "ca. 120 g" -> "ca. 240 g" at 2x."""
+    prefix = _APPROX.match(text)
+    head = prefix.group(0) if prefix else ""
+    rest = text[len(head):]
+    m = _QTY.match(rest)
+    if not m:
+        return text
+    qty = format_number(_to_float(m.group("a")) * scale)
+    if m.group("b"):
+        qty += "–" + format_number(_to_float(m.group("b")) * scale)
+    return head + qty + rest[m.end():]
+
+
 def format_ingredient(
     parsed: dict[str, Any], scale: float = 1.0, mode: str = "grams", mark_approx: bool = True
 ) -> str:
@@ -517,6 +547,8 @@ def format_ingredient(
     if parsed.get("quantity") is None:
         return parsed["text"]
     food = parsed["food"] + (f", {parsed['note']}" if parsed.get("note") else "")
+    parens = [] if mode == "grams" and parsed.get("paren_basis") else parsed.get("parens") or []
+    tail = "".join(f" ({scale_paren(p, scale)})" for p in parens)
     # Whole items ("3 eggs", "2 cloves garlic") read better as counts than as
     # estimated weights, unless the line itself gave an exact metric amount.
     countable = parsed.get("approximate") and (parsed.get("unit") is None or parsed["unit"] in COUNT_AS_ITEMS)
@@ -524,15 +556,15 @@ def format_ingredient(
         tilde = "≈ " if parsed.get("approximate") and mark_approx else ""
         if parsed.get("grams") is not None:
             hi = f"–{_format_grams(parsed['grams_max'] * scale)}" if parsed.get("grams_max") is not None else ""
-            return f"{tilde}{_format_grams(parsed['grams'] * scale)}{hi} g {food}"
+            return f"{tilde}{_format_grams(parsed['grams'] * scale)}{hi} g {food}{tail}"
         if parsed.get("ml") is not None:
-            return f"{_format_grams(parsed['ml'] * scale)} ml {food}"
+            return f"{_format_grams(parsed['ml'] * scale)} ml {food}{tail}"
     if scale == 1:
         return parsed["text"]
     qty = format_number(parsed["quantity"] * scale)
     if parsed.get("quantity_max") is not None:
         qty += "–" + format_number(parsed["quantity_max"] * scale)
-    return " ".join(part for part in (qty, parsed.get("unit_text") or "", food) if part)
+    return " ".join(part for part in (qty, parsed.get("unit_text") or "", food) if part) + tail
 
 
 # ---- ingredients named in a step -------------------------------------------------

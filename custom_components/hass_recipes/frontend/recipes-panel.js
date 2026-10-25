@@ -307,6 +307,7 @@ const STYLE = `
   .ing-text { display: flex; flex-direction: column; }
   .ing-qty { font-variant-numeric: tabular-nums; }
   .ing-note { color: var(--secondary-text-color); }
+  .ing-paren { color: var(--secondary-text-color); }
   .ing-sub { color: var(--secondary-text-color); font-size: 12px; }
   .ing-comment { display: block; color: var(--secondary-text-color); font-size: 13px; font-style: italic; margin-top: 2px; }
   .ing-comment-input { margin-top: 4px; width: 100%; }
