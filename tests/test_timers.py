@@ -226,6 +226,81 @@ def test_saying_stop_silences_the_alarm():
     assert state["timers"] == 0 and state["alarms"] == 0
 
 
+def _stop_without_position(old, new, ended_ago=None):
+    """A speaker that reports no duration or position: only our own clock can tell a stop from the end."""
+    state = {}
+
+    async def scenario(hass, mgr, timer):
+        mgr._finish(timer["id"])
+        await _real_sleep(0.05)
+        mgr._grace_until = 0.0
+        if ended_ago is not None:
+            mgr._clip_end = hass.loop.time() - ended_ago
+        mk = lambda st: types.SimpleNamespace(state=st, attributes={}, entity_id="media_player.kitchen")
+        event = types.SimpleNamespace(data={"old_state": mk(old), "new_state": mk(new)})
+        for cb in list(hass.listeners):
+            cb(event)
+        await _real_sleep(0.05)
+        state["timers"] = len(mgr._timers)
+
+    _run(BASE, scenario)
+    return state
+
+
+def test_a_chime_alone_is_played_as_the_long_alarm_so_there_is_something_to_stop():
+    state = {}
+
+    async def scenario(hass, mgr, timer):
+        mgr._finish(timer["id"])
+        await _real_sleep(0.05)
+        state["urls"] = [c[2]["media_content_id"] for c in _plays(hass)]
+        state["clip_end_in"] = mgr._clip_end - hass.loop.time()
+        mgr.dismiss(timer["id"])
+
+    _run(BASE, scenario)
+    assert state["urls"] and all(u.endswith("/alarm_long.wav") for u in state["urls"])
+    assert state["clip_end_in"] > 10  # the whole long alarm is ahead of us, not three seconds
+
+
+def test_the_chime_before_speech_stays_short():
+    state = {}
+
+    async def scenario(hass, mgr, timer):
+        mgr._finish(timer["id"])
+        await _real_sleep(0.1)
+        state["urls"] = [c[2]["media_content_id"] for c in _plays(hass)]
+        mgr.dismiss(timer["id"])
+
+    _run({**BASE, "speaker_sound": "both"}, scenario)
+    assert state["urls"] and all(u.endswith("/alarm.wav") for u in state["urls"])
+
+
+def test_the_long_alarm_file_is_the_chime_repeated():
+    import io
+    import wave
+
+    sound = importlib.import_module("hr_t.alarm_sound")
+    with wave.open(io.BytesIO(sound.long_wav())) as clip:
+        seconds = clip.getnframes() / clip.getframerate()
+    assert abs(seconds - sound.LONG_SECONDS) < 0.01
+    assert sound.LONG_SECONDS > 3 * sound.CHIME_SECONDS
+
+
+def test_a_speaker_that_reports_no_position_is_still_noticed_when_stopped():
+    # the chime has just started (our clock says it has about 3 s left): stopping it dismisses the alarm
+    assert _stop_without_position("playing", "idle")["timers"] == 0
+    assert _stop_without_position("playing", "paused")["timers"] == 0
+
+
+def test_a_chime_that_ends_by_itself_keeps_the_alarm_even_without_a_position():
+    assert _stop_without_position("playing", "idle", ended_ago=0.2)["timers"] == 1
+
+
+def test_a_stop_during_the_chime_is_not_swallowed_by_the_start_grace():
+    # the grace after starting the clip must be shorter than the chime, or a stop in the chime is ignored
+    assert timers._START_GRACE_SECONDS < timers._CHIME_SECONDS - timers._EARLY_STOP_SECONDS
+
+
 def test_clip_ending_naturally_keeps_the_alarm():
     state = _stop_scenario("playing", "idle", position=3.0)
     assert state["timers"] == 1 and state["alarms"] == 1
