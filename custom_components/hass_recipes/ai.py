@@ -83,30 +83,40 @@ def recipe_from_ai(data: dict[str, Any], url: str = "") -> dict[str, Any]:
     }
 
 
+async def _generate(hass: HomeAssistant, text: str, entity_id: str | None) -> Any:
+    data = {
+        "task_name": "Recipe import",
+        "instructions": _INSTRUCTIONS + text[:_MAX_CHARS],
+        "structure": _STRUCTURE,
+    }
+    if entity_id:
+        data["entity_id"] = entity_id
+    async with asyncio.timeout(_TIMEOUT):
+        return await hass.services.async_call("ai_task", "generate_data", data, blocking=True, return_response=True)
+
+
 async def async_tidy(hass: HomeAssistant, text: str, url: str = "") -> dict[str, Any]:
-    """Ask the configured AI Task entity to read the text as a recipe."""
+    """Ask the AI Task entity to read the text as a recipe.
+
+    The AI the user picked for AI tasks is used; when none is picked the only AI Task entity is.
+    """
     if not available(hass):
         raise RecipeImportError("This Home Assistant has no AI Task. Add an AI such as Google Gemini or Ollama first.")
     try:
-        async with asyncio.timeout(_TIMEOUT):
-            result = await hass.services.async_call(
-                "ai_task",
-                "generate_data",
-                {
-                    "task_name": "Recipe import",
-                    "instructions": _INSTRUCTIONS + text[:_MAX_CHARS],
-                    "structure": _STRUCTURE,
-                },
-                blocking=True,
-                return_response=True,
-            )
+        try:
+            result = await _generate(hass, text, None)
+        except HomeAssistantError as err:
+            if "preferred entity" not in str(err):
+                raise
+            entities = sorted(hass.states.async_entity_ids("ai_task"))
+            if not entities:
+                raise RecipeImportError(
+                    "No AI is set up for AI tasks. Add an integration such as Google Generative AI first."
+                ) from err
+            result = await _generate(hass, text, entities[0])
     except TimeoutError as err:
         raise RecipeImportError("The AI took too long to answer") from err
     except HomeAssistantError as err:
-        if "preferred entity" in str(err):
-            raise RecipeImportError(
-                "No AI is chosen for AI tasks. In Home Assistant open Settings > System > AI tasks and pick one."
-            ) from err
         raise RecipeImportError(f"The AI could not read the text: {err}") from err
     data = (result or {}).get("data")
     if not isinstance(data, dict):
