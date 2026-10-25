@@ -375,7 +375,7 @@ export default function (h) {
 
     /** The switch that adds the other unit to the ingredient chips in the steps. */
     _chipAltHtml() {
-      return `<ha-formfield class="chip-alt" label="${esc(T("Show the other unit in the chips"))}"><ha-switch data-act="chip-alt" ${this._chipAlt ? "checked" : ""}></ha-switch></ha-formfield>`;
+      return `<ha-formfield class="chip-alt" label="${esc(T("Show the other unit in the chips"))}"><ha-switch data-chipalt ${this._chipAlt ? "checked" : ""}></ha-switch></ha-formfield>`;
     },
 
     _rdScaleHtml(r, k) {

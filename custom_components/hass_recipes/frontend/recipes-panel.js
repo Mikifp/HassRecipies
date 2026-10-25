@@ -913,6 +913,14 @@ class HassRecipesPanel extends HTMLElement {
       const [n, i] = e.currentTarget.dataset.chip.split(":").map(Number);
       this._toggleChip(n, i);
     };
+    // the switch for the other unit in the chips: its own change event, so that clicking the switch or its label does the same
+    on("ha-switch[data-chipalt]", "change", (e) => {
+      this._chipAlt = e.currentTarget.checked;
+      try {
+        localStorage.setItem("hass_recipes_chipalt", this._chipAlt ? "1" : "0");
+      } catch (_) { /* ignore */ }
+      this._render();
+    });
     on("[data-chip]", "click", tickChip);
     on("[data-chip]", "keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -1120,13 +1128,6 @@ class HassRecipesPanel extends HTMLElement {
       }
       case "cook-prev":
         this._cookStep(-1);
-        break;
-      case "chip-alt":
-        this._chipAlt = !this._chipAlt;
-        try {
-          localStorage.setItem("hass_recipes_chipalt", this._chipAlt ? "1" : "0");
-        } catch (_) { /* ignore */ }
-        this._render();
         break;
       case "cook-focus":
         this._cookFocus = !this._cookFocus;
