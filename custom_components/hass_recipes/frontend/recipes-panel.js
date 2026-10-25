@@ -239,6 +239,7 @@ const STYLE = `
   ol.steps li { margin-bottom: 12px; line-height: 1.5; }
   .step-ings { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 10px 0 2px; }
   .ing-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 3px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; background: color-mix(in srgb, var(--primary-color) 9%, transparent); border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent); }
+  .ing-chip .alt { color: var(--secondary-text-color); font-size: .9em; }
   .ing-chip.tick { cursor: pointer; user-select: none; }
   .ing-chip.tick:hover { filter: brightness(.95); }
   .ing-chip.done { opacity: .55; text-decoration: line-through; }
@@ -451,6 +452,10 @@ class HassRecipesPanel extends HTMLElement {
     this._doneSteps = new Set();
     this._tab = "ingredients"; // narrow layout: which pane of the recipe is showing
     this._notice = "";
+    this._chipAlt = false; // chips in the steps also show the amount in the other unit
+    try {
+      this._chipAlt = localStorage.getItem("hass_recipes_chipalt") === "1";
+    } catch (_) { /* ignore */ }
     this._cookFocus = false; // false: whole recipe at once (Mealie style); true: one step at a time
     try {
       this._cookFocus = localStorage.getItem("hass_recipes_cookfocus") === "1";
@@ -1115,6 +1120,13 @@ class HassRecipesPanel extends HTMLElement {
       }
       case "cook-prev":
         this._cookStep(-1);
+        break;
+      case "chip-alt":
+        this._chipAlt = !this._chipAlt;
+        try {
+          localStorage.setItem("hass_recipes_chipalt", this._chipAlt ? "1" : "0");
+        } catch (_) { /* ignore */ }
+        this._render();
         break;
       case "cook-focus":
         this._cookFocus = !this._cookFocus;

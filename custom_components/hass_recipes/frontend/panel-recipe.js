@@ -97,7 +97,7 @@ export default function (h) {
     _stepTextParts(r, s, k, n) {
       const idx = this._stepChipIngredients(r, s);
       const items = idx.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main }));
-      const chip = (i) => ingredientChipHtml(r, i, k, this._units, { key: `${n}:${i}`, done: this._doneChips.has(`${n}:${i}`) });
+      const chip = (i) => ingredientChipHtml(r, i, k, this._units, { key: `${n}:${i}`, done: this._doneChips.has(`${n}:${i}`) }, this._chipAlt);
       const { html, placed } = stepTextHtml(s.text, items, chip);
       const links = idx
         .filter((i) => !placed.has(i))
@@ -249,6 +249,7 @@ export default function (h) {
           ${section ? `<div class="cook-section">${esc(section)}</div>` : ""}
           <div class="cook-text" data-step-toggle="${st.i}" style="${done ? "opacity:.55;text-decoration:line-through" : ""}" title="Tap to mark as done">${textHtml}</div>
           ${links ? `<div class="step-ings">${links}</div>` : ""}
+          ${this._chipAltHtml()}
           ${this._timerButtonsHtml(r, st, st.i, n + 1)}
           <label class="cook-done"><input type="checkbox" data-step-done="${st.i}" ${done ? "checked" : ""}> Mark this step as done</label>
           ${this._cookSectionNavHtml(r, n)}
@@ -316,6 +317,7 @@ export default function (h) {
           <div class="cook-top">
             <h2>${esc(r.name)}<span class="muted" style="font-weight:400">${makes}</span></h2>
             ${this._scaleControlHtml(r, k)}
+            ${this._chipAltHtml()}
             ${(() => {
               const jumps = all.map((x, n) => ({ x, n })).filter((o) => o.x.section);
               return this._cookSections(r).length
@@ -371,6 +373,11 @@ export default function (h) {
       return groups.filter((g) => g.steps.length || g.title);
     },
 
+    /** The switch that adds the other unit to the ingredient chips in the steps. */
+    _chipAltHtml() {
+      return `<ha-formfield class="chip-alt" label="${esc(T("Show the other unit in the chips"))}"><ha-switch data-act="chip-alt" ${this._chipAlt ? "checked" : ""}></ha-switch></ha-formfield>`;
+    },
+
     _rdScaleHtml(r, k) {
       const b = scaleBasis(r);
       const hint = k === 1 ? "As written" : `${formatNumber(k)}× the recipe${b.unit === "×" ? "" : ` (written for ${fmtYield(b.base)}${b.unit ? ` ${esc(b.unit)}` : ""})`}`;
@@ -389,6 +396,7 @@ export default function (h) {
             ${b.unit && b.unit !== "×" ? `<span>${esc(b.unit)}</span>` : b.unit === "×" ? "<span>×</span>" : ""}</div>
           ${presets}
           <div class="muted">${hint}</div>
+          ${this._chipAltHtml()}
         </div>`;
     },
 
