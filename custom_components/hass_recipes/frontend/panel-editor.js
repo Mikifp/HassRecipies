@@ -610,7 +610,7 @@ export default function (h) {
     _neRenderPicker(box) {
       const p = this._nePick;
       const item = (attrs, on, text, ic) =>
-        `<ha-list-item-base interactive class="${on ? "on" : ""}" ${attrs}><span slot="headline">${esc(text)}</span>${ic ? `<ha-icon slot="start" icon="mdi:${ic}"></ha-icon>` : ""}</ha-list-item-base>`;
+        `<ha-list-item-button class="${on ? "on" : ""}" ${attrs}><span slot="headline">${esc(text)}</span>${ic ? `<ha-icon slot="start" icon="mdi:${ic}"></ha-icon>` : ""}</ha-list-item-button>`;
       const items = p.options.map((o, i) => item(`data-i="${i}"`, i === p.index, o.text.trim()));
       if (p.query) items.push(item('data-new="1"', p.index === p.options.length, `${T("New ingredient")} “${p.query}”`, "plus"));
       if (!items.length) {

@@ -291,7 +291,7 @@ const STYLE = `
   .ne-timer ha-input.ne-tl { width: 150px; --ha-input-height: 40px; }
   .ne-pick { position: absolute; left: 0; right: 0; z-index: 5; margin-top: 2px; background: var(--card-background-color); border-radius: var(--ha-border-radius-lg, 12px); box-shadow: var(--ha-box-shadow-l, 0 4px 12px rgba(0,0,0,.25)); max-height: 260px; overflow: auto; }
   .ne-pick[hidden] { display: none; }
-  .ne-pick ha-list-item-base.on { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, transparent)); }
+  .ne-pick ha-list-item-button.on { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, transparent)); }
   .ne-body ha-button[data-ne-act] { margin-top: var(--ha-space-1, 4px); }
   ha-button.ne-add-section { align-self: stretch; }
   .ne-dragging { opacity: .4; }

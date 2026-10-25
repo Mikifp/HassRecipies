@@ -387,7 +387,7 @@ export default function (h) {
     /** "Create recipe": the same dialog Home Assistant shows for "Create automation". */
     _brNewDialog() {
       const item = (act, icon, headline, text) =>
-        `<ha-list-item-base interactive data-act="${act}" headline="${esc(T(headline))}" supporting-text="${esc(T(text))}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon><ha-icon-next slot="end"></ha-icon-next></ha-list-item-base>`;
+        `<ha-list-item-button data-act="${act}" headline="${esc(T(headline))}" supporting-text="${esc(T(text))}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon><ha-icon-next slot="end"></ha-icon-next></ha-list-item-button>`;
       return `<ha-adaptive-dialog id="newdlg" flexcontent header-title="${esc(T("New recipe"))}">
           <ha-list-base>
             ${item("new-manual", "pencil-outline", "Create new recipe", "Start with an empty recipe from scratch")}

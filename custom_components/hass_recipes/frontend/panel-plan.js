@@ -214,8 +214,8 @@ export default function (h) {
       if (!found.length) return `<p class="muted pd-empty">${esc(T("No recipes match. Use the text box to add a plain meal."))}</p>`;
       return found
         .map(
-          (r) => `<ha-list-item-base interactive data-rid="${esc(r.id)}" headline="${esc(r.name)}" supporting-text="${esc(minutes(r.total_time) || "")}">
-            <span slot="start" class="pd-thumb" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></span></ha-list-item-base>`
+          (r) => `<ha-list-item-button data-rid="${esc(r.id)}" headline="${esc(r.name)}" supporting-text="${esc(minutes(r.total_time) || "")}">
+            <span slot="start" class="pd-thumb" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></span></ha-list-item-button>`
         )
         .join("");
     },
@@ -407,8 +407,8 @@ export default function (h) {
             <div slot="header" class="plan-cat">${esc(name)} <span class="plan-count">${list.length}</span></div>
             ${list
               .map(
-                (r) => `<ha-list-item-base interactive draggable="true" class="plan-rec" data-rid="${esc(r.id)}" headline="${esc(r.name)}" supporting-text="${esc(minutes(r.total_time) || "")}">
-                  <span slot="start" class="pd-thumb" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></span></ha-list-item-base>`
+                (r) => `<ha-list-item-button draggable="true" class="plan-rec" data-rid="${esc(r.id)}" headline="${esc(r.name)}" supporting-text="${esc(minutes(r.total_time) || "")}">
+                  <span slot="start" class="pd-thumb" ${r.image ? `style="background-image:url('${esc(r.image)}')"` : ""}></span></ha-list-item-button>`
               )
               .join("")}
           </ha-expansion-panel>`;
@@ -461,7 +461,7 @@ export default function (h) {
       );
       const html = `<p class="plan-hint">${esc(recipe.name)} · ${esc(when)}</p>
         <ha-list-base>${SLOTS.map(
-          ([s, label]) => `<ha-list-item-base interactive data-slot="${s}" headline="${esc(T(label))}"><span slot="start" class="plan-dot" style="background:${this._planColor(s)}"></span></ha-list-item-base>`
+          ([s, label]) => `<ha-list-item-button data-slot="${s}" headline="${esc(T(label))}"><span slot="start" class="plan-dot" style="background:${this._planColor(s)}"></span></ha-list-item-button>`
         ).join("")}</ha-list-base>`;
       this._planDialog(T("Add to the meal plan"), html, (dlg, close) => {
         dlg.querySelector("ha-list-base").addEventListener("click", async (e) => {
