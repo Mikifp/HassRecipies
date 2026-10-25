@@ -45,8 +45,13 @@ _LOGGER = logging.getLogger(__name__)
 _PLAYING = ("playing", "buffering")
 # A speaker that stops with more than this left of the clip was stopped by a person
 _EARLY_STOP_SECONDS = 1.5
-# Ignore speaker state changes this long after we start something ourselves
-_START_GRACE_SECONDS = 4.0
+# Ignore speaker state changes while we start something ourselves, and this long after the call returns
+# (the speaker moves through buffering / idle on its way to playing). Keep it well under the length of
+# the chime, or a stop during the chime is never noticed.
+_CALL_GRACE_SECONDS = 4.0
+_START_GRACE_SECONDS = 1.2
+# The bundled chime (sounds/alarm.wav) lasts this long
+_CHIME_SECONDS = 3.2
 
 
 class TimerManager:
@@ -58,6 +63,7 @@ class TimerManager:
         self._unsubs: dict[str, CALLBACK_TYPE] = {}
         self._alarms: dict[str, asyncio.Task] = {}  # timer id -> repeating alarm
         self._grace_until = 0.0  # loop time before which speaker changes are our own doing
+        self._clip_end: float | None = None  # loop time the chime ends, for speakers that do not report their position
 
     async def async_load(self) -> None:
         data = await self._store.async_load()
@@ -280,6 +286,8 @@ class TimerManager:
             if self._hass.loop.time() < self._grace_until:
                 return
             remaining = _seconds_left(old)
+            if remaining is None and self._clip_end is not None:
+                remaining = self._clip_end - self._hass.loop.time()  # the speaker does not say: go by our own clock
             if remaining is not None and remaining > _EARLY_STOP_SECONDS:
                 _LOGGER.debug("%s was stopped by hand; silencing timer alarms", new.entity_id)
                 self.stop_alarms()
@@ -304,7 +312,8 @@ class TimerManager:
         if not speakers:
             return False
         mode = options.get(CONF_SPEAKER_SOUND) or SOUND_CHIME
-        self._grace_until = self._hass.loop.time() + _START_GRACE_SECONDS
+        self._grace_until = self._hass.loop.time() + _CALL_GRACE_SECONDS
+        self._clip_end = None
         try:
             if mode in (SOUND_CHIME, SOUND_BOTH):
                 url = async_process_play_media_url(self._hass, ALARM_PATH)
@@ -315,8 +324,13 @@ class TimerManager:
                     target={"entity_id": speakers},
                     blocking=True,
                 )
+                now = self._hass.loop.time()
+                self._grace_until = now + _START_GRACE_SECONDS
+                self._clip_end = now + _CHIME_SECONDS
             if mode == SOUND_BOTH:
                 await asyncio.sleep(3.5)  # let the chime finish before speaking
+                self._grace_until = self._hass.loop.time() + _CALL_GRACE_SECONDS
+                self._clip_end = None
             if mode in (SOUND_SPEECH, SOUND_BOTH):
                 tts = options.get(CONF_TTS_ENTITY) or next(
                     iter(sorted(self._hass.states.async_entity_ids("tts"))), None
@@ -340,7 +354,9 @@ class TimerManager:
                     "internal URL (Settings > System > Network)."
                 ) from err
             return False
-        self._grace_until = self._hass.loop.time() + _START_GRACE_SECONDS
+        if mode in (SOUND_SPEECH, SOUND_BOTH):
+            self._clip_end = None  # how long the speech lasts is not known
+            self._grace_until = self._hass.loop.time() + _START_GRACE_SECONDS
         return True
 
 
