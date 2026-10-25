@@ -57,7 +57,7 @@ const ingredientHtml = (r, i, k, mode) => {
   const p = (r.parsed_ingredients || [])[i];
   const subs = (p && (p.substitutes || (p.substitute ? [p.substitute] : []))) || [];
   const a = ingParts(p, main, k, mode);
-  let html = `<span class="ing-main">${a.qty ? `<span class="ing-qty">${esc(a.qty)}</span> ` : ""}<strong>${esc(a.food)}</strong>${a.note ? `<span class="ing-note">, ${esc(a.note)}</span>` : ""}</span>`;
+  let html = `<span class="ing-main">${a.qty ? `<span class="ing-qty">${esc(a.qty)}</span> ` : ""}<strong>${esc(a.food)}</strong>${a.paren ? ` <span class="ing-paren">${esc(a.paren)}</span>` : ""}${a.note ? `<span class="ing-note">, ${esc(a.note)}</span>` : ""}</span>`;
   if (a.sub) html += `<small class="ing-sub">${esc(a.sub)}</small>`;
   alts.forEach((altText, n) => {
     const b = ingParts(subs[n], altText, k, mode);
