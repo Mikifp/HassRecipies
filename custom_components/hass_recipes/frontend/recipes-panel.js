@@ -449,6 +449,7 @@ const STYLE = `
   .nu-table tbody tr:first-child th, .nu-table tbody tr:first-child td { font-weight: 600; }
   .nu-table td + td, .nu-table th + td { padding-inline-start: 12px; }
   .nu-table tr.nu-sub th { padding-inline-start: 14px; color: var(--secondary-text-color); font-size: 13px; }
+  .nu .nu-table { max-width: 560px; }
   .nu-status { margin-top: 10px; }
   .nu-warn { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--warning-color, #b26a00); font-size: 13px; --mdc-icon-size: 18px; }
   .nu-src { padding: 0 16px 12px; font-size: 11px; color: var(--secondary-text-color); }

@@ -253,3 +253,12 @@ def test_export_and_import_bring_custom_ingredients_and_links():
     assert links["grøn pesto"] == {"source": "custom", "id": new_id, "unit_grams": {"jar": 190}}
     assert links["æg"]["id"] == 848
     assert other.import_data(document) == 0  # importing again adds nothing
+
+
+def test_numbers_pick_the_right_variant():
+    assert DB.search("oksekød hakket 15-20", 1)[0][1]["name_da"] == "Oksekød, hakket, 15-20% fedt, rå"
+    assert DB.search("fløde 18%", 1)[0][1]["name_da"] == "Fløde 18 %"
+
+
+def test_a_compound_ending_is_a_closer_match_than_its_start():
+    assert nu.score("mælk", "Sødmælk, økologisk") > nu.score("mælk", "Mælkebøtte, blade, rå")

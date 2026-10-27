@@ -20,7 +20,10 @@ export default function (h) {
     ["sat_fat", "of which saturated fat", "g"],
     ["salt", "Salt", "g"],
   ];
-  const ALL = [...MAIN, ...MORE];
+  // the full table follows the order of a nutrition label, the "of which" rows under their parent
+  const ALL = ["kcal", "fat", "sat_fat", "carbs", "sugars", "fibre", "protein", "salt"].map((key) =>
+    [...MAIN, ...MORE].find(([k]) => k === key)
+  );
   // custom-ingredient form fields, in the order of a nutrition label
   const FORM = [
     ["kcal", "Energy (kcal)"],
@@ -156,7 +159,7 @@ export default function (h) {
           item.quantity == null ? "No amount, so it is not counted." : "The weight is unknown, so it is not counted."
         )}</span></div>`;
         if (edit && item.quantity != null && m && m.source !== "ignore")
-          detail += `<div class="nu-unit"><label>1 ${esc(unit || "piece")} =</label><input type="number" min="0" step="any" id="nu-ug-${item.index}" inputmode="decimal"><span>g</span>
+          detail += `<div class="nu-unit"><label>1 ${esc(unit || "piece")} =</label><input type="text" inputmode="decimal" autocomplete="off" id="nu-ug-${item.index}"><span>g</span>
             <button class="btn secondary" data-nu="unit" data-i="${item.index}" data-unit="${esc(item.unit || "piece")}">Save weight</button></div>`;
       }
       const ug = m && m.unit_grams ? Object.entries(m.unit_grams) : [];
@@ -171,7 +174,7 @@ export default function (h) {
         m && m.source !== "ignore"
           ? `<div class="nu-match"><ha-icon icon="mdi:arrow-right-bottom"></ha-icon><span><b>${esc(m.name)}</b>${
               item.grams != null ? ` · ${num(item.grams)} g` : ""
-            }${ug.length ? ` · ${ug.map(([u, g]) => `1 ${esc(u)} = ${num(g)} g`).join(", ")}` : ""}</span>${tag ? `<span class="nu-tag ${tone}">${esc(tag)}</span>` : ""}</div>`
+            }${ug.length ? ` · ${ug.map(([u, g]) => `1 ${esc(u === item.unit && item.unit_text ? item.unit_text : u)} = ${num(g)} g`).join(", ")}` : ""}</span>${tag ? `<span class="nu-tag ${tone}">${esc(tag)}</span>` : ""}</div>`
           : tag
           ? `<div class="nu-match"><span class="nu-tag ${tone}">${esc(tag)}</span></div>`
           : "";
@@ -207,7 +210,7 @@ export default function (h) {
       const f = this._nu.form;
       if (!f) return "";
       const field = (key, label) =>
-        `<label class="nu-f"><span>${esc(label)}</span><input type="number" min="0" step="any" inputmode="decimal" data-nu-field="${key}" value="${f[key] == null ? "" : esc(String(f[key]))}"></label>`;
+        `<label class="nu-f"><span>${esc(label)}</span><input type="text" inputmode="decimal" autocomplete="off" data-nu-field="${key}" value="${f[key] == null ? "" : esc(String(f[key]))}"></label>`;
       return `<div class="pane nu-form" id="nu-form">
           <h3>${f.id ? "Edit custom ingredient" : "New custom ingredient"}</h3>
           ${f.link_food ? `<p class="muted">${esc(`It will be used for “${f.link_food}”.`)}</p>` : ""}

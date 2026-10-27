@@ -35,9 +35,10 @@ SOURCE_IGNORE = "ignore"  # "salt to taste", "water": counted as nothing, on pur
 DATA_FILE = Path(__file__).parent / "data" / "frida.json"
 
 # An unconfirmed best hit is used only when it is at least this good (see score()).
-AUTO_MATCH_SCORE = 1.0
+AUTO_MATCH_SCORE = 1.05
 
 _WORD = re.compile(r"[^\W\d_]+")
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 # words that say how something is prepared or bought, not what it is
 _STOP = frozenset(
     """
@@ -119,14 +120,20 @@ def _tokens(text: str, stop: bool = True) -> list[str]:
 
 
 def _word_match(q: str, name_words: list[str]) -> float:
-    """1 for the same word, 0.75 when one is part of a compound of the other."""
+    """1 for the same word; less when one is part of a compound of the other.
+
+    A Danish compound ends in what it is ("sødmælk" is milk), so a match at the end
+    counts more than one at the start ("mælkebøtte" is a dandelion).
+    """
     best = 0.0
     for w in name_words:
         if q == w:
             return 1.0
         short, long_ = (q, w) if len(q) <= len(w) else (w, q)
-        if len(short) >= 4 and (long_.endswith(short) or long_.startswith(short)):
-            best = max(best, 0.75)
+        if len(short) >= 3 and long_.endswith(short):
+            best = max(best, 0.9)
+        elif len(short) >= 4 and long_.startswith(short):
+            best = max(best, 0.6)
     return best
 
 
@@ -158,6 +165,11 @@ def score(query: str, name: str) -> float:
         total += 0.08
     extra = max(0, len(n_words) - len(q_words))
     total -= 0.04 * extra
+    # numbers tell variants apart: "fløde 18 %", "oksekød hakket 15-20"
+    q_numbers = set(_NUMBER.findall(query))
+    if q_numbers:
+        n_numbers = set(_NUMBER.findall(name))
+        total += 0.1 * len(q_numbers & n_numbers) - 0.05 * len(q_numbers - n_numbers)
     return round(total, 4)
 
 
