@@ -11,7 +11,7 @@ const __v = new URL(import.meta.url).searchParams.get("v");
 const load = (name) => import(`./${name}.js${__v ? `?v=${__v}` : ""}`);
 const helpers = (await load("panel-helpers")).default;
 const { esc, isHeader, clock, scaleBasis, observeTranslations, T, state, isoDate, addDays, mondayOf } = helpers;
-const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-form", "panel-editor"].map(load));
+const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-nutrition", "panel-form", "panel-editor"].map(load));
 
 const STYLE = `
   :host { --hq-loud: var(--ha-color-fill-primary-loud-resting, var(--primary-color)); --hq-on-loud: var(--ha-color-on-primary-loud, #fff); --hq-normal: var(--ha-color-fill-primary-normal-resting, color-mix(in srgb, var(--primary-color) 14%, #fff)); --hq-on-normal: var(--ha-color-on-primary-normal, var(--primary-color)); --hq-outline: var(--outline-color, var(--divider-color)); display: block; height: 100%; overflow: auto; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
@@ -441,6 +441,47 @@ const STYLE = `
   main.ro [data-plan-add], main.ro [data-plan-del], main.ro [data-plan-scale], main.ro .plan-scale { display: none !important; }
   .notice-btn { margin-left: 10px; background: none; border: 1px solid currentColor; border-radius: 6px; color: inherit; cursor: pointer; padding: 1px 10px; font: inherit; }
   .notice { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--success-color, #43a047) 18%, transparent); border: 1px solid var(--success-color, #43a047); }
+  /* ---- nutrition ---- */
+  .nu-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .nu-table th, .nu-table td { padding: 5px 0; text-align: end; font-weight: 400; border-bottom: 1px solid var(--divider-color); }
+  .nu-table thead th { font-size: 13px; color: var(--secondary-text-color); }
+  .nu-table tbody th { text-align: start; }
+  .nu-table tbody tr:first-child th, .nu-table tbody tr:first-child td { font-weight: 600; }
+  .nu-table td + td, .nu-table th + td { padding-inline-start: 12px; }
+  .nu-table tr.nu-sub th { padding-inline-start: 14px; color: var(--secondary-text-color); font-size: 13px; }
+  .nu-status { margin-top: 10px; }
+  .nu-warn { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--warning-color, #b26a00); font-size: 13px; --mdc-icon-size: 18px; }
+  .nu-src { padding: 0 16px 12px; font-size: 11px; color: var(--secondary-text-color); }
+  .nu .nu-src { padding: 16px 0 0; }
+  .nu-src a { color: inherit; }
+  .nu h3 { margin: 24px 0 8px; }
+  .nu-items, .nu-custom, .nu-results { list-style: none; margin: 0; padding: 0; }
+  .nu-item { padding: 12px 0; border-bottom: 1px solid var(--divider-color); }
+  .nu-item.s-no_match .nu-text, .nu-item.s-no_grams .nu-text { color: var(--warning-color, #b26a00); }
+  .nu-item.s-ignored { opacity: .65; }
+  .nu-line { display: flex; justify-content: space-between; gap: 12px; }
+  .nu-kcal { color: var(--secondary-text-color); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .nu-match { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 14px; --mdc-icon-size: 16px; color: var(--secondary-text-color); }
+  .nu-match b { color: var(--primary-text-color); font-weight: 500; }
+  .nu-tag { font-size: 11px; border-radius: 10px; padding: 1px 8px; background: var(--secondary-background-color); color: var(--secondary-text-color); white-space: nowrap; }
+  .nu-tag.ok { background: color-mix(in srgb, var(--success-color, #43a047) 16%, transparent); color: var(--success-color, #2e7d32); }
+  .nu-tag.auto { background: color-mix(in srgb, var(--warning-color, #ffa600) 18%, transparent); color: var(--warning-color, #b26a00); }
+  .nu-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .nu-acts .btn, .nu-cacts .btn, .nu-unit .btn { padding: 4px 10px; font-size: 13px; }
+  .nu-unit { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 14px; }
+  .nu-unit input { width: 90px; }
+  .nu-picker { margin-top: 10px; padding: 10px; border: 1px solid var(--divider-color); border-radius: 8px; }
+  .nu-results { margin-top: 6px; max-height: 320px; overflow-y: auto; }
+  .nu-results button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: start; padding: 8px; background: none; border: 0; border-radius: 6px; font: inherit; color: inherit; cursor: pointer; }
+  .nu-results button:hover, .nu-results button:focus-visible { background: var(--secondary-background-color); }
+  .nu-custom li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--divider-color); }
+  .nu-cacts { display: flex; gap: 6px; flex-shrink: 0; }
+  .nu-form { margin-top: 16px; }
+  .nu-form h3 { margin-top: 0; }
+  .nu-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .nu-f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--secondary-text-color); }
+  .nu-f.wide { margin-bottom: 4px; }
+  .nu-f input { color: var(--primary-text-color); }
   .panel { background: var(--card-background-color); border-radius: 12px; padding: 16px 20px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
 `;
 class HassRecipesPanel extends HTMLElement {
@@ -631,6 +672,8 @@ class HassRecipesPanel extends HTMLElement {
         return `#/recipe/${view.id}/cook`;
       case "shop":
         return `#/recipe/${view.id}/shop`;
+      case "nutrition":
+        return `#/recipe/${view.id}/nutrition`;
       case "edit":
         return view.id ? `#/recipe/${view.id}/edit` : "#/new";
       case "import":
@@ -654,6 +697,7 @@ class HassRecipesPanel extends HTMLElement {
       const id = parts[1];
       if (parts[2] === "cook") return { name: "cook", id, step: 0 };
       if (parts[2] === "shop") return { name: "shop", id };
+      if (parts[2] === "nutrition") return { name: "nutrition", id };
       if (parts[2] === "edit") return { name: "edit", id };
       return { name: "detail", id };
     }
@@ -712,6 +756,7 @@ class HassRecipesPanel extends HTMLElement {
     if (view.name !== "import") this._bulk = null;
     if (view.name === "edit") this._initForm(view.id);
     if (view.name === "data" && prev.name !== "data") this._loadTrash();
+    if (view.name === "nutrition" && prev.name !== "nutrition") this._nu = null;
     if (mode !== "none") {
       const same = prev && prev.name === view.name && prev.id === view.id;
       try {
@@ -776,6 +821,12 @@ class HassRecipesPanel extends HTMLElement {
         bottom: "",
       };
     }
+    if (v.name === "nutrition" && this._recipe(v.id)) {
+      return {
+        header: `${iconBtn("back", "arrow-left", "Back")}<div class="main-title"><b>${esc(T("Nutrition"))}</b><span>${esc(this._recipe(v.id).name)}</span></div>`,
+        bottom: "",
+      };
+    }
     if (v.name === "edit") {
       return { header: `${iconBtn("cancel", "arrow-left", "Back")}<div class="main-title"><b>${esc(T(v.id ? "Edit recipe" : "New recipe"))}</b></div>`, bottom: "" };
     }
@@ -829,6 +880,7 @@ class HassRecipesPanel extends HTMLElement {
       body = this._planHtml();
     }
     else if (v.name === "shop" && this._recipe(v.id)) body = this._shopHtml(this._recipe(v.id));
+    else if (v.name === "nutrition" && this._recipe(v.id)) body = this._nutritionHtml(this._recipe(v.id));
     else if (v.name === "cook" && this._recipe(v.id)) {
       const r = this._recipe(v.id);
       body = this._cookFocus ? this._cookHtml(r) : this._cookAllHtml(r);
@@ -885,6 +937,7 @@ class HassRecipesPanel extends HTMLElement {
     this._bindPlan(root, on);
     this._bindBrowser(root, on);
     if (this._view.name === "detail") this._bindDetail(root, on);
+    if (this._view.name === "nutrition") this._bindNutrition(root, on);
     on("[data-cookbook]", "click", (e) => this._applyCookbook(e.currentTarget.dataset.cookbook));
     on("[data-tab-btn]", "click", (e) => {
       this._tab = e.currentTarget.dataset.tabBtn;
@@ -1150,6 +1203,9 @@ class HassRecipesPanel extends HTMLElement {
         this._go({ name: "shop", id }, true);
         break;
       }
+      case "nutrition":
+        this._go({ name: "nutrition", id }, true);
+        break;
       case "shop-add":
         await this._shopAdd(id);
         break;

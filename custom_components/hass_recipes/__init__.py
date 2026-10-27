@@ -51,6 +51,8 @@ from .lovelace_resource import async_ensure_resource, async_remove_resource, res
 from .intents import async_install_sentences, async_remove_intents, async_setup_intents
 from .scraper import RecipeImportError, async_import_url
 from .mealplan import MealPlan, MealPlanError
+from .nutrition import FoodDatabase
+from .nutrition_store import Nutrition
 from .shopping import (
     _base_servings,
     async_add_plan_to_shopping_list,
@@ -101,6 +103,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
     plan = MealPlan(hass, store)
     await plan.async_load()
     hass.data[f"{DOMAIN}_plan"] = plan
+
+    food_db = await hass.async_add_executor_job(FoodDatabase.load)
+    nutrition = Nutrition(hass, store, food_db)
+    await nutrition.async_load()
+    hass.data[f"{DOMAIN}_nutrition"] = nutrition
 
     @callback
     def _recipe_deleted(event: Event) -> None:
@@ -350,6 +357,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> 
     hass.data.pop(DOMAIN, None)
     hass.data.pop(f"{DOMAIN}_timers", None)
     hass.data.pop(f"{DOMAIN}_plan", None)
+    hass.data.pop(f"{DOMAIN}_nutrition", None)
     hass.data.pop(f"{DOMAIN}_entry", None)
     hass.data.pop(f"{DOMAIN}_images", None)
     return True

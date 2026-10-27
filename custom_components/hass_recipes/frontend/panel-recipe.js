@@ -493,7 +493,7 @@ export default function (h) {
         ? `<ha-card class="rd-notes" header="${esc(T("Notes"))}"><div class="card-content" style="white-space:pre-wrap">${esc(r.notes)}</div></ha-card>`
         : "";
       this._fab = `<ha-button class="fab" size="l" data-act="cook" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>Cook</ha-button>`;
-      return `<div class="rd"><div class="rd-left">${info}${ingredients}${notes}</div><div class="rd-right">${steps}</div></div>`;
+      return `<div class="rd"><div class="rd-left">${info}${ingredients}${this._nutritionCardHtml(r, k)}${notes}</div><div class="rd-right">${steps}</div></div>`;
     },
 
     /** Wire up the HA elements of the recipe page. */

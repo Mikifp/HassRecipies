@@ -44,6 +44,7 @@ TIMER_UNIQUE_PREFIX = "timer_"
 SERVICE_SNOOZE_TIMER = "snooze_timer"
 DEFAULT_SNOOZE_SECONDS = 120
 MEALPLAN_STORAGE_KEY = f"{DOMAIN}.mealplan"
+NUTRITION_STORAGE_KEY = f"{DOMAIN}.nutrition"
 SERVICE_PLAN_MEAL = "plan_meal"
 SERVICE_CLEAR_MEAL_PLAN = "clear_meal_plan"
 SERVICE_PLAN_TO_SHOPPING_LIST = "add_plan_to_shopping_list"
