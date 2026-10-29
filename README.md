@@ -81,7 +81,7 @@ The **Tracker** tab keeps a daily log of what each person eats, with kcal first 
 
 - **People:** every Home Assistant user gets a log of their own on first use, and you can add people by name. Everyone can look at every log; only the person (the user), an administrator, or anyone for a name added by hand can change it.
 - **Day view:** a gauge for kcal against the goal, smaller ones for protein, carbs and fat, and the meals of the day (the meal plan's own meals). Step through the days with the arrows.
-- **Add food:** search recipes and foods in one list, pick a favourite or a recent item, or write a quick entry (a name and kcal). A recipe is logged by servings, a food by grams or one of its units (for example *2 æg*).
+- **Add food:** search recipes and foods in one list, pick a favourite or a recent item, or write a quick entry (a name and kcal). A recipe is logged in servings, by what it makes (*2 boller* of a recipe that makes 12) or by weight (*250 g* of a porridge), a food by grams or one of its units (for example *2 æg*). A recipe weighs what its ingredients weigh.
 - **Meal plan:** a planned meal that is not logged yet is offered as **Log as eaten**.
 - **Goals:** kcal, protein, carbs and fat per person (the menu next to the people).
 - **Week and month:** a chart of kcal per day against the goal, and the average of the days you logged.

@@ -21,6 +21,18 @@ export default function (h) {
     if (iso === isoDate(addDays(parseDay(today), 1))) return T("Tomorrow");
     return new Intl.DateTimeFormat(state.language || undefined, { weekday: "short", day: "numeric", month: "short" }).format(parseDay(iso));
   };
+  /** "2 servings", "2 boller", "150 g": what an entry or a recent item is an amount of. */
+  const howText = (e) => {
+    if (e.kind === "recipe") {
+      const by = e.by || "servings";
+      if (by === "yield") return `${num(e.amount, 2)} ${e.unit || ""}`.trim();
+      if (by === "grams") return `${num(e.amount, 1)} g`;
+      const n = e.amount ?? e.servings;
+      return `${num(n, 2)} ${T(n === 1 ? "serving" : "servings")}`;
+    }
+    if (e.kind === "food") return `${num(e.amount, 1)} ${e.unit}`;
+    return T("Quick entry");
+  };
   const monthFirst = (iso) => `${iso.slice(0, 8)}01`;
   const monthLast = (iso) => {
     const d = parseDay(iso);
@@ -184,7 +196,7 @@ export default function (h) {
           const kcal = rows.reduce((n, e) => n + (e.kcal || 0), 0);
           const list = rows
             .map((e) => {
-              const how = e.kind === "recipe" ? `${num(e.servings, 2)} ${T(e.servings === 1 ? "serving" : "servings")}` : e.kind === "food" ? `${num(e.amount, 1)} ${e.unit}` : T("Quick entry");
+              const how = howText(e);
               const macro = MACROS.map(([k, l]) => (e[k] != null ? `${num(e[k])} g ${T(l).toLowerCase()}` : "")).filter(Boolean).join(" · ");
               return `<ha-list-item-button data-tkentry="${esc(e.id)}" headline="${esc(e.name)}" supporting-text="${esc([how, macro].filter(Boolean).join(" · "))}"><span slot="end" class="tk-ekcal">${num(e.kcal)} kcal</span></ha-list-item-button>`;
             })
@@ -439,10 +451,19 @@ export default function (h) {
       const n = (v) => (v == null || v === "" ? null : Number(v));
       if (draft.kind === "quick") return { kcal: n(draft.kcal), protein: n(draft.protein), carbs: n(draft.carbs), fat: n(draft.fat) };
       if (draft.kind === "recipe") {
-        const per = ctx.perServing;
-        if (!per) return null;
-        const s = Number(draft.servings) || 0;
-        return { kcal: per.kcal == null ? null : per.kcal * s, protein: per.protein == null ? null : per.protein * s, carbs: per.carbs == null ? null : per.carbs * s, fat: per.fat == null ? null : per.fat * s };
+        const b = ctx.basis;
+        if (!b) return null;
+        const amount = Number(draft.amount) || 0;
+        let per = b.total;
+        let factor = 0;
+        if (draft.by === "yield") factor = b.yield_amount ? amount / b.yield_amount : 0;
+        else if (draft.by === "grams") factor = b.grams ? amount / b.grams : 0;
+        else {
+          per = b.per_serving || b.total;
+          factor = amount;
+        }
+        const f = (k) => (per[k] == null ? null : per[k] * factor);
+        return { kcal: f("kcal"), protein: f("protein"), carbs: f("carbs"), fat: f("fat") };
       }
       const food = ctx.food;
       if (!food) return null;
@@ -457,17 +478,32 @@ export default function (h) {
       const meals = this._planMeals();
       const ctx = {};
       if (draft.kind === "food") ctx.food = (await this._tkFoods()).find((f) => f.id === draft.food_id);
+      let ways = [];
       if (draft.kind === "recipe") {
         try {
-          const r = await this._ws({ type: "hass_recipes/nutrition", recipe_id: draft.recipe_id });
-          ctx.perServing = r && (r.per_serving || r.total);
+          ctx.basis = await this._ws({ type: "hass_recipes/tracker_recipe", recipe_id: draft.recipe_id });
         } catch (err) {
-          ctx.perServing = null;
+          ctx.basis = null;
         }
+        const b = ctx.basis;
+        // a recipe can be measured in servings, by what it makes (2 boller) or by weight
+        ways = [{ value: "servings", label: b && b.servings ? T("servings") : T("of the whole recipe") }];
+        if (b && b.yield_amount) ways.push({ value: "yield", label: b.yield_unit || T("pieces") });
+        if (b && b.grams) ways.push({ value: "grams", label: T("g (weight)") });
+        // the amount to start from for each way of measuring
+        ctx.start = (by) => (by === "grams" ? Math.max(1, Math.round(b.grams / (b.servings || 4))) : 1);
+        if (!ways.some((w) => w.value === draft.by)) {
+          draft.by = "servings";
+          draft.amount = 1;
+        }
+        if (draft.amount == null) draft.amount = ctx.start(draft.by);
       }
       const num0 = (min, step) => ({ number: { min, max: 100000, step, mode: "box" } });
       const schema = [];
-      if (draft.kind === "recipe") schema.push({ name: "servings", required: true, selector: num0(0.25, 0.25) });
+      if (draft.kind === "recipe") {
+        schema.push({ name: "amount", required: true, selector: num0(0, 0.25) });
+        schema.push({ name: "by", required: true, selector: { select: { mode: "dropdown", options: ways } } });
+      }
       if (draft.kind === "food") {
         schema.push({ name: "amount", required: true, selector: num0(0, 1) });
         const units = ["g", ...Object.keys((ctx.food && ctx.food.unit_grams) || {})];
@@ -478,7 +514,7 @@ export default function (h) {
         for (const [k] of MACROS) schema.push({ name: k, selector: num0(0, 0.1) });
       }
       schema.push({ name: "meal", required: true, selector: { select: { mode: "dropdown", options: meals.map((m) => ({ value: m.id, label: this._planLabel(m.id) })) } } });
-      const labels = { servings: "Servings", amount: "Amount", unit: "Unit", name: "Name", kcal: "Energy (kcal)", protein: "Protein (g)", carbs: "Carbohydrates (g)", fat: "Fat (g)", meal: "Meal" };
+      const labels = { by: "Measured in", amount: "Amount", unit: "Unit", name: "Name", kcal: "Energy (kcal)", protein: "Protein (g)", carbs: "Carbohydrates (g)", fat: "Fat (g)", meal: "Meal" };
       body.innerHTML = `<div class="tk-fhead"><b>${esc(draft.name || "")}</b></div>
         <ha-form id="tk-f"></ha-form>
         <div class="tk-preview muted" id="tk-pv"></div>
@@ -499,8 +535,11 @@ export default function (h) {
       form.computeLabel = (sc) => T(labels[sc.name] || sc.name);
       form.addEventListener("value-changed", (e) => {
         e.stopPropagation();
+        const before = draft.by;
         Object.assign(draft, e.detail.value || {});
-        form.data = draft;
+        // measuring in something else starts from a sensible amount (a serving, a piece, an average portion in grams)
+        if (draft.kind === "recipe" && draft.by !== before && ctx.start) draft.amount = ctx.start(draft.by);
+        form.data = { ...draft }; // a new object, so the form shows the amount that was set for the new unit
         preview();
       });
       preview();
@@ -513,7 +552,7 @@ export default function (h) {
     /** The ws message that logs `draft` on a day in a meal. */
     _tkPayload(draft) {
       const base = { kind: draft.kind, meal: draft.meal };
-      if (draft.kind === "recipe") return { ...base, recipe_id: draft.recipe_id, servings: Number(draft.servings) };
+      if (draft.kind === "recipe") return { ...base, recipe_id: draft.recipe_id, by: draft.by || "servings", amount: Number(draft.amount) };
       if (draft.kind === "food") return { ...base, food_id: draft.food_id, amount: Number(draft.amount), unit: draft.unit || "g" };
       const q = { ...base, name: draft.name, kcal: Number(draft.kcal) };
       for (const [k] of MACROS) if (draft[k] !== "" && draft[k] != null) q[k] = Number(draft[k]);
@@ -534,7 +573,14 @@ export default function (h) {
             draft.amount = draft.amount ?? 100;
             draft.unit = draft.unit || "g";
           }
-          if (draft.kind === "recipe") draft.servings = draft.servings ?? 1;
+          if (draft.kind === "recipe") {
+            // an older item has servings; a newer one says how it was measured
+            if (draft.by == null) {
+              draft.by = "servings";
+              draft.amount = draft.amount ?? draft.servings ?? 1;
+            }
+            delete draft.servings;
+          }
           this._tkForm(dlg, draft, {
             saveLabel: T("Add"),
             onBack: pick,
@@ -548,7 +594,7 @@ export default function (h) {
           });
         };
         const label = (item) => (item.kind === "recipe" ? "mdi:chef-hat" : item.kind === "food" ? "mdi:food-apple-outline" : "mdi:pencil-outline");
-        const how = (t) => (t.kind === "recipe" ? `${num(t.servings, 2)} ${T("servings")}` : t.kind === "food" ? `${num(t.amount, 1)} ${t.unit}` : `${num(t.kcal)} kcal`);
+        const how = (t) => (t.kind === "quick" ? `${num(t.kcal)} kcal` : howText(t));
         const pick = () => {
           body.innerHTML = `<ha-input-search id="tk-q" appearance="outlined" placeholder="${esc(T("Search recipes and foods"))}"></ha-input-search><div id="tk-res" class="tk-res"></div>`;
           const res = body.querySelector("#tk-res");
@@ -570,7 +616,7 @@ export default function (h) {
             }
             const recipes = this._recipes.filter((r) => !needle || r.name.toLowerCase().includes(needle)).slice(0, needle ? 15 : 5);
             const found = fl.rankFoods(foods, [], needle, []).slice(0, needle ? 20 : 8);
-            if (recipes.length) out += head("Recipes") + recipes.map((r) => row({ kind: "recipe", recipe_id: r.id, name: r.name }, r.servings ? `${r.servings} ${T("servings")}` : "")).join("");
+            if (recipes.length) out += head("Recipes") + recipes.map((r) => row({ kind: "recipe", recipe_id: r.id, name: r.name }, r.servings ? `${r.servings} ${T("servings")}` : r.yield_amount ? `${r.yield_amount} ${r.yield_unit || ""}`.trim() : "")).join("");
             if (found.length) out += head("Foods") + found.map((f) => row({ kind: "food", food_id: f.id, name: f.name }, f.values.kcal != null ? `${num(f.values.kcal)} kcal / 100 g` : T("No nutrition yet"))).join("");
             out += `<ha-list-item-button data-quick headline="${esc(T("Quick entry"))}" supporting-text="${esc(needle ? q.trim() : T("A name and kcal"))}"><ha-icon slot="start" icon="mdi:pencil-outline"></ha-icon></ha-list-item-button>`;
             res.innerHTML = `<ha-list-base>${out}</ha-list-base>`;
@@ -594,7 +640,7 @@ export default function (h) {
     _tkEntryDialog(entry) {
       const st = this._tkState();
       const d = st.data;
-      const starred = (d.favourites || []).some((f) => ["kind", "recipe_id", "food_id", "servings", "amount", "unit", "name"].every((k) => f[k] === entry[k]));
+      const starred = (d.favourites || []).some((f) => ["kind", "recipe_id", "food_id", "by", "amount", "unit", "name"].every((k) => f[k] === entry[k]));
       this._planDialog(entry.name, `<div id="tk-body"></div>`, (dlg, close) => {
         const draft = { ...entry };
         this._tkForm(dlg, draft, {

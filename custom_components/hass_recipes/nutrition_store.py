@@ -103,13 +103,44 @@ class Nutrition:
         values = {k: None if info["values"].get(k) is None else info["values"][k] * grams / 100 for k in ("kcal", "protein", "carbs", "fat")}
         return {"name": food["name"], "grams": grams, **values}
 
-    def recipe_amount(self, recipe_id: str, servings: float = 1.0) -> dict[str, Any] | None:
-        """Energy and macros of ``servings`` of a recipe (the whole recipe when it has no number of servings)."""
+    def recipe_basis(self, recipe_id: str) -> dict[str, Any] | None:
+        """What an amount of a recipe can be given in: servings, what it makes (24 boller) or a weight in grams."""
+        recipe = self._recipes.get(recipe_id)
         result = self.for_recipe(recipe_id)
-        if result is None:
+        if recipe is None or result is None:
             return None
-        per = result["per_serving"] or result["total"]
-        return {k: None if per.get(k) is None else per[k] * servings for k in ("kcal", "protein", "carbs", "fat")}
+        grams = sum(i["grams"] for i in result["items"] if i.get("grams") is not None and i["status"] not in ("ignored", "no_match"))
+        yield_amount = recipe.get("yield_amount")
+        return {
+            "name": recipe["name"],
+            "total": result["total"],
+            "per_serving": result["per_serving"],
+            "servings": result["servings"],
+            "yield_amount": yield_amount if isinstance(yield_amount, (int, float)) and yield_amount > 0 else None,
+            "yield_unit": (recipe.get("yield_unit") or "").strip(),
+            "grams": round(grams, 1) or None,
+        }
+
+    def recipe_amount(self, recipe_id: str, amount: float = 1.0, by: str = "servings") -> dict[str, Any] | None:
+        """Energy and macros of an amount of a recipe: ``by`` servings (the whole recipe when it has no number of
+        servings), what the recipe makes (``yield``, 2 of 24 boller) or ``grams`` of the finished recipe."""
+        basis = self.recipe_basis(recipe_id)
+        if basis is None:
+            return None
+        if by == "servings":
+            per = basis["per_serving"] or basis["total"]
+            factor = amount
+        elif by == "yield":
+            if not basis["yield_amount"]:
+                raise NutritionError("This recipe does not say what it makes")
+            per, factor = basis["total"], amount / basis["yield_amount"]
+        elif by == "grams":
+            if not basis["grams"]:
+                raise NutritionError("This recipe has no weight yet: its ingredients need weights")
+            per, factor = basis["total"], amount / basis["grams"]
+        else:
+            raise NutritionError(f"Unknown way to measure a recipe: {by}")
+        return {k: None if per.get(k) is None else per[k] * factor for k in ("kcal", "protein", "carbs", "fat")}
 
     def shopping_food(self, parsed: dict[str, Any]) -> dict[str, Any] | None:
         """The user's food that an ingredient line is, with what the line weighs in grams (None if that cannot be told)."""

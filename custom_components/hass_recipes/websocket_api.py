@@ -161,6 +161,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_tracker_person_delete,
         ws_tracker_favourite,
         ws_tracker_log_plan,
+        ws_tracker_recipe,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -1212,6 +1213,7 @@ _NUM = vol.Any(None, vol.Coerce(float))
         vol.Optional("recipe_id"): str,
         vol.Optional("food_id"): str,
         vol.Optional("servings"): _NUM,
+        vol.Optional("by"): vol.In(["servings", "yield", "grams"]),
         vol.Optional("amount"): _NUM,
         vol.Optional("unit"): vol.All(str, vol.Length(max=40)),
         vol.Optional("name"): vol.All(str, vol.Length(max=120)),
@@ -1236,6 +1238,7 @@ async def ws_tracker_add(hass, connection, msg, tracker) -> None:
         vol.Optional("date"): _DAY,
         vol.Optional("meal"): str,
         vol.Optional("servings"): _NUM,
+        vol.Optional("by"): vol.In(["servings", "yield", "grams"]),
         vol.Optional("amount"): _NUM,
         vol.Optional("unit"): vol.All(str, vol.Length(max=40)),
         vol.Optional("name"): vol.All(str, vol.Length(max=120)),
@@ -1320,3 +1323,14 @@ async def ws_tracker_log_plan(hass, connection, msg, tracker) -> None:
         raise TrackerError("That planned meal has no recipe")
     entry = tracker.add(msg["person_id"], plan["date"], plan["slot"], "recipe", recipe_id=plan["recipe_id"], servings=msg["servings"], plan_id=plan["id"])
     connection.send_result(msg["id"], entry)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/tracker_recipe", vol.Required("recipe_id"): str})
+@callback
+def ws_tracker_recipe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """What a recipe can be logged in (servings, what it makes, grams) and its nutrition for them."""
+    basis = _nutrition(hass).recipe_basis(msg["recipe_id"])
+    if basis is None:
+        connection.send_error(msg["id"], "not_found", "Recipe not found")
+        return
+    connection.send_result(msg["id"], basis)
