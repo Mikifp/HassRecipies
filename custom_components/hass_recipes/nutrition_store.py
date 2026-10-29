@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import NUTRITION_STORAGE_KEY, STORAGE_VERSION
+from .food_groups import suggest_groups
 from .foods import SOURCE_NONE, FoodBook, FoodError, clean_unit_grams
 from .nutrition import (
     NUTRIENTS,
@@ -267,6 +268,7 @@ class Nutrition:
         return {
             "foods": foods,
             "review": review,
+            "groups": suggest_groups(review, foods),
             "ignored": list(self.book.ignored),
             "counts": {
                 "foods": len(foods),
@@ -300,6 +302,35 @@ class Nutrition:
             raise NutritionError(str(err)) from err
         self._save()
         return self._describe_food(merged, self._usage()[0])
+
+    def assign_groups(self, groups: list[dict[str, Any]]) -> int:
+        """Assign groups of ingredient names, each to a food that is there or one made from a Frida or USDA food.
+
+        A group that cannot be done is left alone; the others are. Returns how many names were assigned."""
+        done = 0
+        for group in groups:
+            keys = [k for k in dict.fromkeys(food_key(k) for k in group["keys"]) if k]
+            if not keys:
+                continue
+            snapshot = copy.deepcopy((self.book.foods, self.book.ignored))
+            try:
+                if group.get("food_id"):
+                    food = self.book.foods[group["food_id"]]
+                elif group.get("source") in (SOURCE_FRIDA, SOURCE_USDA) and group.get("source_id") is not None:
+                    ensure = self.book.ensure_frida_food if group["source"] == SOURCE_FRIDA else self.book.ensure_usda_food
+                    food = ensure(int(group["source_id"]), keys[0])
+                else:
+                    food = self.book.create({"name": group.get("name") or keys[0], "source": SOURCE_NONE})
+                    food["auto"] = False
+                for key in keys:
+                    self.book.link_key(key, food["id"])
+            except (FoodError, KeyError, ValueError):
+                self.book.foods, self.book.ignored = snapshot
+                continue
+            done += len(keys)
+        if done:
+            self._save()
+        return done
 
     def link_to_food(self, key: str, food_id: str) -> dict[str, Any]:
         """Say that an ingredient name is one of the user's foods (it becomes another name of it)."""

@@ -238,6 +238,53 @@ def test_several_names_are_linked_to_one_food_all_or_none():
     assert _raises(lambda: n.link_many(["x"], "nope"))
 
 
+# ---- suggested groups ----------------------------------------------------------
+
+def _groups(n):
+    return {g["id"]: g for g in n.foods_overview()["groups"]}
+
+
+def test_names_with_a_food_you_have_in_them_are_grouped_to_it():
+    recipes, n = _make()
+    recipes.create({"name": "A", "ingredients": ["1 hvedemel", "2 hvedemel fint", "1 kartoffelmel"]})
+    flour = n.save_food({"name": "Hvedemel", "source": "frida", "frida_id": HVEDEMEL})
+    [g] = [g for g in n.foods_overview()["groups"] if g["reason"] == "food"]
+    assert g["target"]["food_id"] == flour["id"] and g["keys"] == ["hvedemel fint"] and g["match"] is True
+
+
+def test_a_name_with_two_of_your_foods_in_it_is_not_grouped_to_either():
+    recipes, n = _make()
+    recipes.create({"name": "A", "ingredients": ["1 smør eller olie"]})
+    n.save_food({"name": "Smør"})
+    n.save_food({"name": "Olie"})
+    assert n.foods_overview()["groups"] == []
+
+
+def test_names_that_share_a_word_are_grouped_to_a_new_food_without_nutrition():
+    recipes, n = _make()
+    recipes.create({"name": "A", "ingredients": ["1 tsk vaniljeekstrakt", "1 vaniljesukker", "1 drageblod"]})
+    [g] = n.foods_overview()["groups"]
+    assert sorted(g["keys"]) == ["vaniljeekstrakt", "vaniljesukker"]
+    assert g["reason"] == "words" and g["match"] is False and g["target"]["name"] == "Vanilje"
+    assert n.assign_groups([{"keys": g["keys"], "name": g["target"]["name"], "source": "none"}]) == 2
+    [food] = [f for f in n.foods_overview()["foods"] if f["name"] == "Vanilje"]
+    assert sorted(food["aliases"]) == ["vaniljeekstrakt", "vaniljesukker"] and food["source"] == "none"
+    assert n.foods_overview()["groups"] == []
+
+
+def test_assigning_a_group_to_a_frida_food_and_one_that_cannot_be_done():
+    _recipes, n = _make()
+    n.save_food({"name": "Kartoffelmel"})
+    done = n.assign_groups(
+        [
+            {"keys": ["mel", "hvid mel"], "source": "frida", "source_id": HVEDEMEL},
+            {"keys": ["x", "kartoffelmel"], "name": "X", "source": "none"},  # one name is another food's: none of the group
+        ]
+    )
+    assert done == 2 and "x" not in n.book.by_key() and n.links()["hvid mel"]["id"] == HVEDEMEL
+    assert [f["name"] for f in n.foods_overview()["foods"]] == ["Kartoffelmel", "Mel"]
+
+
 # ---- the overview and adopting suggestions ---------------------------------------
 
 def test_the_overview_lists_foods_with_use_and_names_in_recipes_that_need_a_food():

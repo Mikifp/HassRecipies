@@ -148,6 +148,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_foods_merge,
         ws_foods_adopt,
         ws_foods_link,
+        ws_foods_assign,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -1033,6 +1034,30 @@ def ws_foods_merge(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
         connection.send_error(msg["id"], "invalid", str(err))
         return
     connection.send_result(msg["id"], food)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/foods_assign",
+        vol.Required("groups"): vol.All(
+            [
+                {
+                    vol.Required("keys"): vol.All([vol.All(str, vol.Length(min=1, max=200))], vol.Length(min=1, max=50)),
+                    vol.Optional("food_id"): str,
+                    vol.Optional("name"): vol.All(str, vol.Length(max=200)),
+                    vol.Optional("source"): vol.In(["frida", "usda", "none"]),
+                    vol.Optional("source_id"): vol.Any(int, None),
+                }
+            ],
+            vol.Length(min=1, max=100),
+        ),
+    }
+)
+@callback
+@_edits
+def ws_foods_assign(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Assign groups of ingredient names to foods (the suggested groups on the review list)."""
+    connection.send_result(msg["id"], {"assigned": _nutrition(hass).assign_groups(msg["groups"])})
 
 
 @websocket_api.websocket_command(
