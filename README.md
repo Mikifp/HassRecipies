@@ -80,7 +80,7 @@ The **USDA Foundation Foods** (about 370 generic foods, English names) are from 
 The **Tracker** tab keeps a daily log of what each person eats, with kcal first and the macros beside it.
 
 - **People:** every Home Assistant user gets a log of their own on first use, and you can add people by name. Everyone can look at every log; only the person (the user), an administrator, or anyone for a name added by hand can change it.
-- **Day view:** a gauge for kcal against the goal, smaller ones for protein, carbs and fat, and the meals of the day (the meal plan's own meals). Step through the days with the arrows.
+- **Day view:** a large number for what is left of the day's kcal (it turns red and says what is over), with a thin bar under it, and the meals of the day (the meal plan's own meals). The macros are hidden to start with; the person's menu can show them as bars, gauges or chips (kept in your browser), also in the week and month views. With no goal set the card is short and offers to set one or open the calculator.
 - **Add food:** search recipes and foods in one list, pick a favourite or a recent item, or write a quick entry (a name and kcal). A recipe is logged in servings, by what it makes (*2 boller* of a recipe that makes 12) or by weight (*250 g* of a porridge), a food by grams or one of its units (for example *2 æg*). A recipe weighs what its ingredients weigh.
 - **Meal plan:** a planned meal that is not logged yet is offered as **Log as eaten**.
 - **Quick logging:** each meal shows chips for what you most often eat in it (one tap logs it), **Copy yesterday** logs yesterday's entries again in the same meals, and a slim summary stays at the top while you scroll. On a phone, Add food opens as a sheet with large steppers for the amount.

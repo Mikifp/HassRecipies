@@ -33,6 +33,14 @@ export default function (h) {
     if (e.kind === "food") return `${num(e.amount, 1)} ${e.unit}`;
     return T("Quick entry");
   };
+  const MACRO_KEY = "hass_recipes_tracker_macros";
+  // how the macros are shown, if at all: kcal only is the start
+  const MACRO_STYLES = [
+    ["off", "Hide macros", "eye-off-outline"],
+    ["bars", "Show macros as bars", "chart-bar"],
+    ["gauges", "Show macros as gauges", "gauge"],
+    ["chips", "Show macros as chips", "tag-outline"],
+  ];
   /** "Deficit 520 kcal" or "Surplus 120 kcal": what was eaten against maintenance. */
   const deficitText = (deficit) => (deficit >= 0 ? `${T("Deficit")} ${num(deficit)} kcal` : `${T("Surplus")} ${num(-deficit)} kcal`);
   const monthFirst = (iso) => `${iso.slice(0, 8)}01`;
@@ -136,6 +144,7 @@ export default function (h) {
             <ha-dropdown id="tk-menu"><ha-icon-button slot="trigger" label="${esc(T("More"))}"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
               ${p.editable ? `<ha-dropdown-item value="calc"><ha-icon slot="icon" icon="mdi:calculator-variant-outline"></ha-icon>${esc(T("Calorie calculator"))}</ha-dropdown-item>` : ""}
               ${p.editable ? `<ha-dropdown-item value="weight"><ha-icon slot="icon" icon="mdi:scale-bathroom"></ha-icon>${esc(T("Log weight"))}</ha-dropdown-item>` : ""}
+              ${MACRO_STYLES.map(([id, label, icon]) => `<ha-dropdown-item value="macros-${id}"><ha-icon slot="icon" icon="mdi:${this._tkMacroStyle() === id ? "check" : icon}"></ha-icon>${esc(T(label))}</ha-dropdown-item>`).join("")}
               ${p.editable ? `<ha-dropdown-item value="goals"><ha-icon slot="icon" icon="mdi:target"></ha-icon>${esc(T("Edit goals"))}</ha-dropdown-item>` : ""}
               ${p.editable && (!p.user_id || this._tkAdmin()) ? `<ha-dropdown-item value="person-delete" variant="danger"><ha-icon slot="icon" icon="mdi:account-remove-outline"></ha-icon>${esc(`${T("Remove")} ${p.name}`)}</ha-dropdown-item>` : ""}
             </ha-dropdown>
@@ -164,36 +173,65 @@ export default function (h) {
       const goals = d.person.goals;
       const t = d.totals;
       const left = goals.kcal != null ? goals.kcal - t.kcal : null;
-      const macros = MACROS.map(([k, l]) => `${T(l).charAt(0)} ${num(t[k])}${goals[k] ? `/${num(goals[k])}` : ""}`).join(" · ");
-      return `<div id="tk-pin" class="tk-pin" hidden><b class="${left != null && left < 0 ? "tk-over" : ""}">${left == null ? num(t.kcal) : num(Math.abs(left))}</b> ${esc(left == null ? "kcal" : T(left >= 0 ? "kcal left" : "kcal over"))}<span class="muted"> · ${num(t.kcal)}${goals.kcal ? ` / ${num(goals.kcal)}` : ""} kcal · ${esc(macros)}</span></div>`;
+      const macros = this._tkMacroStyle() === "off" ? "" : MACROS.map(([k, l]) => `${T(l).charAt(0)} ${num(t[k])}${goals[k] ? `/${num(goals[k])}` : ""}`).join(" · ");
+      return `<div id="tk-pin" class="tk-pin" hidden><b class="${left != null && left < 0 ? "tk-over" : ""}">${left == null ? num(t.kcal) : num(Math.abs(left))}</b> ${esc(left == null ? "kcal" : T(left >= 0 ? "kcal left" : "kcal over"))}<span class="muted"> · ${num(t.kcal)}${goals.kcal ? ` / ${num(goals.kcal)}` : ""} kcal${macros ? ` · ${esc(macros)}` : ""}</span></div>`;
+    },
+
+    /** How the macros are shown (bars, gauges or chips): kept in this browser. */
+    _tkMacroStyle() {
+      try {
+        const v = localStorage.getItem(MACRO_KEY);
+        return MACRO_STYLES.some((x) => x[0] === v) ? v : "off";
+      } catch (_) {
+        return "off";
+      }
+    },
+
+    /** The macros of the day, in the chosen style. Over a goal, only that macro turns red. */
+    _tkMacrosHtml(totals, goals, style) {
+      const row = ([k, label]) => {
+        const goal = goals[k];
+        const over = goal && totals[k] > goal;
+        const amount = goal ? `${num(totals[k])} / ${num(goal)} g` : `${num(totals[k])} g`;
+        if (style === "chips") {
+          const pct = goal ? ` · ${Math.round((totals[k] / goal) * 100)}%` : "";
+          return `<ha-assist-chip class="tk-mchip ${over ? "over" : ""}" label="${esc(`${T(label)} ${amount}${pct}`)}"></ha-assist-chip>`;
+        }
+        if (style === "gauges") return `<div class="tk-macro"><ha-gauge id="tk-g-${k}"></ha-gauge><div class="tk-mlabel">${esc(T(label))}<br><b class="${over ? "tk-over" : ""}">${amount}</b></div></div>`;
+        return `<div class="tk-mrow"><span>${esc(T(label))}</span><ha-control-slider id="tk-s-${k}" class="${over ? "over" : ""}"></ha-control-slider><span class="${over ? "tk-over" : "muted"}">${amount}</span></div>`;
+      };
+      return `<div class="tk-macros tk-m-${style}">${MACROS.map(row).join("")}</div>`;
     },
 
     _tkSummaryHtml(totals, goals, editable, d) {
-      const left = goals.kcal != null ? goals.kcal - totals.kcal : null;
-      const macros = MACROS.map(
-        ([k, label]) => `<div class="tk-macro"><ha-gauge id="tk-g-${k}"></ha-gauge><div class="tk-mlabel">${esc(T(label))}<br><b>${num(totals[k])}</b>${goals[k] ? ` / ${num(goals[k])} g` : " g"}</div></div>`
-      ).join("");
-      return `<ha-card class="tk-summary"><div class="card-content">
-          <div class="tk-kcal">
-            <ha-gauge id="tk-g-kcal"></ha-gauge>
-            <div class="tk-ktext">
-              <div class="tk-big">${num(totals.kcal)} <span>kcal</span></div>
-              ${d && d.maintenance && totals.kcal ? `<div class="muted">${esc(deficitText(d.maintenance - totals.kcal))} · ${esc(T("maintenance"))} ${num(d.maintenance)}</div>` : ""}
-              ${
-                goals.kcal != null
-                  ? `<div class="${left < 0 ? "tk-over" : "muted"}">${left >= 0 ? `${num(left)} ${esc(T("kcal left"))}` : `${num(-left)} ${esc(T("kcal over"))}`} · ${esc(T("Goal"))} ${num(goals.kcal)}</div>`
-                  : editable
-                    ? `<ha-button size="s" appearance="plain" data-tkact="goals"><ha-icon slot="start" icon="mdi:target"></ha-icon>${esc(T("Set a goal"))}</ha-button>`
-                    : `<div class="muted">${esc(T("No goal set"))}</div>`
-              }
+      const style = this._tkMacroStyle();
+      const goal = goals.kcal;
+      const copy =
+        d && editable && d.previous && d.previous.count
+          ? `<div class="tk-copy"><ha-assist-chip data-tkact="copy" label="${esc(T("Copy yesterday"))}"><ha-icon slot="icon" icon="mdi:content-copy"></ha-icon></ha-assist-chip></div>`
+          : "";
+      const deficit = d && d.maintenance && totals.kcal ? `<div class="muted">${esc(deficitText(d.maintenance - totals.kcal))} · ${esc(T("maintenance"))} ${num(d.maintenance)}</div>` : "";
+      if (goal == null) {
+        // no goal: nothing to measure against, so a short card with the way to set one
+        return `<ha-card class="tk-summary"><div class="card-content">
+            <div class="tk-top">
+              <div><div class="tk-big">${num(totals.kcal)} <span>${esc(T("kcal today"))}</span></div>
+                <div class="muted">${esc(T(editable ? "Set a daily goal to see what is left." : "No goal set"))}</div>${deficit}</div>
+              ${editable ? `<div class="tk-cta"><ha-button size="m" appearance="filled" data-tkact="goals"><ha-icon slot="start" icon="mdi:target"></ha-icon>${esc(T("Set a goal"))}</ha-button>
+                <ha-button size="s" appearance="plain" data-tkact="calc"><ha-icon slot="start" icon="mdi:calculator-variant-outline"></ha-icon>${esc(T("Use the calculator"))}</ha-button></div>` : ""}
             </div>
-          </div>
-          <div class="tk-macros">${macros}</div>
-          ${
-            d && editable && d.previous && d.previous.count
-              ? `<div class="tk-copy"><ha-assist-chip data-tkact="copy" label="${esc(T("Copy yesterday"))}"><ha-icon slot="icon" icon="mdi:content-copy"></ha-icon></ha-assist-chip></div>`
-              : ""
-          }
+            ${totals.kcal ? `<div class="tk-macros tk-m-chips">${MACROS.map(([k, l]) => `<ha-assist-chip label="${esc(`${T(l)} ${num(totals[k])} g`)}"></ha-assist-chip>`).join("")}</div>` : ""}
+            ${copy}
+          </div></ha-card>`;
+      }
+      const left = goal - totals.kcal;
+      // a large number you can read from across the kitchen, with a thin bar under it
+      return `<ha-card class="tk-summary"><div class="card-content tk-c">
+          <div class="tk-huge ${left < 0 ? "tk-over" : ""}">${num(Math.abs(left))}</div>
+          <div class="muted">${esc(T(left >= 0 ? "kcal left today" : "kcal over today"))} · ${esc(T("goal"))} ${num(goal)}</div>${deficit}
+          <ha-control-slider id="tk-s-kcal" class="tk-kbar ${left < 0 ? "over" : ""}"></ha-control-slider>
+          ${style === "off" ? "" : this._tkMacrosHtml(totals, goals, style)}
+          ${copy}
         </div></ha-card>`;
     },
 
@@ -267,7 +305,7 @@ export default function (h) {
                 : ""
           }
           ${this._tkWeightCardHtml(r, st.data.person)}
-          <div class="tk-avg">${MACROS.map(([k, label]) => `<div><div class="muted">${esc(T(label))}</div><b>${avg[k] == null ? "–" : num(avg[k])} g</b></div>`).join("")}</div>
+          ${this._tkMacroStyle() === "off" ? "" : `<div class="tk-avg">${MACROS.map(([k, label]) => `<div><div class="muted">${esc(T(label))}</div><b>${avg[k] == null ? "–" : num(avg[k])} g</b></div>`).join("")}</div>`}
           <div id="tk-chart" class="tk-chart"></div>
         </div></ha-card>`;
     },
@@ -305,26 +343,45 @@ export default function (h) {
           this._tkObs = new IntersectionObserver(([entry]) => (pin.hidden = entry.isIntersecting || entry.boundingClientRect.top > 0), { threshold: 0 });
           this._tkObs.observe(card);
         }
-        const ready = await this._tkElement("ha-gauge", { type: "gauge", entity: "sun.sun" });
-        if (!ready && !customElements.get("ha-gauge")) await new Promise((r) => setTimeout(r, 3000));
-        if (!root.getElementById("tk-g-kcal")) return;
-        const { totals } = st.data;
         const goals = st.data.person.goals;
-        const set = (id, value, goal, label, size) => {
-          const g = root.getElementById(id);
-          if (!g) return;
-          const max = Math.max(goal || 0, value, 1);
-          g.min = 0;
-          g.max = max;
-          g.value = value;
-          g.label = label;
-          g.valueText = num(value);
-          g.levels = goal ? [{ level: 0, stroke: "var(--primary-color)" }, { level: goal + 0.01, stroke: "var(--error-color)" }] : [{ level: 0, stroke: "var(--primary-color)" }];
-          g.locale = state.language || undefined;
-          if (size) g.style.width = size;
+        const { totals } = st.data;
+        const style = this._tkMacroStyle();
+        if (goals.kcal == null) return;
+        if (style === "gauges") {
+          const ready = await this._tkElement("ha-gauge", { type: "gauge", entity: "sun.sun" });
+          if (!ready && !customElements.get("ha-gauge")) await new Promise((r) => setTimeout(r, 3000));
+          // a gauge with a needle: the arc is the goal (blue up to it, red after) and the needle is where you are
+          MACROS.forEach(([k]) => {
+            const g = root.getElementById(`tk-g-${k}`);
+            if (!g) return;
+            const goal = goals[k];
+            g.min = 0;
+            g.max = Math.round(goal ? Math.max(goal * 1.25, totals[k] * 1.05) : Math.max(totals[k] * 1.25, 1));
+            g.value = totals[k];
+            g.needle = true;
+            g.label = "g";
+            g.valueText = num(totals[k]);
+            g.levels = goal ? [{ level: 0, stroke: "var(--primary-color)" }, { level: goal, stroke: "var(--error-color)" }] : [{ level: 0, stroke: "var(--primary-color)" }];
+            g.locale = state.language || undefined;
+            g.style.width = "104px";
+          });
+        }
+        // read-only bars (Home Assistant's control slider): kcal, and the macros when they are shown as bars
+        await this._tkElement("ha-control-slider", { type: "tile", entity: "light.x", features: [{ type: "light-brightness" }] });
+        const bar = (id, value, goal, label) => {
+          const sl = root.getElementById(id);
+          if (!sl) return;
+          sl.min = 0;
+          sl.max = Math.max(goal || 0, value, 1);
+          sl.value = value;
+          sl.step = 0.1;
+          sl.mode = "start";
+          sl.showHandle = false;
+          sl.setAttribute("aria-readonly", "true");
+          sl.setAttribute("aria-label", `${label} ${num(value)}`);
         };
-        set("tk-g-kcal", totals.kcal, goals.kcal, "kcal", "190px");
-        MACROS.forEach(([k]) => set(`tk-g-${k}`, totals[k], goals[k], "g", "96px"));
+        bar("tk-s-kcal", totals.kcal, goals.kcal, "kcal");
+        if (style === "bars") MACROS.forEach(([k, l]) => bar(`tk-s-${k}`, totals[k], goals[k], T(l)));
       } else this._tkMountChart(root);
     },
 
@@ -407,7 +464,14 @@ export default function (h) {
 
     _tkMenu(value) {
       if (value === "goals") this._tkGoalsDialog();
-      else if (value === "calc") this._tkCalcDialog();
+      else if (value.startsWith("macros-")) {
+        try {
+          localStorage.setItem(MACRO_KEY, value.slice(7));
+        } catch (_) {
+          /* not remembered */
+        }
+        this._render();
+      } else if (value === "calc") this._tkCalcDialog();
       else if (value === "weight") this._tkWeightDialog();
       else if (value === "person-delete") this._tkRemovePerson();
     },
