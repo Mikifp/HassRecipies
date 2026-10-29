@@ -14,6 +14,7 @@ import uuid
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from .calorie_calc import CalcError, KCAL_PER_KG, calculate, clean_profile
 from .const import EVENT_TRACKER_CHANGED, STORAGE_VERSION, TRACKER_STORAGE_KEY
 from .mealplan import MealPlan, MealPlanError, parse_date
 from .nutrition_store import Nutrition, NutritionError
@@ -59,6 +60,9 @@ class Tracker:
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
         self._persons = {p["id"]: p for p in data.get("persons", [])}
+        for person in self._persons.values():
+            person.setdefault("profile", {})
+            person.setdefault("weights", {})
         self._entries = {e["id"]: e for e in data.get("entries", [])}
 
     def _save(self) -> None:
@@ -77,7 +81,11 @@ class Tracker:
 
     # ---- persons ----
     def persons(self) -> list[dict[str, Any]]:
-        return sorted((dict(p, goals=dict(p["goals"])) for p in self._persons.values()), key=lambda p: p["name"].casefold())
+        return sorted((self._copy(p) for p in self._persons.values()), key=lambda p: p["name"].casefold())
+
+    @staticmethod
+    def _copy(person: dict[str, Any]) -> dict[str, Any]:
+        return dict(person, goals=dict(person["goals"]), profile=dict(person.get("profile", {})), weights=dict(person.get("weights", {})))
 
     def person(self, person_id: str) -> dict[str, Any]:
         person = self._persons.get(person_id)
@@ -93,7 +101,7 @@ class Tracker:
         found = self.person_for_user(user_id)
         if found:
             return found
-        person = {"id": uuid.uuid4().hex, "name": (name or "User").strip()[:60], "user_id": user_id, "goals": {}, "favourites": []}
+        person = {"id": uuid.uuid4().hex, "name": (name or "User").strip()[:60], "user_id": user_id, "goals": {}, "favourites": [], "profile": {}, "weights": {}}
         self._persons[person["id"]] = person
         self._save()
         return person
@@ -112,7 +120,7 @@ class Tracker:
             raise TrackerError("Too many people")
         if any(p["name"].casefold() == name.casefold() for p in self._persons.values()):
             raise TrackerError(f"There is already a person called {name}")
-        person = {"id": uuid.uuid4().hex, "name": name, "user_id": None, "goals": {}, "favourites": []}
+        person = {"id": uuid.uuid4().hex, "name": name, "user_id": None, "goals": {}, "favourites": [], "profile": {}, "weights": {}}
         self._persons[person["id"]] = person
         self._changed(person["id"])
         return person
@@ -138,6 +146,58 @@ class Tracker:
         person["goals"] = clean
         self._changed(person_id)
         return person
+
+    # ---- body, weight and what is needed ----
+    def set_profile(self, person_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+        person = self.person(person_id)
+        try:
+            person["profile"] = clean_profile(raw)
+        except CalcError as err:
+            raise TrackerError(str(err)) from err
+        self._changed(person_id)
+        return person
+
+    def log_weight(self, person_id: str, day: str, kg: Any) -> dict[str, Any]:
+        person = self.person(person_id)
+        try:
+            day = parse_date(day).isoformat()
+        except MealPlanError as err:
+            raise TrackerError(str(err)) from err
+        kg = _num(kg, "Weight", allow_zero=False)
+        if not 30 <= kg <= 400:
+            raise TrackerError("Weight must be between 30 and 400 kg")
+        person["weights"][day] = round(kg, 1)
+        self._changed(person_id, day)
+        return person
+
+    def delete_weight(self, person_id: str, day: str) -> bool:
+        person = self.person(person_id)
+        if person["weights"].pop(day, None) is None:
+            return False
+        self._changed(person_id, day)
+        return True
+
+    @staticmethod
+    def weight_on(person: dict[str, Any], day: str) -> float | None:
+        """The last weight logged on or before ``day`` (else the first one logged, else the one in the profile)."""
+        weights = person.get("weights", {})
+        before = [d for d in weights if d <= day]
+        if before:
+            return weights[max(before)]
+        if weights:
+            return weights[min(weights)]
+        return person.get("profile", {}).get("weight_kg")
+
+    def needs(self, person: dict[str, Any], day: str) -> dict[str, Any] | None:
+        """Resting and maintenance energy for the person on a day (None until the profile is filled in)."""
+        profile = person.get("profile") or {}
+        weight = self.weight_on(person, day)
+        if not profile.get("sex") or weight is None:
+            return None
+        try:
+            return calculate({**profile, "weight_kg": weight}, parse_date(day))
+        except CalcError:
+            return None
 
     # ---- entries ----
     def _check_meal(self, meal: str) -> None:
@@ -255,10 +315,11 @@ class Tracker:
         day = parse_date(day).isoformat()
         entries = self.entries(person_id, day, day)
         return {
-            "person": dict(person, goals=dict(person["goals"])),
+            "person": self._copy(person),
             "date": day,
             "entries": entries,
             "totals": _sum(entries),
+            "maintenance": (self.needs(person, day) or {}).get("maintenance"),
             "planned": self.planned(person_id, day),
             "recent": self.recent(person_id),
             "favourites": list(person.get("favourites", [])),
@@ -293,9 +354,25 @@ class Tracker:
         for n in range((last - first).days + 1):
             d = (first + timedelta(days=n)).isoformat()
             days.append({"date": d, "logged": d in by_day, **_sum(by_day.get(d, []))})
+        need = {d["date"]: (self.needs(person, d["date"]) or {}).get("maintenance") for d in days}
+        for d in days:
+            maintenance = need[d["date"]]
+            d["maintenance"] = maintenance
+            d["deficit"] = round(maintenance - d["kcal"]) if maintenance and d["logged"] else None
         logged = [d for d in days if d["logged"]]
+        deficits = [d["deficit"] for d in days if d["deficit"] is not None]
+        weights = [{"date": d, "kg": kg} for d, kg in sorted(person["weights"].items()) if first.isoformat() <= d <= last.isoformat()]
         average = {k: round(sum(d[k] for d in logged) / len(logged), 1) for k in NUTRIENTS} if logged else {k: None for k in NUTRIENTS}
-        return {"person": dict(person, goals=dict(person["goals"])), "days": days, "average": average, "logged_days": len(logged)}
+        return {
+            "person": self._copy(person),
+            "days": days,
+            "average": average,
+            "logged_days": len(logged),
+            "deficit_total": sum(deficits) if deficits else None,
+            "deficit_average": round(sum(deficits) / len(deficits)) if deficits else None,
+            "kg": round(sum(deficits) / KCAL_PER_KG, 2) if deficits else None,
+            "weights": weights,
+        }
 
     # ---- recent and favourite items ----
     @staticmethod

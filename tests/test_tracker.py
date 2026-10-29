@@ -242,6 +242,50 @@ def test_the_usual_items_of_a_meal_and_copying_a_day():
     assert t.copy_day(anna["id"], "2026-10-28", "2026-10-31") == {"added": 2, "skipped": 1}  # the food is gone
 
 
+PROFILE = {"sex": "female", "age": 34, "height_cm": 168, "weight_kg": 78, "target_kg": 70, "activity": "light"}
+
+
+def test_the_calculator_gives_maintenance_and_a_target_for_each_pace():
+    calc = importlib.import_module("hr_t.calorie_calc")
+    r = calc.calculate(PROFILE, __import__("datetime").date(2026, 10, 29))
+    assert (r["bmr"], r["maintenance"], r["to_lose"]) == (1499, 2061, 8.0)
+    half = r["options"][1]
+    assert (half["pace"], half["kcal"], half["deficit"], half["weeks"], half["reached"]) == (0.5, 1511, 550, 16, "2027-02-18")
+    assert half["macros"] == {"protein": 125, "carbs": 159, "fat": 42}
+    assert not any(o["below_minimum"] for o in r["options"])
+    thin = calc.calculate({**PROFILE, "weight_kg": 50, "height_cm": 150, "activity": "sedentary", "target_kg": None}, None)
+    assert thin["options"][2]["below_minimum"] and thin["options"][0]["weeks"] is None  # a warning flag, the target is still given
+    male = calc.calculate({**PROFILE, "sex": "male"}, None)
+    assert male["bmr"] == 1499 + 166 and male["minimum"] == 1500
+    for bad in ({"sex": "x"}, {"activity": "none"}, {"age": 5}, {"height_cm": "tall"}, {"weight_kg": 0}):
+        try:
+            calc.calculate({**PROFILE, **bad}, None)
+        except calc.CalcError:
+            continue
+        raise AssertionError(bad)
+
+
+def test_a_profile_and_weights_give_the_deficit_of_a_day_and_a_week():
+    *_, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    assert t.day(anna["id"], DAY)["maintenance"] is None  # no profile yet
+    t.set_profile(anna["id"], PROFILE)
+    assert t.day(anna["id"], DAY)["maintenance"] == 2061  # from the weight in the profile
+    t.log_weight(anna["id"], "2026-10-26", 78)
+    t.log_weight(anna["id"], "2026-10-29", 77.4)
+    assert t.day(anna["id"], "2026-10-28")["maintenance"] == 2061 and t.day(anna["id"], DAY)["maintenance"] < 2061
+    t.add(anna["id"], "2026-10-26", "lunch", "quick", name="A", kcal=1500)
+    t.add(anna["id"], "2026-10-28", "lunch", "quick", name="B", kcal=1700)
+    r = t.range(anna["id"], "2026-10-26", "2026-10-29")
+    assert [d["deficit"] for d in r["days"]] == [561, None, 361, None]
+    assert (r["deficit_total"], r["deficit_average"], r["kg"]) == (922, 461, 0.12)
+    assert r["weights"] == [{"date": "2026-10-26", "kg": 78.0}, {"date": "2026-10-29", "kg": 77.4}]
+    assert t.delete_weight(anna["id"], "2026-10-29") and not t.delete_weight(anna["id"], "2026-10-29")
+    assert _raises(lambda: t.log_weight(anna["id"], DAY, 5)) and _raises(lambda: t.set_profile(anna["id"], {**PROFILE, "sex": "x"}))
+    t.set_profile(anna["id"], {k: v for k, v in PROFILE.items() if k != "weight_kg"})
+    assert t.needs(t.person(anna["id"]), "2026-10-20") is not None  # the first logged weight stands in before it
+
+
 def test_changes_are_announced_and_saved():
     hass, _r, _p, _n, t = _make()
     anna = t.ensure_user("u1", "Anna")
