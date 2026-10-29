@@ -218,7 +218,7 @@ export default function (h) {
         <span class="fd-seln">${n} ${esc(T("selected"))}</span>
         ${
           sel.kind === "names"
-            ? `${btn("link", "link-variant", "Link to one food")}${btn("create", "plus", "Create one food")}${btn("accept", "check", "Accept suggestions")}${btn("ignore", "cancel", "Don't count")}`
+            ? `${btn("link", "link-variant", "Assign to a food")}${btn("accept", "check", "Accept suggestions")}${btn("ignore", "cancel", "Don't count")}`
             : `${n > 1 ? btn("merge", "call-merge", "Merge into one food") : ""}${btn("delete", "delete-outline", "Delete")}`
         }`;
       bar.querySelectorAll("[data-fdsel]").forEach((el) => el.addEventListener("click", () => this._fdSelAct(el.dataset.fdsel)));
@@ -238,15 +238,6 @@ export default function (h) {
       if (sel.kind === "names") {
         const keys = sel.keys;
         if (act === "link") return this._fdPickFood({ keys });
-        if (act === "create") {
-          // one food from all of them: the first is its name, the others other names for it
-          const first = sel.rows.find((r) => r.suggestion) || sel.rows[0];
-          const ext = first.suggestion && (first.suggestion.source === "frida" || first.suggestion.source === "usda") ? first.suggestion : null;
-          const rest = sel.rows.filter((r) => r !== first).map((r) => r.key);
-          st.draft = { ...blank(), name: title(first.key), aliases: rest, source: ext ? ext.source : "none", [`${ext ? ext.source : "frida"}_id`]: ext ? ext.id : null, [`${ext ? ext.source : "frida"}_name`]: ext ? ext.name : "", values: ext ? { kcal: ext.kcal, fat: ext.fat, carbs: ext.carbs, protein: ext.protein } : {} };
-          st.draftFor = "new";
-          return this._go({ name: "foods", id: "new" }, false, this._brCompact() ? undefined : "replace");
-        }
         if (act === "accept") {
           const { ok, res } = await this._fdCall({ type: "hass_recipes/foods_adopt", keys });
           if (ok) {
@@ -269,6 +260,18 @@ export default function (h) {
         await this._fdRefresh();
         this._go({ name: "foods" }, false, "replace");
       }
+    },
+
+    /** Start a new food from ingredient names: the first is its name, the others other names for it. */
+    _fdStartNew(keys) {
+      const st = this._fdState();
+      const rows = st.data.review.filter((r) => keys.includes(r.key));
+      const first = rows.find((r) => r.suggestion) || rows[0];
+      const ext = first.suggestion && (first.suggestion.source === "frida" || first.suggestion.source === "usda") ? first.suggestion : null;
+      const kind = ext ? ext.source : "frida";
+      st.draft = { ...blank(), name: title(first.key), aliases: rows.filter((r) => r !== first).map((r) => r.key), source: ext ? ext.source : "none", [`${kind}_id`]: ext ? ext.id : null, [`${kind}_name`]: ext ? ext.name : "", values: ext ? { kcal: ext.kcal, fat: ext.fat, carbs: ext.carbs, protein: ext.protein } : {} };
+      st.draftFor = "new";
+      this._go({ name: "foods", id: "new" }, false, this._brCompact() ? undefined : "replace");
     },
 
     /** Merging foods: choose the one that stays; the others become other names of it. */
@@ -375,8 +378,7 @@ export default function (h) {
             canEdit
               ? `<div class="fd-actions">
                   ${s ? `<ha-button appearance="filled" data-fd="accept"><ha-icon slot="start" icon="mdi:check"></ha-icon>${esc(T("Accept suggestion"))}</ha-button>` : ""}
-                  <ha-button appearance="${s ? "plain" : "filled"}" data-fd="create"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("Create food"))}</ha-button>
-                  <ha-button appearance="plain" data-fd="link"><ha-icon slot="start" icon="mdi:link-variant"></ha-icon>${esc(T("Link to a food"))}</ha-button>
+                  <ha-button appearance="${s ? "plain" : "filled"}" data-fd="link"><ha-icon slot="start" icon="mdi:link-variant"></ha-icon>${esc(T("Assign to a food"))}</ha-button>
                   <ha-button appearance="plain" data-fd="ignore">${esc(T("Don't count"))}</ha-button>
                 </div>`
               : ""
@@ -469,17 +471,8 @@ export default function (h) {
           }
           break;
         }
-        case "create": {
-          const r = this._fdReview(this._view.id);
-          const s = r.suggestion;
-          const ext = s && (s.source === "frida" || s.source === "usda") ? s : null;
-          st.draft = { ...blank(), name: title(r.key), source: ext ? ext.source : "none", [`${ext ? ext.source : "frida"}_id`]: ext ? ext.id : null, [`${ext ? ext.source : "frida"}_name`]: ext ? ext.name : "", values: ext ? { kcal: ext.kcal, fat: ext.fat, carbs: ext.carbs, protein: ext.protein } : {} };
-          st.draftFor = "new";
-          this._go({ name: "foods", id: "new" }, false, this._brCompact() ? undefined : "replace");
-          break;
-        }
         case "link":
-          this._fdPickFood(this._fdReview(this._view.id));
+          this._fdPickFood({ keys: [this._fdReview(this._view.id).key] });
           break;
         case "ignore": {
           const r = this._fdReview(this._view.id);
@@ -541,25 +534,30 @@ export default function (h) {
     _fdPickFood(from) {
       const st = this._fdState();
       const many = from && from.keys; // several ingredient names ticked in the list
-      const reviewing = !!many || this._view.id.startsWith("r~");
-      const names = many || (reviewing ? [from.key] : []);
+      const reviewing = !!many;
+      const names = many || [];
       const foods = st.data.foods.filter((f) => !from || !from.id || f.id !== from.id);
       const html = `<ha-input-search id="fm-q" appearance="outlined" placeholder="${esc(T("Search foods"))}"></ha-input-search><div id="fm-res" class="fm-res"></div>`;
-      this._planDialog(T(reviewing ? "Link to a food" : "Merge into another food"), html, (dlg, close) => {
+      this._planDialog(T(reviewing ? "Assign to a food" : "Merge into another food"), html, (dlg, close) => {
         const res = dlg.querySelector("#fm-res");
         let shown = [];
+        const newRow = reviewing ? `<ha-list-item-button data-new headline="${esc(T("Create a new food"))}" supporting-text="${esc(names.length > 1 ? names.join(", ") : title(names[0]))}"><ha-icon slot="start" icon="mdi:plus"></ha-icon></ha-list-item-button>` : "";
         const draw = (q) => {
           const needle = q.trim().toLowerCase();
           shown = foods.filter((f) => !needle || [f.name, ...f.aliases].some((x) => x.toLowerCase().includes(needle))).slice(0, 40);
           res.innerHTML = shown.length
-            ? `<ha-list-base>${shown
+            ? `<ha-list-base>${newRow}${shown
                 .map((f, n) => `<ha-list-item-button data-n="${n}" headline="${esc(f.name)}" supporting-text="${esc(f.aliases.join(", "))}"></ha-list-item-button>`)
                 .join("")}</ha-list-base>`
-            : `<p class="muted">${esc(T("No foods match."))}</p>`;
+            : `<ha-list-base>${newRow}</ha-list-base><p class="muted">${esc(T("No foods match."))}</p>`;
         };
         draw("");
         dlg.querySelector("#fm-q").addEventListener("input", (e) => draw(e.target.value));
         res.addEventListener("click", async (e) => {
+          if (e.target.closest("[data-new]")) {
+            close();
+            return this._fdStartNew(names);
+          }
           const item = e.target.closest("[data-n]");
           if (!item) return;
           const target = shown[+item.dataset.n];
@@ -568,7 +566,7 @@ export default function (h) {
             const { ok } = await this._fdCall({ type: "hass_recipes/foods_link", keys: names, food_id: target.id });
             if (ok) {
               await this._fdRefresh();
-              if (many) this._flash(`${names.length} ${T("names linked to")} ${target.name}.`);
+              if (names.length > 1) this._flash(`${names.length} ${T("names linked to")} ${target.name}.`);
               this._go({ name: "foods", id: target.id }, false, "replace");
             }
             return;
