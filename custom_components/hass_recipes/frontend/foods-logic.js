@@ -143,3 +143,13 @@ export function carbsToFit(goals) {
   const rest = Number(goals.kcal) - (Number(goals.protein) || 0) * 4 - (Number(goals.fat) || 0) * 9;
   return Math.max(0, Math.round(rest / 4));
 }
+
+/** What changing a logged entry sends: only what the server accepts for that kind (not the recipe or food it is, which cannot change). */
+export function entryUpdate(draft) {
+  const n = (v) => (v === "" || v == null ? undefined : Number(v));
+  const out = { meal: draft.meal };
+  if (draft.kind === "recipe") Object.assign(out, { by: draft.by || "servings", amount: n(draft.amount) });
+  else if (draft.kind === "food") Object.assign(out, { amount: n(draft.amount), unit: draft.unit || "g" });
+  else Object.assign(out, { name: draft.name, kcal: n(draft.kcal), protein: n(draft.protein), carbs: n(draft.carbs), fat: n(draft.fat) });
+  return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined));
+}
