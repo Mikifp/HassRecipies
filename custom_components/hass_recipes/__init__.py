@@ -115,6 +115,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
 
     entry.async_on_unload(hass.bus.async_listen(f"{DOMAIN}_recipe_deleted", _recipe_deleted))
 
+    @callback
+    def _recipe_saved(event: Event) -> None:
+        nutrition.auto_link(event.data.get("recipe_id", ""))
+
+    for kind in ("added", "updated"):
+        entry.async_on_unload(hass.bus.async_listen(f"{DOMAIN}_recipe_{kind}", _recipe_saved))
+
     timers = TimerManager(hass, lambda: entry.options)
     await timers.async_load()
     hass.data[f"{DOMAIN}_timers"] = timers

@@ -490,6 +490,9 @@ const STYLE = `
   .nu-picker { margin-top: 10px; padding: 10px; border: 1px solid var(--divider-color); border-radius: 8px; }
   .nu-results { margin-top: 6px; max-height: 320px; overflow-y: auto; }
   .nu-picker ha-input-search { display: block; }
+  .nu-group { margin: 12px 0 4px; font-size: var(--ha-font-size-s, 12px); text-transform: uppercase; letter-spacing: .06em; color: var(--secondary-text-color); }
+  .nu-banner { display: block; margin: 0 0 8px; }
+  .nu-via { color: var(--secondary-text-color); font-weight: 400; }
   .nu-custom { margin: 0 calc(-1 * var(--ha-space-4, 16px)); }
   .nu-cacts { display: flex; gap: 2px; }
   .nu-form { margin-top: 16px; }
@@ -772,7 +775,11 @@ class HassRecipesPanel extends HTMLElement {
     if (view.name === "edit") this._initForm(view.id);
     if (view.name === "data" && prev.name !== "data") this._loadTrash();
     if (view.name === "nutrition" && prev.name !== "nutrition") this._nu = null;
-    if (view.name === "foods" && prev.name !== "foods") this._fd = null;
+    if (view.name === "foods" && prev.name !== "foods") {
+      // coming from a recipe's ingredients with a new food already started: keep it
+      if (this._fdKeep) this._fdKeep = false;
+      else this._fd = null;
+    }
     if (mode !== "none") {
       const same = prev && prev.name === view.name && prev.id === view.id;
       try {
@@ -840,7 +847,7 @@ class HassRecipesPanel extends HTMLElement {
     }
     if (v.name === "nutrition" && this._recipe(v.id)) {
       return {
-        header: `${iconBtn("back", "arrow-left", "Back")}<div class="main-title"><b>${esc(T("Nutrition"))}</b><span>${esc(this._recipe(v.id).name)}</span></div>`,
+        header: `${iconBtn("back", "arrow-left", "Back")}<div class="main-title"><b>${esc(T("Ingredients and foods"))}</b><span>${esc(this._recipe(v.id).name)}</span></div>`,
         bottom: "",
       };
     }

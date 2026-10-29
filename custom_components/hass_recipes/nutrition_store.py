@@ -69,7 +69,18 @@ class Nutrition:
         if recipe is None:
             return None
         custom, links = self._views()
-        return calculate(recipe, recipe.get("parsed_ingredients") or [], self.db, custom, links)
+        result = calculate(recipe, recipe.get("parsed_ingredients") or [], self.db, custom, links)
+        # which of the user's foods each ingredient is, and which names are not a food yet
+        standard: list[str] = []
+        for item in result["items"]:
+            food = self.book.food_for_key(item["key"])
+            item["own_food"] = {"id": food["id"], "name": food["name"], "auto": food["auto"]} if food else None
+            match = item.get("match") or {}
+            if food is None and item["status"] != "ignored" and match.get("default") and item["key"] not in standard:
+                standard.append(item["key"])
+        result["unlinked"] = sum(1 for i in result["items"] if i["own_food"] is None and i["status"] != "ignored")
+        result["standard"] = standard
+        return result
 
     def search(self, query: str, limit: int = 15) -> list[dict[str, Any]]:
         return search(self.db, self._views()[0], query, limit)
@@ -290,7 +301,23 @@ class Nutrition:
         self._save()
         return self._describe_food(food, self._usage()[0])
 
-    def adopt(self, keys: list[str]) -> int:
+    def auto_link(self, recipe_id: str) -> int:
+        """A recipe was saved or imported: make foods of its names that have a standard choice.
+
+        Only the standard choices (everyday words like "æg", "smør"): a best guess by words is left
+        for the user to review.
+        """
+        recipe = self._recipes.get(recipe_id)
+        if recipe is None:
+            return 0
+        keys = [
+            food_key(p.get("food") or p.get("text", ""))
+            for p in recipe.get("parsed_ingredients") or []
+            if not p.get("header")
+        ]
+        return self.adopt([k for k in dict.fromkeys(keys) if k and k not in self.book.ignored], standard_only=True)
+
+    def adopt(self, keys: list[str], standard_only: bool = False) -> int:
         """Make foods of ingredient names, the way the calculation already reads them (suggestions accepted)."""
         done = 0
         for raw in keys:
@@ -298,7 +325,7 @@ class Nutrition:
             if not key or self.book.food_for_key(key):
                 continue
             guess = resolve(self.db, *self._views(), key)
-            if not guess:
+            if not guess or (standard_only and not guess.get("default")):
                 continue
             try:
                 if guess["source"] == SOURCE_FRIDA:

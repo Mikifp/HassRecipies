@@ -268,3 +268,32 @@ def test_foods_travel_in_the_backup_and_an_older_backup_still_reads():
     _r3, old = _make()
     assert old.import_data({"custom": [{"id": "z", "name": "Pesto", "kcal": 300}], "links": {"grøn pesto": {"source": "custom", "id": "z"}}}) == 1
     assert old.links()["grøn pesto"]["source"] == "custom"
+
+
+# ---- a recipe's ingredients and their foods --------------------------------------
+
+def test_a_recipe_shows_which_food_each_line_is_and_which_names_are_not_one_yet():
+    recipes, n = _make()
+    r = recipes.create({"name": "x", "ingredients": ["200 g hvedemel", "2 æg", "100 g drageblod", "50 g bagepulver"]})
+    n.save_food({"name": "Hvedemel", "source": "frida", "frida_id": HVEDEMEL})
+    result = n.for_recipe(r["id"])
+    by = {i["text"]: i for i in result["items"]}
+    assert by["200 g hvedemel"]["own_food"]["name"] == "Hvedemel"
+    assert by["2 æg"]["own_food"] is None and by["100 g drageblod"]["own_food"] is None
+    assert result["unlinked"] == 3 and result["standard"] == ["æg"]  # only everyday words have a standard choice
+
+
+def test_saving_a_recipe_makes_foods_of_its_standard_names_but_not_of_guesses():
+    recipes, n = _make()
+    r = recipes.create({"name": "x", "ingredients": ["2 æg", "100 g bagepulver", "1 dl mælk"]})
+    assert n.auto_link(r["id"]) == 2
+    assert {f["name"] for f in n.foods_overview()["foods"]} == {"Æg", "Mælk"}
+    assert [x["key"] for x in n.foods_overview()["review"]] == ["bagepulver"]
+    assert n.auto_link(r["id"]) == 0  # again: nothing new
+    n.set_link("æg", None)  # a name reset on purpose is made a food again the next time the recipe is saved
+    assert n.auto_link(r["id"]) == 1
+    n.set_link("mælk", "ignore")  # counted as nothing: the food made for it goes, and it is left alone from now on
+    assert n.auto_link(r["id"]) == 0 and n.book.ignored == ["mælk"]
+    assert {f["name"] for f in n.foods_overview()["foods"]} == {"Æg"}
+    mine = n.save_food({"name": "Kokos"})
+    assert _raises(lambda: n.set_link("kokos", "ignore"))  # a food you made is not removed by Don't count
