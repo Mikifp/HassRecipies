@@ -370,6 +370,13 @@ const STYLE = `
   .tk-mrow ha-control-slider.over { --control-slider-color: var(--error-color); --control-slider-background: var(--error-color); }
   .tk-mchip.over { --md-assist-chip-label-text-color: var(--error-color); --md-assist-chip-outline-color: var(--error-color); }
   .tk-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .tk-c { text-align: center; }
+  .tk-huge { font-size: 3.4rem; font-weight: 500; line-height: 1; }
+  .tk-c .muted { margin: 4px 0 12px; }
+  .tk-kbar { display: block; pointer-events: none; --control-slider-color: var(--primary-color); --control-slider-background: var(--primary-color); --control-slider-background-opacity: 0.2; --control-slider-thickness: 10px; --control-slider-border-radius: 5px; }
+  .tk-kbar.over { --control-slider-color: var(--error-color); --control-slider-background: var(--error-color); }
+  .tk-c .tk-macros { text-align: left; margin-top: 16px; }
+  .tk-c .tk-copy { text-align: left; }
   .tk-cta { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .tk-macro { display: flex; flex-direction: column; align-items: center; text-align: center; }
   .tk-mlabel { font-size: 0.85em; color: var(--secondary-text-color); }
