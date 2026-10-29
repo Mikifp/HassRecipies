@@ -363,6 +363,14 @@ const STYLE = `
   .tk-big span { font-size: 1rem; font-weight: 400; color: var(--secondary-text-color); }
   .tk-over { color: var(--error-color); }
   .tk-macros { display: flex; gap: 8px; justify-content: space-around; flex-wrap: wrap; margin-top: 12px; }
+  .tk-macros.tk-m-bars { flex-direction: column; gap: 6px; justify-content: flex-start; }
+  .tk-macros.tk-m-chips { justify-content: flex-start; }
+  .tk-mrow { display: grid; grid-template-columns: 72px 1fr auto; gap: 12px; align-items: center; font-size: 0.9em; }
+  .tk-mrow ha-control-slider { pointer-events: none; --control-slider-color: var(--primary-color); --control-slider-background: var(--primary-color); --control-slider-background-opacity: 0.2; --control-slider-thickness: 14px; --control-slider-border-radius: 7px; min-width: 0; }
+  .tk-mrow ha-control-slider.over { --control-slider-color: var(--error-color); --control-slider-background: var(--error-color); }
+  .tk-mchip.over { --md-assist-chip-label-text-color: var(--error-color); --md-assist-chip-outline-color: var(--error-color); }
+  .tk-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .tk-cta { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .tk-macro { display: flex; flex-direction: column; align-items: center; text-align: center; }
   .tk-mlabel { font-size: 0.85em; color: var(--secondary-text-color); }
   .tk-mlabel b { color: var(--primary-text-color); font-weight: 500; }
