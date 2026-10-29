@@ -208,17 +208,31 @@ export default function (h) {
     },
 
     // ---- dialogs (put on the page directly, so the calendar is not rebuilt) ----
-    _planDialog(title, html, bind) {
+    /** A dialog (a sheet from the bottom on a phone): a title, an optional line under it, the body, and `footer` buttons. */
+    _planDialog(title, html, bind, opts = {}) {
       const dlg = document.createElement("ha-adaptive-dialog");
       dlg.setAttribute("open", "");
       dlg.setAttribute("flexcontent", "");
       dlg.setAttribute("header-title", title);
+      if (opts.subtitle) dlg.setAttribute("header-subtitle", opts.subtitle);
       dlg.innerHTML = `<div class="pdlg">${html}</div>`;
       dlg.addEventListener("closed", (e) => {
         if (e.target === dlg) dlg.remove();
       });
       this.shadowRoot.appendChild(dlg);
       bind(dlg, () => (dlg.open = false));
+    },
+
+    /** The buttons at the foot of a dialog, in Home Assistant's own footer: one main action and any number of others. */
+    _planFooter(dlg, { primary = null, secondary = [] } = {}) {
+      dlg.querySelectorAll(':scope > [slot="footer"]').forEach((n) => n.remove());
+      if (!primary && !secondary.length) return;
+      const btn = (b, slot, appearance) =>
+        `<ha-button slot="${slot}" appearance="${appearance}" ${b.variant ? `variant="${b.variant}"` : ""} ${b.id ? `id="${b.id}"` : ""} ${b.attrs || ""}>${b.icon ? `<ha-icon slot="start" icon="mdi:${b.icon}"></ha-icon>` : ""}${esc(b.label)}</ha-button>`;
+      dlg.insertAdjacentHTML(
+        "beforeend",
+        `<ha-dialog-footer slot="footer">${secondary.map((b) => btn(b, "secondaryAction", "plain")).join("")}${primary ? btn(primary, "primaryAction", "filled") : ""}</ha-dialog-footer>`
+      );
     },
 
     _planSlotChips(slot) {
