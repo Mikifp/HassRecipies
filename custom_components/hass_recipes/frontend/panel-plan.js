@@ -208,14 +208,15 @@ export default function (h) {
     },
 
     // ---- dialogs (put on the page directly, so the calendar is not rebuilt) ----
-    /** A dialog (a sheet from the bottom on a phone): a title, an optional line under it, the body, and `footer` buttons. */
+    /** A dialog (a sheet from the bottom on a phone): a title, an optional line under it, the body, and footer buttons.
+     *  With `fill`, a long list in it uses the whole height of the sheet on a phone. */
     _planDialog(title, html, bind, opts = {}) {
       const dlg = document.createElement("ha-adaptive-dialog");
       dlg.setAttribute("open", "");
       dlg.setAttribute("flexcontent", "");
       dlg.setAttribute("header-title", title);
       if (opts.subtitle) dlg.setAttribute("header-subtitle", opts.subtitle);
-      dlg.innerHTML = `<div class="pdlg">${html}</div>`;
+      dlg.innerHTML = `<div class="pdlg${opts.fill ? " fill" : ""}">${html}</div>`;
       dlg.addEventListener("closed", (e) => {
         if (e.target === dlg) dlg.remove();
       });
