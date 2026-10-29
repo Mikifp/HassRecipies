@@ -96,7 +96,7 @@ export default function (h) {
     /** A step's text with the ingredients it names as chips, and chips for the ones it does not name. */
     _stepTextParts(r, s, k, n) {
       const idx = this._stepChipIngredients(r, s);
-      const items = idx.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main }));
+      const items = idx.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main, names: this._foodNamesFor(r, i) }));
       const chip = (i) => ingredientChipHtml(r, i, k, this._units, { key: `${n}:${i}`, done: this._doneChips.has(`${n}:${i}`) }, this._chipAlt);
       const { html, placed } = stepTextHtml(s.text, items, chip);
       const links = idx

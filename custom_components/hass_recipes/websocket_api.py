@@ -149,6 +149,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_foods_adopt,
         ws_foods_link,
         ws_foods_assign,
+        ws_foods_names,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -1034,6 +1035,13 @@ def ws_foods_merge(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
         connection.send_error(msg["id"], "invalid", str(err))
         return
     connection.send_result(msg["id"], food)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/foods_names"})
+@callback
+def ws_foods_names(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Every name of the foods, with all the names of the same food (so a step can call an ingredient by any of them)."""
+    connection.send_result(msg["id"], _nutrition(hass).name_groups())
 
 
 @websocket_api.websocket_command(

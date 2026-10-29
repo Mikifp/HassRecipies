@@ -19,6 +19,7 @@ from .const import NUTRITION_STORAGE_KEY, STORAGE_VERSION
 from .food_groups import suggest_groups
 from .foods import SOURCE_NONE, FoodBook, FoodError, clean_unit_grams
 from .nutrition import (
+    _grams,
     NUTRIENTS,
     SOURCE_CUSTOM,
     SOURCE_FRIDA,
@@ -84,6 +85,25 @@ class Nutrition:
         result["unlinked"] = sum(1 for i in result["items"] if i["own_food"] is None and i["status"] != "ignored")
         result["standard"] = standard
         return result
+
+    def shopping_food(self, parsed: dict[str, Any]) -> dict[str, Any] | None:
+        """The user's food that an ingredient line is, with what the line weighs in grams (None if that cannot be told)."""
+        name = parsed.get("food") or parsed.get("text", "")
+        food = self.book.food_for_key(food_key(name))
+        if food is None:
+            return None
+        match = resolve(self.db, *self._views(), name) or {}
+        grams = _grams(parsed, match.get("unit_grams") or food["unit_grams"])
+        return {"id": food["id"], "name": food["name"], "section": food["section"], "grams": grams}
+
+    def name_groups(self) -> dict[str, list[str]]:
+        """Every name of every food (as a key) with all the names of that food: what a step can call an ingredient."""
+        groups: dict[str, list[str]] = {}
+        for food in self.book.foods.values():
+            names = [food["name"], *food["aliases"]]
+            for name in names:
+                groups[food_key(name)] = names
+        return groups
 
     def search(self, query: str, limit: int = 15) -> list[dict[str, Any]]:
         return search(self.db, self._views()[0], query, limit)

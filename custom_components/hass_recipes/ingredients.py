@@ -570,7 +570,8 @@ def format_ingredient(
 # ---- ingredients named in a step -------------------------------------------------
 # The panel shows an ingredient a step names as a chip in the step text. A recipe imported from
 # a web page has no such links, so they are found from the step text. This mirrors the front end
-# (frontend/recipes-shared.js: foodWords / detectChips); keep the two in step.
+# (frontend/recipes-shared.js: foodWords / detectChips); keep the two in step. The front end also tries
+# the other names of an ingredient's food (foods-logic.js namesForLine); the import here has no foods yet.
 
 _LETTER = r"[^\W\d_]"
 _UNITS = frozenset(

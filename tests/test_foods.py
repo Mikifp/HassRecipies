@@ -38,6 +38,13 @@ for pkg in ("homeassistant", "homeassistant.helpers"):
 _stub("homeassistant.core", HomeAssistant=object)
 _stub("homeassistant.helpers.storage", Store=_Store)
 
+
+class _HAError(Exception):
+    pass
+
+
+_stub("homeassistant.exceptions", HomeAssistantError=_HAError, ServiceValidationError=_HAError)
+
 pkg = types.ModuleType("hr_f")
 pkg.__path__ = [str(Path(__file__).parents[1] / "custom_components/hass_recipes")]
 sys.modules["hr_f"] = pkg
@@ -45,6 +52,7 @@ store_mod = importlib.import_module("hr_f.store")
 nu = importlib.import_module("hr_f.nutrition")
 foods = importlib.import_module("hr_f.foods")
 ns = importlib.import_module("hr_f.nutrition_store")
+shop = importlib.import_module("hr_f.shopping")
 
 DB = nu.FoodDatabase.load()
 HVEDEMEL = 1301  # Frida: Hvedemel
@@ -236,6 +244,41 @@ def test_several_names_are_linked_to_one_food_all_or_none():
     assert _raises(lambda: n.link_many(["bagepulver", "kartoffelmel"], food["id"]))
     assert n.book.foods[food["id"]]["aliases"] == before and "bagepulver" not in n.links()
     assert _raises(lambda: n.link_many(["x"], "nope"))
+
+
+# ---- the shopping list and the names a step can use ---------------------------------
+
+def test_the_shopping_list_adds_up_the_lines_that_are_one_food_in_grams():
+    recipes, n = _make()
+    a = recipes.create({"name": "A", "ingredients": ["2 løg", "1 spsk olie"]})
+    b = recipes.create({"name": "B", "ingredients": ["100 g løg finthakket", "2 dl mælk"]})
+    onion = n.save_food({"name": "Løg", "aliases": ["løg finthakket"], "unit_grams": {"piece": 90}, "section": "Frugt og grønt"})
+    entries = [{"recipe_id": a["id"]}, {"recipe_id": b["id"]}]
+    without, _ = shop.aggregate_plan_items(recipes, entries, "grams")
+    assert sum(1 for l in without if "løg" in l) == 2  # told apart by what the recipes call it
+    lines, _ = shop.aggregate_plan_items(recipes, entries, "grams", n)
+    assert [l for l in lines if "løg" in l] == ["400 g løg"] and onion["id"]  # 2 løg are 300 g as the ingredient parser knows them, plus 100 g
+    # the foods with a section come first, in that order of sections
+    assert lines[0] == "400 g løg"
+
+
+def test_a_single_recipe_keeps_its_lines_as_written_unless_the_food_is_in_two_lines():
+    recipes, n = _make()
+    r = recipes.create({"name": "A", "ingredients": ["2-3 løg", "salt", "1 spsk smør", "50 g smør"]})
+    n.save_food({"name": "Smør", "unit_grams": {"spsk": 15}})
+    parsed = [p for p in r["parsed_ingredients"] if not p.get("header")]
+    lines = shop._collect([(p, 1.0) for p in parsed], "grams", n, exact=True)
+    assert "2-3 løg" in lines[0] and "salt" in lines
+    assert [l for l in lines if "smør" in l] == ["64 g smør"]
+
+
+def test_every_name_of_a_food_is_found_by_any_of_its_names():
+    recipes, n = _make()
+    n.save_food({"name": "Hvedemel", "aliases": ["mel", "wheat flour"]})
+    groups = n.name_groups()
+    assert groups["mel"] == ["Hvedemel", "mel", "wheat flour"] and groups["hvedemel"] == groups["wheat flour"]
+    assert n.shopping_food({"food": "mel", "quantity": 1, "unit": "piece"})["name"] == "Hvedemel"
+    assert n.shopping_food({"food": "kartoffel"}) is None
 
 
 # ---- suggested groups ----------------------------------------------------------

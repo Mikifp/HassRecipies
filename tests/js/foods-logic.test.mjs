@@ -51,3 +51,11 @@ test("names in the review list are ticked as r~name", () => {
   const ids = [f.reviewId("løg finthakket"), "food-id"];
   assert.deepEqual(f.reviewKeys(ids), ["løg finthakket"]);
 });
+
+test("a food's other names are found from the line's food or its words", () => {
+  const groups = { hvedemel: ["Hvedemel", "mel"], mel: ["Hvedemel", "mel"] };
+  assert.deepEqual(f.namesForLine(groups, ["Hvedemel"]), ["Hvedemel", "mel"]);
+  assert.deepEqual(f.namesForLine(groups, ["finsigtet", "Mel!"]), ["Hvedemel", "mel"]);
+  assert.deepEqual(f.namesForLine(groups, ["smør"]), []);
+  assert.equal(f.nameKey("  Brun   Farin, 200 g"), "brun farin g");
+});

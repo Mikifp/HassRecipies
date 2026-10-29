@@ -90,3 +90,15 @@ export function keepSelection(selected, rowIds) {
 /** Ingredient-name rows are "r~" + the name; foods are their id. */
 export const reviewId = (name) => `r~${encodeURIComponent(name)}`;
 export const reviewKeys = (ids) => [...ids].filter((id) => String(id).startsWith("r~")).map((id) => decodeURIComponent(id.slice(2)));
+
+/** A name the way the server keys it: lower case letters, single spaces. */
+export const nameKey = (text) => (String(text || "").toLowerCase().match(/\p{L}+/gu) || []).join(" ");
+
+/** The other names of the food an ingredient line is: tries each candidate (the food of the line, or its food words) in `groups` ({ key: [names] }). */
+export function namesForLine(groups, candidates) {
+  for (const c of candidates) {
+    const names = groups && groups[nameKey(c)];
+    if (names) return names.filter((n) => String(n).trim().length >= 3);
+  }
+  return [];
+}
