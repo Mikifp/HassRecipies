@@ -783,7 +783,7 @@ export default function (h) {
           close();
           onPick(shown[+row.dataset.n]);
         });
-      });
+      }, { fill: true });
     },
 
     /** Assign ingredient names to a food: one that is there, or a new one made from them. `after` runs when it is done. */
