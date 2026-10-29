@@ -31,6 +31,8 @@ const {
   detectChips,
   stepTextHtml
 } = await import(`./recipes-shared.js${__v ? `?v=${__v}` : ""}`);
+// The Foods page's plain functions (ranking, merge preview, what stays ticked), tested on their own.
+const fl = await import(`./foods-logic.js${__v ? `?v=${__v}` : ""}`);
 // Panel translations (Danish): the templates stay English and are translated where they land.
 const { observeTranslations, translate: translateText } = await import(`./recipes-i18n.js${__v ? `?v=${__v}` : ""}`);
 const state = { language: "en" };
@@ -84,6 +86,7 @@ const PROGRESS_KEY = "hass_recipes_progress";
 const HANDLED_KEY = "hass_recipes_timers_handled";
 
 export default {
+  fl,
   esc,
   minutes,
   parseNumber,
