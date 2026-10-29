@@ -89,6 +89,34 @@ export default function (h) {
       return st.draft;
     },
 
+    // ---- what a step can call an ingredient: every name of its food ----
+    /** { name key: [all names of that food] }, loaded once and again after the foods change. */
+    _foodNamesMap() {
+      if (!this._fnames && !this._fnamesLoading) {
+        this._fnamesLoading = true;
+        this._ws({ type: "hass_recipes/foods_names" })
+          .then((m) => (this._fnames = m))
+          .catch(() => (this._fnames = {}))
+          .then(() => {
+            this._fnamesLoading = false;
+            // a recipe that is being read shows its chips again; an editor is left as it is
+            if (["detail", "cook"].includes(this._view.name) && Object.keys(this._fnames).length) this._render();
+          });
+      }
+      return this._fnames || {};
+    },
+
+    _foodNamesForText(text) {
+      return fl.namesForLine(this._foodNamesMap(), [...h.foodWords(text), text]);
+    },
+
+    /** The other names of the food that line `i` of recipe `r` is. */
+    _foodNamesFor(r, i) {
+      const p = (r.parsed_ingredients || [])[i];
+      const own = p && p.food ? [p.food] : [];
+      return fl.namesForLine(this._foodNamesMap(), [...own, ...h.foodWords(h.splitSubs(r.ingredients[i]).main)]);
+    },
+
     // ---- the list ----
     _fdRows() {
       const st = this._fdState();
@@ -545,6 +573,7 @@ export default function (h) {
 
     // ---- actions ----
     async _fdRefresh(select) {
+      this._fnames = null;
       const st = this._fdState();
       st.draft = null;
       st.draftFor = null;

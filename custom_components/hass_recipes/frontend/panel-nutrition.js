@@ -52,6 +52,7 @@ export default function (h) {
 
     /** Links and custom ingredients are shared by every recipe: forget all results and fetch again. */
     async _nuRefresh() {
+      this._fnames = null;
       for (const entry of Object.values(this._nuCache || {})) entry.version = "stale";
       const r = this._recipe(this._view.id);
       if (r) this._nuData(r);

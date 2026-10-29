@@ -208,7 +208,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
     )
 
     async def add_to_shopping_list(call: ServiceCall) -> ServiceResponse:
-        return await async_add_to_shopping_list(hass, store, dict(call.data))
+        return await async_add_to_shopping_list(hass, store, dict(call.data), nutrition)
 
     hass.services.async_register(
         DOMAIN,
@@ -306,7 +306,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
         start = call.data.get("start") or date.today()
         end = start + timedelta(days=int(call.data["days"]) - 1)
         return await async_add_plan_to_shopping_list(
-            hass, store, plan.list(start, end), call.data["entity_id"], call.data["units"]
+            hass, store, plan.list(start, end), call.data["entity_id"], call.data["units"], nutrition
         )
 
     hass.services.async_register(

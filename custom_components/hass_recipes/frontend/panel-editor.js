@@ -96,7 +96,7 @@ export default function (h) {
     // ---- text with ingredient chips ----
     /** Where each linked ingredient is named in the step text. */
     _neDetectChips(step, rowsByUid) {
-      const items = (step.ingredients || []).filter((u) => rowsByUid.has(u)).map((u) => ({ key: u, text: rowsByUid.get(u).text }));
+      const items = (step.ingredients || []).filter((u) => rowsByUid.has(u)).map((u) => ({ key: u, text: rowsByUid.get(u).text, names: this._foodNamesForText(rowsByUid.get(u).text) }));
       return detectChips(step.text, items).map((c) => ({ uid: c.key, start: c.start, len: c.len }));
     },
 
@@ -509,7 +509,7 @@ export default function (h) {
         for (const s of g.steps) {
           if (stepUid && s.uid !== stepUid) continue;
           const have = new Set((s.ingredients || []).map(String));
-          const items = mine.filter((r) => r.text.trim() && !have.has(String(r.uid))).map((r) => ({ key: r.uid, text: r.text }));
+          const items = mine.filter((r) => r.text.trim() && !have.has(String(r.uid))).map((r) => ({ key: r.uid, text: r.text, names: this._foodNamesForText(r.text) }));
           const found = detectChips(s.text, items).map((c) => c.key);
           if (found.length) {
             s.ingredients = [...new Set([...(s.ingredients || []), ...found])];

@@ -91,3 +91,12 @@ test("the food word is the noun, without units or remarks", () => {
   assert.equal(s.foodWords("2 stk røde løg")[0], "løg");
   assert.equal(s.foodWords("280 gram sukker jeg brugte halv brun farin")[0], "sukker");
 });
+
+test("a step names an ingredient by another name of its food", () => {
+  const items = [{ key: 1, text: "400 g hvedemel", names: ["Hvedemel", "mel"] }, { key: 2, text: "2 æg" }];
+  assert.deepEqual(s.detectChips("Rør melet i og tilsæt æg.", items).map((c) => c.key), [1, 2]);
+  // without the names the line's own words are all there is
+  assert.deepEqual(s.detectChips("Rør melet i.", [{ key: 1, text: "400 g hvedemel" }]), []);
+  // the line's own words still come first
+  assert.deepEqual(s.detectChips("Rør hvedemel og mel.", items).map((c) => [c.start, c.len]), [[4, 8]]);
+});

@@ -322,13 +322,14 @@ const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Where each ingredient in `items` ([{ key, text }]) is named in `text`: [{ key, start, len }].
+ * An item may have `names`: other names of its food, tried when the line's own words are not in the text.
  * Every mention of the first food word that is found counts, and inflected forms
  * (smør / smørret, æg / æggene); "salt og peber" is that phrase or each food on its own.
  */
 export const detectChips = (text, items) => {
   const chips = [];
   const taken = (a, b) => chips.some((c) => a < c.start + c.len && b > c.start);
-  for (const { key, text: line } of items) {
+  for (const { key, text: line, names = [] } of items) {
     const words = foodWords(line);
     const find = (word) => {
       const re = new RegExp(`(?<![\\p{L}])${escRe(word).replace(/ /g, "\\s+")}\\p{L}{0,4}(?![\\p{L}])`, "giu");
@@ -348,7 +349,8 @@ export const detectChips = (text, items) => {
       for (const word of words.slice(1)) chips.push(...find(word));
       continue;
     }
-    for (const word of words) {
+    // the words of the line first, then the other names of its food ("mel" for hvedemel)
+    for (const word of [...words, ...names]) {
       const found = find(word);
       if (found.length) {
         chips.push(...found);
