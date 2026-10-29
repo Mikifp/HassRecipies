@@ -185,7 +185,7 @@ export default function (h) {
         ? `<div class="nu-match">${this._nuChip(tag, tone)}</div>`
         : "";
       return `<li class="nu-item s-${item.status}">
-          <div class="nu-line"><span class="nu-text">${esc(item.text)}</span><span class="nu-kcal">${esc(kcal)}</span></div>
+          <div class="nu-line">${edit && item.key ? `<ha-checkbox data-nu-sel="${item.index}" ${this._nu.sel && this._nu.sel.has(item.index) ? "checked" : ""}></ha-checkbox>` : ""}<span class="nu-text">${esc(item.text)}</span><span class="nu-kcal">${esc(kcal)}</span></div>
           ${matchLine}${detail}${acts}
           ${open ? this._nuPickerHtml(item) : ""}
         </li>`;
@@ -254,6 +254,7 @@ export default function (h) {
           <div class="muted nu-status">${esc(this._nuStatusText(d))}</div>
           <h3>${esc(h.T("Ingredients and foods"))}</h3>
           ${banner}
+          ${edit ? `<div id="nu-selbar" class="nu-selbar" hidden></div>${d.unlinked ? `<ha-button appearance="plain" size="s" data-nu="select-unlinked"><ha-icon slot="start" icon="mdi:checkbox-multiple-marked-outline"></ha-icon>${esc(h.T("Select the ones without a food"))}</ha-button>` : ""}` : ""}
           <ul class="nu-items">${d.items.map((i) => this._nuItemHtml(i, edit)).join("")}</ul>
           <ha-button appearance="plain" data-act="foods"><ha-icon slot="start" icon="mdi:food-apple-outline"></ha-icon>${esc(h.T("Manage foods"))}</ha-button>
           ${this._nuSourceHtml(d)}
@@ -318,10 +319,67 @@ export default function (h) {
       await this._nuRefresh();
     },
 
+    // ---- several lines at once ----
+    _nuSelItems() {
+      const sel = (this._nu && this._nu.sel) || new Set();
+      return [...sel].map((i) => this._nuItem(i)).filter((i) => i && i.key);
+    },
+
+    _nuPaintSel() {
+      const bar = this.shadowRoot && this.shadowRoot.getElementById("nu-selbar");
+      if (!bar) return;
+      const items = this._nuSelItems();
+      bar.hidden = !items.length;
+      if (!items.length) return;
+      const btn = (act, icon, label) => `<ha-button size="s" appearance="plain" data-nusel="${act}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon>${esc(h.T(label))}</ha-button>`;
+      const hasGuess = items.some((i) => !i.own_food && i.match && i.match.source !== "ignore");
+      bar.innerHTML = `<ha-icon-button data-nusel="clear" label="${esc(h.T("Clear selection"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>
+        <span class="nu-seln">${items.length} ${esc(h.T("selected"))}</span>
+        ${btn("assign", "link-variant", "Assign to a food")}${hasGuess ? btn("accept", "check", "Accept suggestions") : ""}${btn("ignore", "cancel", "Don't count")}`;
+      bar.querySelectorAll("[data-nusel]").forEach((el) => el.addEventListener("click", () => this._nuSelAct(el.dataset.nusel)));
+    },
+
+    async _nuSelAct(act) {
+      const items = this._nuSelItems();
+      const keys = [...new Set(items.map((i) => i.key))];
+      const done = async () => {
+        this._nu.sel = new Set();
+        this._fdState().data = null; // the Foods page looks again
+        await this._nuRefresh();
+      };
+      if (act === "clear") {
+        this._nu.sel = new Set();
+        this.shadowRoot.querySelectorAll("[data-nu-sel]").forEach((c) => (c.checked = false));
+        return this._nuPaintSel();
+      }
+      if (!keys.length) return;
+      if (act === "assign") return this._fdAssignNames(keys, done);
+      if (act === "accept") {
+        const res = await this._nuCall({ type: "hass_recipes/foods_adopt", keys });
+        if (res !== undefined) {
+          await done();
+          this._flash(`${res.added} ${h.T("foods added from the suggestions.")}`);
+        }
+        return;
+      }
+      if (act === "ignore") {
+        for (const key of keys) if ((await this._nuCall({ type: "hass_recipes/nutrition_link", food: key, source: "ignore" })) === undefined) return;
+        await done();
+      }
+    },
+
     async _nuAct(act, el) {
       const index = el.dataset.i !== undefined ? +el.dataset.i : null;
       const item = index !== null ? this._nuItem(index) : null;
       switch (act) {
+        case "select-unlinked": {
+          const r = this._recipe(this._view.id);
+          const st = r && this._nuData(r);
+          this._nu.sel = new Set(((st && st.data && st.data.items) || []).filter((i) => i.key && !i.own_food && i.status !== "ignored").map((i) => i.index));
+          this.shadowRoot.querySelectorAll("[data-nu-sel]").forEach((c) => (c.checked = this._nu.sel.has(+c.dataset.nuSel)));
+          this._nuPaintSel();
+          break;
+        }
         case "change": {
           const opening = this._nu.open !== index;
           this._nu.open = opening ? index : null;
@@ -394,6 +452,16 @@ export default function (h) {
     },
 
     _bindNutrition(root, on) {
+      this._nu = this._nu || { open: null, query: "", results: [], foods: null };
+      if (this._nu.selFor !== this._view.id) this._nu.sel = new Set();
+      this._nu.selFor = this._view.id;
+      on("[data-nu-sel]", "change", (e) => {
+        const i = +e.currentTarget.dataset.nuSel;
+        if (e.currentTarget.checked) this._nu.sel.add(i);
+        else this._nu.sel.delete(i);
+        this._nuPaintSel();
+      });
+      this._nuPaintSel();
       on("[data-nu]", "click", (e) => this._nuAct(e.currentTarget.dataset.nu, e.currentTarget));
       on("[data-nu-pick]", "click", (e) => this._nuPick(+e.currentTarget.dataset.nuPick));
       on("[data-nu-own]", "click", (e) => this._nuPickOwn(e.currentTarget.dataset.nuOwn));

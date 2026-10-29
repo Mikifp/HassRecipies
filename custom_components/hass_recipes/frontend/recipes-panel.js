@@ -346,8 +346,16 @@ const STYLE = `
   .fd-urow ha-input { flex: 1; min-width: 0; }
   .fd-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
   .fm-res { max-height: 45vh; overflow-y: auto; }
+  .fm-head { padding: 8px 16px 2px; font-size: 0.8em; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--secondary-text-color); }
+  .fd-preview { list-style: none; margin: 0 0 12px; padding: 0; }
+  .fd-preview li { display: flex; gap: 12px; align-items: flex-start; padding: 6px 0; }
+  .fd-preview ha-icon { color: var(--secondary-text-color); flex: none; --mdc-icon-size: 20px; }
   .fd-selbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 0 var(--ha-space-4, 16px); min-height: 48px; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, transparent)); }
   .fd-selbar[hidden] { display: none; }
+  .nu-selbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; position: sticky; top: 0; z-index: 2; min-height: 48px; padding: 0 8px; margin: 4px 0; border-radius: 8px; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, var(--card-background-color))); }
+  .nu-selbar[hidden] { display: none; }
+  .nu-seln { font-weight: 500; margin-inline: 4px 12px; }
+  .nu-line ha-checkbox { margin-inline: -8px 0; flex: none; }
   .fd-groups { margin: 0 var(--ha-space-4, 16px) var(--ha-space-3, 12px); }
   .fd-groups-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
   .fd-groups-head > ha-icon { color: var(--primary-color); flex: none; }
