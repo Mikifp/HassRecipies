@@ -23,6 +23,7 @@ from .mealplan import MealPlanError
 from .migrate import from_mealie
 from .nutrition import NUTRIENTS, SOURCE_CUSTOM, SOURCE_FRIDA, SOURCE_IGNORE, SOURCE_USDA, food_key as _key
 from .nutrition_store import Nutrition, NutritionError
+from .calorie_calc import CalcError, calculate
 from .tracker import Tracker, TrackerError
 from .scraper import RecipeImportError, async_import_html, async_import_text, async_import_url
 from .store import RecipeStore
@@ -163,6 +164,10 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_tracker_log_plan,
         ws_tracker_recipe,
         ws_tracker_copy,
+        ws_tracker_calc,
+        ws_tracker_profile,
+        ws_tracker_weight,
+        ws_tracker_weight_delete,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -1347,3 +1352,53 @@ async def ws_tracker_copy(hass, connection, msg, tracker) -> None:
     if msg["source"] == msg["date"]:
         raise TrackerError("Pick another day to copy from")
     connection.send_result(msg["id"], tracker.copy_day(msg["person_id"], msg["source"], msg["date"]))
+
+
+_PROFILE = {
+    vol.Optional("sex"): vol.In(["female", "male"]),
+    vol.Optional("activity"): vol.In(["sedentary", "light", "moderate", "hard"]),
+    vol.Optional("age"): vol.Any(None, vol.Coerce(float)),
+    vol.Optional("height_cm"): vol.Any(None, vol.Coerce(float)),
+    vol.Optional("weight_kg"): vol.Any(None, vol.Coerce(float)),
+    vol.Optional("target_kg"): vol.Any(None, vol.Coerce(float)),
+    vol.Optional("pace"): vol.Any(None, vol.Coerce(float)),
+}
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/tracker_calc", vol.Required("profile"): _PROFILE})
+@callback
+def ws_tracker_calc(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Resting and maintenance energy and a daily target for each pace of weight loss (nothing is saved)."""
+    from homeassistant.util import dt as dt_util
+
+    try:
+        connection.send_result(msg["id"], calculate(msg["profile"], dt_util.now().date()))
+    except CalcError as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/tracker_profile", vol.Required("person_id"): str, vol.Required("profile"): _PROFILE}
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_profile(hass, connection, msg, tracker) -> None:
+    connection.send_result(msg["id"], _person_view(connection, tracker.set_profile(msg["person_id"], msg["profile"])))
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/tracker_weight", vol.Required("person_id"): str, vol.Required("date"): _DAY, vol.Required("kg"): vol.Coerce(float)}
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_weight(hass, connection, msg, tracker) -> None:
+    connection.send_result(msg["id"], _person_view(connection, tracker.log_weight(msg["person_id"], msg["date"], msg["kg"])))
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/tracker_weight_delete", vol.Required("person_id"): str, vol.Required("date"): _DAY}
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_weight_delete(hass, connection, msg, tracker) -> None:
+    connection.send_result(msg["id"], {"deleted": tracker.delete_weight(msg["person_id"], msg["date"])})

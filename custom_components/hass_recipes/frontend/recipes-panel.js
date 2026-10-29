@@ -388,6 +388,15 @@ const STYLE = `
   .tk-stepper ha-icon-button { --mdc-icon-button-size: 56px; --mdc-icon-size: 28px; border: 1px solid var(--divider-color); border-radius: 50%; }
   .tk-stepper ha-input { width: 120px; --ha-font-size-m: 1.6rem; text-align: center; }
   .tk-preview { text-align: center; }
+  .tk-deficit { margin: 8px 0 4px; }
+  .tk-weight { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 12px 0; padding-top: 12px; border-top: 1px solid var(--divider-color); }
+  .tk-wchart { flex-basis: 100%; min-height: 160px; }
+  .tk-cres { display: flex; flex-direction: column; gap: var(--ha-space-3, 12px); }
+  .tk-cgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .tk-cc .tk-big { font-size: 1.6rem; }
+  .tk-pace { cursor: pointer; border: 2px solid transparent; box-shadow: none; outline: 1px solid var(--divider-color); }
+  .tk-pace.on { border-color: var(--primary-color); outline: none; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 10%, transparent)); }
+  .tk-note { margin-top: 8px; font-size: 0.85em; }
   #tk-body { display: flex; flex-direction: column; gap: var(--ha-space-3, 12px); }
   .tk-fhead { font-size: 1.1em; }
   .nu-selbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; position: sticky; top: 0; z-index: 2; min-height: 48px; padding: 0 8px; margin: 4px 0; border-radius: 8px; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, var(--card-background-color))); }

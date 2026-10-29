@@ -33,6 +33,8 @@ export default function (h) {
     if (e.kind === "food") return `${num(e.amount, 1)} ${e.unit}`;
     return T("Quick entry");
   };
+  /** "Deficit 520 kcal" or "Surplus 120 kcal": what was eaten against maintenance. */
+  const deficitText = (deficit) => (deficit >= 0 ? `${T("Deficit")} ${num(deficit)} kcal` : `${T("Surplus")} ${num(-deficit)} kcal`);
   const monthFirst = (iso) => `${iso.slice(0, 8)}01`;
   const monthLast = (iso) => {
     const d = parseDay(iso);
@@ -132,6 +134,8 @@ export default function (h) {
           <div class="tk-tool">
             <div class="tk-people">${people}<ha-assist-chip data-tkact="person-add" label="${esc(T("Add person"))}"><ha-icon slot="icon" icon="mdi:plus"></ha-icon></ha-assist-chip></div>
             <ha-dropdown id="tk-menu"><ha-icon-button slot="trigger" label="${esc(T("More"))}"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
+              ${p.editable ? `<ha-dropdown-item value="calc"><ha-icon slot="icon" icon="mdi:calculator-variant-outline"></ha-icon>${esc(T("Calorie calculator"))}</ha-dropdown-item>` : ""}
+              ${p.editable ? `<ha-dropdown-item value="weight"><ha-icon slot="icon" icon="mdi:scale-bathroom"></ha-icon>${esc(T("Log weight"))}</ha-dropdown-item>` : ""}
               ${p.editable ? `<ha-dropdown-item value="goals"><ha-icon slot="icon" icon="mdi:target"></ha-icon>${esc(T("Edit goals"))}</ha-dropdown-item>` : ""}
               ${p.editable && (!p.user_id || this._tkAdmin()) ? `<ha-dropdown-item value="person-delete" variant="danger"><ha-icon slot="icon" icon="mdi:account-remove-outline"></ha-icon>${esc(`${T("Remove")} ${p.name}`)}</ha-dropdown-item>` : ""}
             </ha-dropdown>
@@ -174,6 +178,7 @@ export default function (h) {
             <ha-gauge id="tk-g-kcal"></ha-gauge>
             <div class="tk-ktext">
               <div class="tk-big">${num(totals.kcal)} <span>kcal</span></div>
+              ${d && d.maintenance && totals.kcal ? `<div class="muted">${esc(deficitText(d.maintenance - totals.kcal))} · ${esc(T("maintenance"))} ${num(d.maintenance)}</div>` : ""}
               ${
                 goals.kcal != null
                   ? `<div class="${left < 0 ? "tk-over" : "muted"}">${left >= 0 ? `${num(left)} ${esc(T("kcal left"))}` : `${num(-left)} ${esc(T("kcal over"))}`} · ${esc(T("Goal"))} ${num(goals.kcal)}</div>`
@@ -230,6 +235,21 @@ export default function (h) {
       return `${this._tkPinHtml(d)}${this._tkSummaryHtml(d.totals, p.goals, edit, d)}${planned}${cards}`;
     },
 
+    _tkWeightCardHtml(r, person) {
+      const w = r.weights;
+      const latest = Object.keys(person.weights || {}).sort().pop();
+      if (!latest && !person.editable) return "";
+      const first = w[0];
+      const last = w[w.length - 1];
+      return `<div class="tk-weight">
+          <div><div class="muted">${esc(T("Weight"))}</div>
+            <b>${latest ? `${num(person.weights[latest], 1)} kg` : "–"}</b>
+            ${w.length > 1 ? `<span class="muted"> · ${last.kg - first.kg > 0 ? "+" : ""}${num(last.kg - first.kg, 1)} kg ${esc(T("in this period"))}</span>` : ""}</div>
+          ${person.editable ? `<ha-button size="s" appearance="plain" data-tkact="weight"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("Log weight"))}</ha-button>` : ""}
+          ${w.length > 1 ? `<div id="tk-wchart" class="tk-wchart"></div>` : ""}
+        </div>`;
+    },
+
     _tkRangeHtml(st) {
       const r = st.range;
       if (!r) return `<div class="muted tk-loading">${esc(T("Loading…"))}</div>`;
@@ -238,6 +258,15 @@ export default function (h) {
       return `<ha-card class="tk-summary"><div class="card-content">
           <div class="tk-ktext"><div class="tk-big">${avg.kcal == null ? "–" : num(avg.kcal)} <span>${esc(T("kcal a day on average"))}</span></div>
             <div class="muted">${r.logged_days} ${esc(T(r.logged_days === 1 ? "day logged" : "days logged"))}${goals.kcal ? ` · ${esc(T("Goal"))} ${num(goals.kcal)}` : ""}</div></div>
+          ${
+            r.deficit_total != null
+              ? `<div class="tk-deficit"><b>${esc(deficitText(r.deficit_total))}</b> <span class="muted">${esc(T("against maintenance"))} · ${esc(T("on average"))} ${num(Math.abs(r.deficit_average))} kcal ${esc(T(r.deficit_average >= 0 ? "a day under" : "a day over"))}</span>
+                  <div class="muted">${esc(`≈ ${num(Math.abs(r.kg), 2)} kg ${T(r.kg >= 0 ? "lost" : "gained")} ${T("if it keeps up")}`)}</div></div>`
+              : st.data.person.editable && !(st.data.person.profile && st.data.person.profile.sex)
+                ? `<div class="tk-deficit"><ha-button size="s" appearance="plain" data-tkact="calc"><ha-icon slot="start" icon="mdi:calculator-variant-outline"></ha-icon>${esc(T("Work out your maintenance calories"))}</ha-button></div>`
+                : ""
+          }
+          ${this._tkWeightCardHtml(r, st.data.person)}
           <div class="tk-avg">${MACROS.map(([k, label]) => `<div><div class="muted">${esc(T(label))}</div><b>${avg[k] == null ? "–" : num(avg[k])} g</b></div>`).join("")}</div>
           <div id="tk-chart" class="tk-chart"></div>
         </div></ha-card>`;
@@ -327,6 +356,9 @@ export default function (h) {
           data: days.map((x) => (x.logged ? { value: x.kcal, itemStyle: { color: goal && x.kcal > goal ? error : primary, borderRadius: [4, 4, 0, 0] } } : null)),
           barMaxWidth: 36,
         },
+        ...(days.some((x) => x.maintenance)
+          ? [{ type: "line", name: T("maintenance"), data: days.map((x) => x.maintenance), symbol: "none", lineStyle: { type: "dotted", width: 1, color: text }, itemStyle: { color: text }, silent: true }]
+          : []),
         ...(goal
           ? [{ type: "line", name: T("Goal"), data: days.map(() => goal), symbol: "none", lineStyle: { type: "dashed", width: 1, color: text }, itemStyle: { color: text }, silent: true }]
           : []),
@@ -340,6 +372,22 @@ export default function (h) {
         dataZoom: [],
       };
       host.replaceChildren(chart);
+      const wh = root.getElementById("tk-wchart");
+      if (wh && r.weights.length > 1) {
+        const wc = document.createElement("ha-chart-base");
+        wc.hass = this._hass;
+        wc.height = "160px";
+        wc.data = [{ type: "line", name: T("Weight"), data: r.weights.map((x) => [x.date, x.kg]), symbolSize: 6, lineStyle: { color: primary }, itemStyle: { color: primary } }];
+        wc.options = {
+          xAxis: { type: "time", min: days[0].date, max: days[days.length - 1].date },
+          yAxis: { type: "value", scale: true, name: "kg" },
+          legend: { show: false },
+          grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+          tooltip: { trigger: "axis" },
+          dataZoom: [],
+        };
+        wh.replaceChildren(wc);
+      }
     },
 
     _tkDaysList(r) {
@@ -359,6 +407,8 @@ export default function (h) {
 
     _tkMenu(value) {
       if (value === "goals") this._tkGoalsDialog();
+      else if (value === "calc") this._tkCalcDialog();
+      else if (value === "weight") this._tkWeightDialog();
       else if (value === "person-delete") this._tkRemovePerson();
     },
 
@@ -392,6 +442,10 @@ export default function (h) {
           return this._tkAddDialog(el.dataset.tkadd);
         case "goals":
           return this._tkGoalsDialog();
+        case "calc":
+          return this._tkCalcDialog();
+        case "weight":
+          return this._tkWeightDialog();
         case "usual": {
           const [meal, i] = el.dataset.tkusual.split(":");
           const t = (d.usual[meal] || [])[Number(i)];
@@ -480,6 +534,151 @@ export default function (h) {
           const { ok } = await this._tkCall({ type: "hass_recipes/tracker_goals", person_id: p.id, goals: data });
           if (ok) await this._tkLoad();
         });
+      });
+    },
+
+    _tkWeightDialog() {
+      const st = this._tkState();
+      const p = st.data.person;
+      const recent = Object.keys(p.weights || {}).sort().reverse().slice(0, 6);
+      const html = `<div id="tk-body"><ha-form id="tk-wf"></ha-form>
+          <div class="pd-actions"><ha-button appearance="filled" id="tk-wok">${esc(T("Save"))}</ha-button></div>
+          ${recent.length ? `<ha-list-base>${recent.map((d) => `<ha-list-item-button data-wd="${esc(d)}" headline="${esc(`${num(p.weights[d], 1)} kg`)}" supporting-text="${esc(dayLabel(d, st.data.today))}"><ha-icon slot="end" icon="mdi:delete-outline"></ha-icon></ha-list-item-button>`).join("")}</ha-list-base>` : ""}</div>`;
+      this._planDialog(`${p.name}: ${T("Weight")}`, html, (dlg, close) => {
+        const last = recent[0] ? p.weights[recent[0]] : (p.profile && p.profile.weight_kg) || null;
+        let data = { kg: last, date: st.data.today };
+        const form = dlg.querySelector("#tk-wf");
+        form.hass = this._hass;
+        form.schema = [
+          { name: "kg", required: true, selector: { number: { min: 30, max: 400, step: 0.1, mode: "box", unit_of_measurement: "kg" } } },
+          { name: "date", required: true, selector: { date: {} } },
+        ];
+        form.data = data;
+        form.computeLabel = (sc) => T(sc.name === "kg" ? "Weight (kg)" : "Date");
+        form.addEventListener("value-changed", (e) => {
+          e.stopPropagation();
+          data = e.detail.value || data;
+          form.data = data;
+        });
+        dlg.querySelector("#tk-wok").addEventListener("click", async () => {
+          if (!data.kg) return;
+          close();
+          const { ok } = await this._tkCall({ type: "hass_recipes/tracker_weight", person_id: p.id, date: data.date, kg: Number(data.kg) });
+          if (ok) await this._tkLoad();
+        });
+        dlg.querySelectorAll("[data-wd]").forEach((row) =>
+          row.addEventListener("click", async () => {
+            close();
+            const { ok } = await this._tkCall({ type: "hass_recipes/tracker_weight_delete", person_id: p.id, date: row.dataset.wd });
+            if (ok) await this._tkLoad();
+          })
+        );
+      });
+    },
+
+    /** The calorie calculator: your numbers, maintenance, and a daily target for each pace of weight loss. */
+    _tkCalcDialog() {
+      const st = this._tkState();
+      const p = st.data.person;
+      const latest = Object.keys(p.weights || {}).sort().pop();
+      const prof = p.profile || {};
+      let data = {
+        sex: prof.sex || "female",
+        age: prof.age ?? null,
+        height_cm: prof.height_cm ?? null,
+        weight_kg: latest ? p.weights[latest] : prof.weight_kg ?? null,
+        target_kg: prof.target_kg ?? null,
+        activity: prof.activity || "light",
+      };
+      let pace = prof.pace || 0.5;
+      let result = null;
+      const html = `<div id="tk-body"><ha-form id="tk-cf"></ha-form><div id="tk-cres" class="tk-cres"></div>
+          <div class="muted tk-note">${esc(T("These are estimates (Mifflin-St Jeor). Real needs vary from person to person."))}</div></div>`;
+      this._planDialog(`${p.name}: ${T("Calorie calculator")}`, html, (dlg, close) => {
+        const form = dlg.querySelector("#tk-cf");
+        const out = dlg.querySelector("#tk-cres");
+        const labels = { sex: "Sex", age: "Age", height_cm: "Height (cm)", weight_kg: "Weight (kg)", target_kg: "Target weight (kg)", activity: "Activity" };
+        const box = (min, max, step) => ({ number: { min, max, step, mode: "box" } });
+        form.hass = this._hass;
+        form.schema = [
+          { name: "sex", required: true, selector: { select: { mode: "box", options: [{ value: "female", label: T("Female") }, { value: "male", label: T("Male") }] } } },
+          { type: "grid", name: "", schema: [
+            { name: "age", required: true, selector: box(14, 110, 1) },
+            { name: "height_cm", required: true, selector: box(100, 250, 1) },
+            { name: "weight_kg", required: true, selector: box(30, 400, 0.1) },
+            { name: "target_kg", selector: box(30, 400, 0.1) },
+          ] },
+          { name: "activity", required: true, selector: { select: { mode: "list", options: [
+            { value: "sedentary", label: T("Mostly sitting") },
+            { value: "light", label: T("Light: exercise 1–3 days a week") },
+            { value: "moderate", label: T("Moderate: 3–5 days a week") },
+            { value: "hard", label: T("Hard: 6–7 days a week") },
+          ] } } },
+        ];
+        form.data = data;
+        form.computeLabel = (sc) => T(labels[sc.name] || sc.name);
+        const draw = () => {
+          if (!result) {
+            out.innerHTML = `<p class="muted">${esc(T("Fill in your age, height and weight."))}</p>`;
+            return;
+          }
+          const card = (title, big, sub) => `<ha-card class="tk-cc"><div class="card-content"><div class="muted">${esc(title)}</div><div class="tk-big">${big}</div><div class="muted">${esc(sub)}</div></div></ha-card>`;
+          const chosen = result.options.find((o) => o.pace === pace) || result.options[1];
+          const names = { 0.25: "gentle", 0.5: "steady", 0.75: "fast" };
+          const paces = result.options
+            .map((o) => `<ha-card class="tk-pace ${o.pace === chosen.pace ? "on" : ""}" data-pace="${o.pace}" tabindex="0"><div class="card-content"><b>${num(o.pace, 2)} kg ${esc(T("a week"))}</b><div class="muted">${num(o.kcal)} kcal · ${esc(T(names[o.pace] || ""))}</div></div></ha-card>`)
+            .join("");
+          const when = chosen.weeks != null ? `${esc(T("You reach"))} ${num(data.target_kg)} kg ${esc(T("in about"))} ${chosen.weeks} ${esc(T("weeks"))} (${esc(new Intl.DateTimeFormat(state.language || undefined, { day: "numeric", month: "short" }).format(parseDay(chosen.reached)))}).` : data.target_kg ? esc(T("The target weight is not below your weight.")) : esc(T("Add a target weight to see when you get there."));
+          out.innerHTML = `<div class="tk-cgrid">${card(T("Resting (BMR)"), num(result.bmr), `kcal ${T("a day")}`)}${card(T("Maintenance"), num(result.maintenance), `kcal ${T("a day to keep")} ${num(data.weight_kg, 1)} kg`)}</div>
+            <div class="muted">${esc(T("Pace"))}</div><div class="tk-cgrid tk-paces">${paces}</div>
+            ${chosen.below_minimum ? `<ha-alert alert-type="warning">${esc(`${num(chosen.kcal)} kcal ${T("is below")} ${num(result.minimum)} kcal ${T("a day. That is not advised without a doctor.")}`)}</ha-alert>` : ""}
+            <ha-card><div class="card-content"><div>${when}</div><div class="muted">${esc(T("Suggested split"))}: ${esc(T("Protein"))} ${chosen.macros.protein} g · ${esc(T("Carbs"))} ${chosen.macros.carbs} g · ${esc(T("Fat"))} ${chosen.macros.fat} g</div></div></ha-card>
+            <div class="pd-actions"><ha-button appearance="filled" id="tk-goalall">${esc(`${T("Set as")} ${p.name}${T("'s goal")}`)}</ha-button><ha-button appearance="plain" id="tk-goalkcal">${esc(T("Set kcal only"))}</ha-button><ha-button appearance="plain" id="tk-saveprof">${esc(T("Save profile"))}</ha-button></div>`;
+          out.querySelectorAll("[data-pace]").forEach((c) => c.addEventListener("click", () => {
+            pace = Number(c.dataset.pace);
+            draw();
+          }));
+          const profile = () => ({ ...data, age: Number(data.age), height_cm: Number(data.height_cm), weight_kg: Number(data.weight_kg), target_kg: data.target_kg ? Number(data.target_kg) : null, pace });
+          const save = async (goals) => {
+            close();
+            let r = await this._tkCall({ type: "hass_recipes/tracker_profile", person_id: p.id, profile: profile() });
+            if (r.ok && goals) r = await this._tkCall({ type: "hass_recipes/tracker_goals", person_id: p.id, goals });
+            if (r.ok) {
+              await this._tkLoad();
+              this._flash(T(goals ? "Goal set." : "Profile saved."));
+            }
+          };
+          out.querySelector("#tk-goalall").addEventListener("click", () => save({ kcal: chosen.kcal, ...chosen.macros }));
+          out.querySelector("#tk-goalkcal").addEventListener("click", () => save({ kcal: chosen.kcal }));
+          out.querySelector("#tk-saveprof").addEventListener("click", () => save(null));
+        };
+        let timer = null;
+        const calc = () => {
+          clearTimeout(timer);
+          timer = setTimeout(async () => {
+            const need = ["age", "height_cm", "weight_kg"].every((k) => Number(data[k]) > 0);
+            if (!need) {
+              result = null;
+              return draw();
+            }
+            try {
+              result = await this._ws({ type: "hass_recipes/tracker_calc", profile: { ...data, age: Number(data.age), height_cm: Number(data.height_cm), weight_kg: Number(data.weight_kg), target_kg: data.target_kg ? Number(data.target_kg) : null } });
+            } catch (err) {
+              result = null;
+              out.innerHTML = `<ha-alert alert-type="warning">${esc(err.message || String(err))}</ha-alert>`;
+              return;
+            }
+            draw();
+          }, 250);
+        };
+        form.addEventListener("value-changed", (e) => {
+          e.stopPropagation();
+          data = e.detail.value || data;
+          form.data = data;
+          calc();
+        });
+        draw();
+        calc();
       });
     },
 
