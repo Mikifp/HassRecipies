@@ -17,3 +17,9 @@ DEVICE_INFO = DeviceInfo(
 
 def get_manager(hass) -> TimerManager:
     return hass.data[f"{DOMAIN}_timers"]
+
+TRACKER_DEVICE = DeviceInfo(
+    identifiers={(DOMAIN, "tracker")},
+    name="Calorie tracker",
+    entry_type=DeviceEntryType.SERVICE,
+)

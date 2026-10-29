@@ -23,6 +23,7 @@ from .mealplan import MealPlanError
 from .migrate import from_mealie
 from .nutrition import NUTRIENTS, SOURCE_CUSTOM, SOURCE_FRIDA, SOURCE_IGNORE, SOURCE_USDA, food_key as _key
 from .nutrition_store import Nutrition, NutritionError
+from .tracker import Tracker, TrackerError
 from .scraper import RecipeImportError, async_import_html, async_import_text, async_import_url
 from .store import RecipeStore
 
@@ -150,6 +151,16 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_foods_link,
         ws_foods_assign,
         ws_foods_names,
+        ws_tracker_day,
+        ws_tracker_range,
+        ws_tracker_add,
+        ws_tracker_update,
+        ws_tracker_delete,
+        ws_tracker_goals,
+        ws_tracker_person_add,
+        ws_tracker_person_delete,
+        ws_tracker_favourite,
+        ws_tracker_log_plan,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -1100,3 +1111,212 @@ def ws_foods_link(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
 def ws_foods_adopt(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Make foods of ingredient names, accepting what the calculation already picks for them."""
     connection.send_result(msg["id"], {"added": _nutrition(hass).adopt(msg["keys"])})
+
+
+# ---- the calorie tracker ----------------------------------------------------------
+# Anyone may read everyone's log. A person's log is changed by that person (the Home Assistant user it is
+# made for), by an administrator, or by anyone when it is a name added by hand.
+
+def _tracker(hass: HomeAssistant) -> Tracker:
+    return hass.data[f"{DOMAIN}_tracker"]
+
+
+def _may_change(connection: websocket_api.ActiveConnection, person: dict[str, Any]) -> bool:
+    user = connection.user
+    if person.get("user_id") is None:
+        return True
+    return bool(user is not None and (user.is_admin or user.id == person["user_id"]))
+
+
+def _person_view(connection: websocket_api.ActiveConnection, person: dict[str, Any]) -> dict[str, Any]:
+    return {**person, "editable": _may_change(connection, person)}
+
+
+def _tracker_guard(func):
+    """A tracker command that changes a person's log: the person is checked, TrackerError becomes an error reply."""
+
+    @functools.wraps(func)
+    async def wrapper(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+        tracker = _tracker(hass)
+        try:
+            person_id = msg.get("person_id")
+            if person_id is None and msg.get("entry_id"):
+                person_id = tracker.entry(msg["entry_id"])["person_id"]
+            person = tracker.person(person_id)
+            if not _may_change(connection, person):
+                connection.send_error(msg["id"], "unauthorized", f"Only {person['name']} or an administrator can change this log.")
+                return
+            await func(hass, connection, msg, tracker)
+        except (TrackerError, MealPlanError) as err:
+            connection.send_error(msg["id"], "invalid_format", str(err))
+
+    return wrapper
+
+
+async def _caller(hass: HomeAssistant, connection: websocket_api.ActiveConnection) -> str | None:
+    """The person of the user who asks (made when there is none yet)."""
+    tracker = _tracker(hass)
+    await tracker.async_sync_users()
+    user = connection.user
+    if user is None:
+        return None
+    return tracker.ensure_user(user.id, user.name)["id"]
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/tracker_day", vol.Optional("person_id"): str, vol.Optional("date"): _DAY}
+)
+@websocket_api.async_response
+async def ws_tracker_day(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """One person's day: entries, totals against the goal, planned meals not logged yet, recent and favourite items."""
+    from homeassistant.util import dt as dt_util
+
+    tracker = _tracker(hass)
+    me = await _caller(hass, connection)
+    person_id = msg.get("person_id") or me
+    day = msg.get("date") or dt_util.now().date().isoformat()
+    try:
+        result = tracker.day(person_id, day)
+    except (TrackerError, MealPlanError) as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+        return
+    result["person"] = _person_view(connection, result["person"])
+    result["persons"] = [_person_view(connection, p) for p in tracker.persons()]
+    result["me"] = me
+    result["meals"] = _plan(hass).meals()
+    result["today"] = dt_util.now().date().isoformat()
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/tracker_range", vol.Required("person_id"): str, vol.Required("start"): _DAY, vol.Required("end"): _DAY}
+)
+@callback
+def ws_tracker_range(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    try:
+        connection.send_result(msg["id"], _tracker(hass).range(msg["person_id"], msg["start"], msg["end"]))
+    except (TrackerError, MealPlanError) as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+
+
+_NUM = vol.Any(None, vol.Coerce(float))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/tracker_add",
+        vol.Required("person_id"): str,
+        vol.Required("date"): _DAY,
+        vol.Required("meal"): str,
+        vol.Required("kind"): vol.In(["recipe", "food", "quick"]),
+        vol.Optional("recipe_id"): str,
+        vol.Optional("food_id"): str,
+        vol.Optional("servings"): _NUM,
+        vol.Optional("amount"): _NUM,
+        vol.Optional("unit"): vol.All(str, vol.Length(max=40)),
+        vol.Optional("name"): vol.All(str, vol.Length(max=120)),
+        vol.Optional("kcal"): _NUM,
+        vol.Optional("protein"): _NUM,
+        vol.Optional("carbs"): _NUM,
+        vol.Optional("fat"): _NUM,
+        vol.Optional("plan_id"): str,
+    }
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_add(hass, connection, msg, tracker) -> None:
+    fields = {k: v for k, v in msg.items() if k not in ("id", "type", "person_id", "date", "meal", "kind")}
+    connection.send_result(msg["id"], tracker.add(msg["person_id"], msg["date"], msg["meal"], msg["kind"], **fields))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/tracker_update",
+        vol.Required("entry_id"): str,
+        vol.Optional("date"): _DAY,
+        vol.Optional("meal"): str,
+        vol.Optional("servings"): _NUM,
+        vol.Optional("amount"): _NUM,
+        vol.Optional("unit"): vol.All(str, vol.Length(max=40)),
+        vol.Optional("name"): vol.All(str, vol.Length(max=120)),
+        vol.Optional("kcal"): _NUM,
+        vol.Optional("protein"): _NUM,
+        vol.Optional("carbs"): _NUM,
+        vol.Optional("fat"): _NUM,
+    }
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_update(hass, connection, msg, tracker) -> None:
+    fields = {k: v for k, v in msg.items() if k not in ("id", "type", "entry_id")}
+    connection.send_result(msg["id"], tracker.update(msg["entry_id"], **fields))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/tracker_delete", vol.Required("entry_id"): str})
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_delete(hass, connection, msg, tracker) -> None:
+    connection.send_result(msg["id"], {"deleted": tracker.delete(msg["entry_id"])})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/tracker_goals",
+        vol.Required("person_id"): str,
+        vol.Required("goals"): {vol.Optional(k): _NUM for k in ("kcal", "protein", "carbs", "fat")},
+    }
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_goals(hass, connection, msg, tracker) -> None:
+    connection.send_result(msg["id"], _person_view(connection, tracker.set_goals(msg["person_id"], msg["goals"])))
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/tracker_person_add", vol.Required("name"): vol.All(str, vol.Length(min=1, max=60))}
+)
+@callback
+def ws_tracker_person_add(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    try:
+        connection.send_result(msg["id"], _person_view(connection, _tracker(hass).add_person(msg["name"])))
+    except TrackerError as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/tracker_person_delete", vol.Required("person_id"): str})
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_person_delete(hass, connection, msg, tracker) -> None:
+    person = tracker.person(msg["person_id"])
+    if person.get("user_id") is not None and not (connection.user and connection.user.is_admin):
+        connection.send_error(msg["id"], "unauthorized", "Only an administrator can remove a Home Assistant user's log.")
+        return
+    connection.send_result(msg["id"], {"deleted": tracker.delete_person(msg["person_id"])})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/tracker_favourite", vol.Required("person_id"): str, vol.Required("entry_id"): str}
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_favourite(hass, connection, msg, tracker) -> None:
+    connection.send_result(msg["id"], {"favourite": tracker.toggle_favourite(msg["person_id"], msg["entry_id"])})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/tracker_log_plan",
+        vol.Required("person_id"): str,
+        vol.Required("plan_id"): str,
+        vol.Optional("servings", default=1): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1000)),
+    }
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_log_plan(hass, connection, msg, tracker) -> None:
+    """Log a planned meal as eaten (on its day, in its meal)."""
+    plan = _plan(hass).get(msg["plan_id"])
+    if not plan or not plan.get("recipe_id"):
+        raise TrackerError("That planned meal has no recipe")
+    entry = tracker.add(msg["person_id"], plan["date"], plan["slot"], "recipe", recipe_id=plan["recipe_id"], servings=msg["servings"], plan_id=plan["id"])
+    connection.send_result(msg["id"], entry)
