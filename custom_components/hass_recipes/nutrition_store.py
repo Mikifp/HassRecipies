@@ -9,6 +9,7 @@ panel's Check ingredients page keep working.
 from __future__ import annotations
 
 from collections import Counter
+import copy
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -324,6 +325,20 @@ class Nutrition:
             if not p.get("header")
         ]
         return self.adopt([k for k in dict.fromkeys(keys) if k and k not in self.book.ignored], standard_only=True)
+
+    def link_many(self, keys: list[str], food_id: str) -> dict[str, Any]:
+        """Say that several ingredient names are the same food. All of them, or none if one cannot be."""
+        snapshot = copy.deepcopy((self.book.foods, self.book.ignored))
+        try:
+            for key in dict.fromkeys(food_key(k) for k in keys):
+                if key:
+                    self.book.link_key(key, food_id)
+            food = self.book.foods[food_id]
+        except (FoodError, KeyError) as err:
+            self.book.foods, self.book.ignored = snapshot
+            raise NutritionError(str(err) if isinstance(err, FoodError) else "Food not found") from err
+        self._save()
+        return self._describe_food(food, self._usage()[0])
 
     def adopt(self, keys: list[str], standard_only: bool = False) -> int:
         """Make foods of ingredient names, the way the calculation already reads them (suggestions accepted)."""

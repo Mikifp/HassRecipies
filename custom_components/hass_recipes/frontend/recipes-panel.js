@@ -346,6 +346,9 @@ const STYLE = `
   .fd-urow ha-input { flex: 1; min-width: 0; }
   .fd-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
   .fm-res { max-height: 45vh; overflow-y: auto; }
+  .fd-selbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 0 var(--ha-space-4, 16px); min-height: 48px; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, transparent)); }
+  .fd-selbar[hidden] { display: none; }
+  .fd-seln { font-weight: 500; margin-inline: 4px 12px; }
   .plan-cal { flex: 1; min-height: 0; display: flex; }
   .plan-cal ha-full-calendar { flex: 1; min-width: 0; height: 100%; }
   .plan-key { display: inline-flex; align-items: center; gap: 12px; font-size: var(--ha-font-size-m, 14px); }
