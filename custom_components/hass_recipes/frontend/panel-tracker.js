@@ -513,26 +513,84 @@ export default function (h) {
       });
     },
 
+    /** Goals: the kcal goal, then help with the macros: a split to start from, what the grams come to, and a fit to the kcal goal. */
     _tkGoalsDialog() {
       const st = this._tkState();
       const p = st.data.person;
-      const html = `<ha-form id="tk-gf"></ha-form>`;
-      this._planDialog(`${T("Goals")}`, html, (dlg, close) => {
+      const latest = Object.keys(p.weights || {}).sort().pop();
+      const weight = latest ? p.weights[latest] : (p.profile && p.profile.weight_kg) || null;
+      const html = `<ha-form id="tk-gk"></ha-form>
+        <div class="tk-sub">${esc(T("Suggest a split of protein, carbs and fat"))}</div>
+        <div class="tk-chips" id="tk-gpre"></div>
+        <ha-form id="tk-gm"></ha-form>
+        <div id="tk-gsum" class="tk-gsum"></div>`;
+      this._planDialog(T("Goals"), html, (dlg, close) => {
         this._planFooter(dlg, { primary: { id: "tk-gok", label: T("Save") }, secondary: [{ id: "tk-gcancel", label: T("Cancel") }] });
         dlg.querySelector("#tk-gcancel").addEventListener("click", close);
-        const form = dlg.querySelector("#tk-gf");
         let data = { kcal: p.goals.kcal ?? null, protein: p.goals.protein ?? null, carbs: p.goals.carbs ?? null, fat: p.goals.fat ?? null };
         const labels = { kcal: "Energy per day (kcal)", protein: "Protein (g)", carbs: "Carbohydrates (g)", fat: "Fat (g)" };
-        form.hass = this._hass;
-        form.schema = Object.keys(labels).map((name) => ({ name, selector: { number: { min: 0, max: 20000, step: 1, mode: "box" } } }));
-        form.data = data;
-        form.computeLabel = (sc) => T(labels[sc.name]);
-        form.computeHelper = (sc) => (sc.name === "kcal" ? T("Leave a goal empty to not track it") : "");
-        form.addEventListener("value-changed", (e) => {
-          e.stopPropagation();
-          data = e.detail.value || data;
-          form.data = data;
-        });
+        const box = (name) => ({ name, selector: { number: { min: 0, max: 20000, step: 1, mode: "box" } } });
+        const kform = dlg.querySelector("#tk-gk");
+        const mform = dlg.querySelector("#tk-gm");
+        for (const [form, names] of [[kform, ["kcal"]], [mform, ["protein", "carbs", "fat"]]]) {
+          form.hass = this._hass;
+          form.schema = names.map(box);
+          form.computeLabel = (sc) => T(labels[sc.name]);
+        }
+        kform.computeHelper = () => T("Leave a goal empty to not track it");
+        const sync = () => {
+          kform.data = { kcal: data.kcal };
+          mform.data = { protein: data.protein, carbs: data.carbs, fat: data.fat };
+        };
+        const kcal = () => Number(data.kcal) || 0;
+        // the ready-made splits (and one from your weight, when it is known) as chips
+        const chips = dlg.querySelector("#tk-gpre");
+        const options = [
+          ...(weight ? [{ id: "weight", label: T("For you") }] : []),
+          ...fl.MACRO_PRESETS.map((x) => ({ id: x.id, label: `${T(x.label)} ${x.split.protein}/${x.split.carbs}/${x.split.fat}` })),
+        ];
+        chips.innerHTML = options.map((o) => `<ha-assist-chip data-gpre="${o.id}" label="${esc(o.label)}"></ha-assist-chip>`).join("");
+        const summary = () => {
+          const box = dlg.querySelector("#tk-gsum");
+          const e = fl.macroEnergy(data);
+          if (!e.kcal) {
+            box.innerHTML = `<div class="muted">${esc(T(kcal() ? "Pick a split above, or type the grams." : "Enter a kcal goal first, then pick a split."))}</div>`;
+            return;
+          }
+          const row = (k, label) => `<div class="tk-grow"><span>${esc(T(label))}</span><b>${num(data[k])} g</b><span class="muted">${fl.macroEnergy(data).share[k]}% · ${num((Number(data[k]) || 0) * (k === "fat" ? 9 : 4))} kcal</span></div>`;
+          const diff = kcal() ? e.kcal - kcal() : 0;
+          const off = kcal() && Math.abs(diff) > kcal() * 0.05;
+          box.innerHTML = `${row("protein", "Protein")}${row("carbs", "Carbs")}${row("fat", "Fat")}
+            <div class="tk-grow tk-gtotal"><span>${esc(T("Together"))}</span><b>${num(e.kcal)} kcal</b><span class="muted">${kcal() ? `${esc(T("goal"))} ${num(kcal())}` : ""}</span></div>
+            ${off ? `<ha-alert alert-type="info">${esc(`${T("The macros come to")} ${num(e.kcal)} kcal, ${num(Math.abs(diff))} ${T(diff > 0 ? "more than" : "less than")} ${T("your kcal goal.")}`)}<ha-button slot="action" size="s" appearance="plain" data-gfit="1">${esc(T("Fit the carbs"))}</ha-button></ha-alert>` : ""}`;
+          const fit = box.querySelector("[data-gfit]");
+          if (fit) fit.addEventListener("click", () => {
+            data = { ...data, carbs: fl.carbsToFit(data) };
+            sync();
+            summary();
+          });
+        };
+        chips.querySelectorAll("[data-gpre]").forEach((chip) =>
+          chip.addEventListener("click", () => {
+            if (!kcal()) return summary();
+            const id = chip.dataset.gpre;
+            const g = id === "weight" ? fl.suggestFromWeight(kcal(), weight) : fl.gramsFromSplit(kcal(), fl.MACRO_PRESETS.find((x) => x.id === id).split);
+            data = { ...data, ...g };
+            chips.querySelectorAll("[data-gpre]").forEach((c) => c.toggleAttribute("active", c === chip));
+            sync();
+            summary();
+          })
+        );
+        for (const form of [kform, mform]) {
+          form.addEventListener("value-changed", (e) => {
+            e.stopPropagation();
+            data = { ...data, ...(e.detail.value || {}) };
+            chips.querySelectorAll("[data-gpre]").forEach((c) => c.removeAttribute("active"));
+            summary();
+          });
+        }
+        sync();
+        summary();
         dlg.querySelector("#tk-gok").addEventListener("click", async () => {
           close();
           const { ok } = await this._tkCall({ type: "hass_recipes/tracker_goals", person_id: p.id, goals: data });
