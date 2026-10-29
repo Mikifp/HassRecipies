@@ -149,12 +149,18 @@ class Tracker:
         kind = entry["kind"]
         try:
             if kind == "recipe":
-                servings = _num(entry.get("servings", 1), "Servings", allow_zero=False)
-                values = self._nutrition.recipe_amount(entry.get("recipe_id") or "", servings)
+                by = entry.get("by") or "servings"
+                amount = _num(entry.get("amount", entry.get("servings", 1)), "Amount", allow_zero=False)
+                values = self._nutrition.recipe_amount(entry.get("recipe_id") or "", amount, by)
                 if values is None:
                     raise TrackerError("Recipe not found")
                 recipe = self._nutrition._recipes.get(entry["recipe_id"])
-                entry.update(name=recipe["name"], servings=servings)
+                entry.update(name=recipe["name"], by=by, amount=amount)
+                entry.pop("servings", None)
+                if by == "yield":
+                    entry["unit"] = (recipe.get("yield_unit") or "").strip()
+                else:
+                    entry.pop("unit", None)
             elif kind == "food":
                 amount = _num(entry.get("amount", 100), "Amount", allow_zero=False)
                 unit = str(entry.get("unit") or "g")
@@ -185,7 +191,7 @@ class Tracker:
             day = parse_date(day).isoformat()
         except MealPlanError as err:
             raise TrackerError(str(err)) from err
-        keep = ("recipe_id", "food_id", "servings", "amount", "unit", "name", "kcal", "protein", "carbs", "fat", "plan_id")
+        keep = ("recipe_id", "food_id", "by", "servings", "amount", "unit", "name", "kcal", "protein", "carbs", "fat", "plan_id")
         entry = {
             "id": uuid.uuid4().hex,
             "person_id": person_id,
@@ -217,8 +223,11 @@ class Tracker:
                 entry["date"] = parse_date(fields["date"]).isoformat()
             except MealPlanError as err:
                 raise TrackerError(str(err)) from err
-        for key in ("servings", "amount", "unit", "name", "kcal", "protein", "carbs", "fat"):
+        for key in ("by", "servings", "amount", "unit", "name", "kcal", "protein", "carbs", "fat"):
             if key in fields and fields[key] is not None:
+                if key == "servings" and entry["kind"] == "recipe":
+                    entry["by"], entry["amount"] = "servings", fields[key]
+                    continue
                 if key in ("name", "kcal", "protein", "carbs", "fat") and entry["kind"] != "quick":
                     continue  # a recipe or a food is given by what it is
                 entry[key] = fields[key]
@@ -289,12 +298,12 @@ class Tracker:
     # ---- recent and favourite items ----
     @staticmethod
     def _template(entry: dict[str, Any]) -> dict[str, Any]:
-        keys = ("kind", "recipe_id", "food_id", "servings", "amount", "unit", "name", "kcal", "protein", "carbs", "fat")
+        keys = ("kind", "recipe_id", "food_id", "by", "amount", "unit", "name", "kcal", "protein", "carbs", "fat")
         return {k: entry[k] for k in keys if entry.get(k) is not None}
 
     @staticmethod
     def _same(a: dict[str, Any], b: dict[str, Any]) -> bool:
-        keys = ("kind", "recipe_id", "food_id", "servings", "amount", "unit", "name")
+        keys = ("kind", "recipe_id", "food_id", "by", "amount", "unit", "name")
         return all(a.get(k) == b.get(k) for k in keys)
 
     def recent(self, person_id: str, limit: int = 8) -> list[dict[str, Any]]:

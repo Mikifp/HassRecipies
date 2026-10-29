@@ -125,6 +125,32 @@ def test_a_recipe_is_logged_by_servings_and_a_quick_entry_by_its_energy():
     assert _raises(lambda: t.add(anna["id"], DAY, "snack", "quick", name="x", kcal=-5))
 
 
+def test_a_recipe_can_be_logged_by_what_it_makes_or_by_weight():
+    _h, recipes, _p, n, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    oats = _food(n)
+    r = recipes.create({"name": "Boller", "servings": "4", "yield_amount": 24, "yield_unit": "boller", "ingredients": ["600 g havregryn"]})
+    n.link_to_food("havregryn", oats["id"])  # 600 g of 370 kcal / 100 g = 2220 kcal in all
+    two = t.add(anna["id"], DAY, "snack", "recipe", recipe_id=r["id"], by="yield", amount=2)
+    assert (two["kcal"], two["by"], two["amount"], two["unit"]) == (185, "yield", 2, "boller")  # 2 of 24
+    grams = t.add(anna["id"], DAY, "dinner", "recipe", recipe_id=r["id"], by="grams", amount=150)
+    assert grams["kcal"] == 555 and "unit" not in grams  # 150 of the 600 g
+    servings = t.add(anna["id"], DAY, "dinner", "recipe", recipe_id=r["id"], by="servings", amount=1)
+    assert servings["kcal"] == 555  # 1 of 4
+    assert t.update(grams["id"], amount=300)["kcal"] == 1110
+    assert t.update(grams["id"], by="yield", amount=12)["kcal"] == 1110
+    assert t.update(servings["id"], servings=2)["kcal"] == 1110
+    plain = recipes.create({"name": "Plain", "ingredients": ["100 g havregryn"]})
+    assert _raises(lambda: t.add(anna["id"], DAY, "snack", "recipe", recipe_id=plain["id"], by="yield", amount=1))
+    nothing = recipes.create({"name": "Nothing", "ingredients": ["noget ukendt"]})
+    assert _raises(lambda: t.add(anna["id"], DAY, "snack", "recipe", recipe_id=nothing["id"], by="grams", amount=100))
+    assert _raises(lambda: t.add(anna["id"], DAY, "snack", "recipe", recipe_id=r["id"], by="nope", amount=1))
+    basis = n.recipe_basis(r["id"])
+    assert (basis["yield_amount"], basis["yield_unit"], basis["grams"], basis["servings"]) == (24, "boller", 600, 4)
+    # the same amount of the same recipe is one recent item, a different way to measure is another
+    assert len({(x["by"], x["amount"]) for x in t.recent(anna["id"]) if x.get("recipe_id")}) >= 3
+
+
 def test_a_day_has_totals_against_the_goal_and_entries_can_be_changed_and_removed():
     _h, _r, _p, n, t = _make()
     anna = t.ensure_user("u1", "Anna")
