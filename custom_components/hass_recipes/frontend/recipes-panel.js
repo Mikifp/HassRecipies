@@ -11,7 +11,7 @@ const __v = new URL(import.meta.url).searchParams.get("v");
 const load = (name) => import(`./${name}.js${__v ? `?v=${__v}` : ""}`);
 const helpers = (await load("panel-helpers")).default;
 const { esc, isHeader, clock, scaleBasis, observeTranslations, T, state, isoDate, addDays, mondayOf } = helpers;
-const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-nutrition", "panel-form", "panel-editor"].map(load));
+const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-nutrition", "panel-foods", "panel-form", "panel-editor"].map(load));
 
 const STYLE = `
   :host { --hq-loud: var(--ha-color-fill-primary-loud-resting, var(--primary-color)); --hq-on-loud: var(--ha-color-on-primary-loud, #fff); --hq-normal: var(--ha-color-fill-primary-normal-resting, color-mix(in srgb, var(--primary-color) 14%, #fff)); --hq-on-normal: var(--ha-color-on-primary-normal, var(--primary-color)); --hq-outline: var(--outline-color, var(--divider-color)); display: block; height: 100%; overflow: auto; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
@@ -329,6 +329,23 @@ const STYLE = `
   .plan-legend { display: flex; flex-wrap: wrap; gap: var(--ha-space-3, 12px); padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px); border-top: 1px solid var(--divider-color); font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .plan-legend .plan-key { font-size: var(--ha-font-size-s, 12px); gap: 6px; }
   .plan-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .fd-page { display: flex; min-height: calc(100vh - 56px); }
+  .fd-main { flex: 1; min-width: 0; }
+  .fd-tool { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px); }
+  .fd-tool ha-input-search { width: 260px; }
+  .fd-tool ha-assist-chip { cursor: pointer; }
+  .fd-pane { width: 400px; flex: none; box-sizing: border-box; border-left: 1px solid var(--divider-color); background: var(--primary-background-color); padding: var(--ha-space-4, 16px); overflow-y: auto; max-height: calc(100vh - 56px); position: sticky; top: 56px; }
+  .fd-detail-page { padding: var(--ha-space-4, 16px); max-width: 640px; margin: 0 auto; padding-bottom: 96px; }
+  .fd-dhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .fd-dhead h2 { margin: 0; font-size: var(--ha-font-size-xl, 20px); font-weight: 400; }
+  .fd-detail h3 { margin: 20px 0 8px; font-size: var(--ha-font-size-m, 14px); font-weight: 500; }
+  .fd-srcs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .fd-srcs ha-assist-chip { cursor: pointer; }
+  .fd-frida { display: flex; align-items: center; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+  .fd-urow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .fd-urow ha-input { flex: 1; min-width: 0; }
+  .fd-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+  .fm-res { max-height: 45vh; overflow-y: auto; }
   .plan-cal { flex: 1; min-height: 0; display: flex; }
   .plan-cal ha-full-calendar { flex: 1; min-width: 0; height: 100%; }
   .plan-key { display: inline-flex; align-items: center; gap: 12px; font-size: var(--ha-font-size-m, 14px); }
@@ -677,6 +694,8 @@ class HassRecipesPanel extends HTMLElement {
         return "#/data";
       case "plan":
         return view.week ? `#/plan/${view.week}` : "#/plan";
+      case "foods":
+        return view.id ? `#/foods/${view.id}` : "#/foods";
       default:
         return "";
     }
@@ -699,6 +718,7 @@ class HassRecipesPanel extends HTMLElement {
     if (parts[0] === "new") return { name: "edit" };
     if (parts[0] === "import") return { name: "import" };
     if (parts[0] === "data") return { name: "data" };
+    if (parts[0] === "foods") return { name: "foods", id: parts[1] || "" };
     if (parts[0] === "plan") return { name: "plan", week: /^\d{4}-\d{2}-\d{2}$/.test(parts[1] || "") ? parts[1] : "" };
     return { name: "list" };
   }
@@ -752,6 +772,7 @@ class HassRecipesPanel extends HTMLElement {
     if (view.name === "edit") this._initForm(view.id);
     if (view.name === "data" && prev.name !== "data") this._loadTrash();
     if (view.name === "nutrition" && prev.name !== "nutrition") this._nu = null;
+    if (view.name === "foods" && prev.name !== "foods") this._fd = null;
     if (mode !== "none") {
       const same = prev && prev.name === view.name && prev.id === view.id;
       try {
@@ -792,7 +813,8 @@ class HassRecipesPanel extends HTMLElement {
 
   /** The top bar and (on a phone) the bottom tabs, built from Home Assistant's own ha-icon-button, ha-input-search and ha-tab. */
   _chrome(v) {
-    const tabsView = v.name === "list" || v.name === "plan";
+    const foodDetail = v.name === "foods" && v.id && this._brCompact();
+    const tabsView = v.name === "list" || v.name === "plan" || (v.name === "foods" && !foodDetail);
     const iconBtn = (act, icon, label) => `<ha-icon-button data-act="${act}" label="${label}"><ha-icon icon="mdi:${icon}"></ha-icon></ha-icon-button>`;
     if (v.name === "cook" && this._recipe(v.id)) {
       // cook mode: the back arrow leaves it (the menu button would only open the sidebar)
@@ -822,6 +844,11 @@ class HassRecipesPanel extends HTMLElement {
         bottom: "",
       };
     }
+    if (foodDetail) {
+      const d = this._fdDraft();
+      const name = v.id === "new" ? T("New food") : v.id.startsWith("r~") ? decodeURIComponent(v.id.slice(2)) : (d && d.name) || T("Food");
+      return { header: `${iconBtn("back", "arrow-left", "Back")}<div class="main-title"><b>${esc(name)}</b></div>`, bottom: "" };
+    }
     if (v.name === "edit") {
       return { header: `${iconBtn("cancel", "arrow-left", "Back")}<div class="main-title"><b>${esc(T(v.id ? "Edit recipe" : "New recipe"))}</b></div>`, bottom: "" };
     }
@@ -829,7 +856,9 @@ class HassRecipesPanel extends HTMLElement {
     const tab = (act, icon, name, active, narrow) =>
       `<div class="tabwrap" data-act="${act}"><ha-tab name="${esc(T(name))}" ${active ? "active" : ""} ${narrow ? "narrow" : ""}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon></ha-tab></div>`;
     const tabs = (narrow) =>
-      tab("tab-list", "book-open-page-variant-outline", "Recipes", v.name === "list", narrow) + tab("plan", "calendar-month-outline", "Meal plan", v.name === "plan", narrow);
+      tab("tab-list", "book-open-page-variant-outline", "Recipes", v.name === "list", narrow) +
+      tab("plan", "calendar-month-outline", "Meal plan", v.name === "plan", narrow) +
+      tab("foods", "food-apple-outline", "Foods", v.name === "foods", narrow);
     const planMenu =
       v.name === "plan"
         ? `<ha-dropdown id="plan-menu"><ha-icon-button slot="trigger" label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></ha-icon-button>
@@ -842,6 +871,8 @@ class HassRecipesPanel extends HTMLElement {
         header: `${iconBtn("leave", "arrow-left", "Back")}${
           v.name === "list"
             ? `<ha-input-search id="search" appearance="outlined" placeholder="Search ${this._recipes.length} recipes"></ha-input-search>`
+            : v.name === "foods"
+            ? `<ha-input-search id="fdsearch" appearance="outlined" placeholder="${esc(T("Search foods"))}"></ha-input-search>`
             : `<h1>${esc(T("Meal plan"))}</h1>${planMenu}`
         }`,
         bottom: `<nav class="bottomtabs">${tabs(true)}</nav>`,
@@ -876,6 +907,7 @@ class HassRecipesPanel extends HTMLElement {
     }
     else if (v.name === "shop" && this._recipe(v.id)) body = this._shopHtml(this._recipe(v.id));
     else if (v.name === "nutrition" && this._recipe(v.id)) body = this._nutritionHtml(this._recipe(v.id));
+    else if (v.name === "foods") body = this._foodsHtml();
     else if (v.name === "cook" && this._recipe(v.id)) {
       const r = this._recipe(v.id);
       body = this._cookFocus ? this._cookHtml(r) : this._cookAllHtml(r);
@@ -896,7 +928,7 @@ class HassRecipesPanel extends HTMLElement {
         <header>${chrome.header}</header>
         <div id="timers" class="timers"></div>
       </div>
-      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}${v.name === "plan" ? " plan" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<ha-alert alert-type="error">${esc(this._error)}</ha-alert>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
+      <main class="${this._canEdit === false ? "ro" : ""}${v.name === "list" ? " wide" : ""}${v.name === "detail" && this._recipe(v.id) ? " rdmain" : ""}${v.name === "plan" ? " plan" : ""}${v.name === "foods" ? " wide" : ""}">${this._notice ? `<div class="notice">✓ ${esc(this._notice)}${this._noticeAction ? ` <button type="button" class="notice-btn" data-act="notice-action">${esc(this._noticeAction.label)}</button>` : ""}</div>` : ""}${this._error ? `<ha-alert alert-type="error">${esc(this._error)}</ha-alert>` : ""}${body}</main></div>${chrome.bottom}${this._fab || ""}`;
     this._timerSig = "";
     if (keep) {
       // the new page is only as tall as it will be once its elements have rendered, so put the scroll back again over the next frames
@@ -933,6 +965,7 @@ class HassRecipesPanel extends HTMLElement {
     this._bindBrowser(root, on);
     if (this._view.name === "detail") this._bindDetail(root, on);
     if (this._view.name === "nutrition") this._bindNutrition(root, on);
+    if (this._view.name === "foods") this._bindFoods(root, on);
     on("[data-cookbook]", "click", (e) => this._applyCookbook(e.currentTarget.dataset.cookbook));
     on("[data-tab-btn]", "click", (e) => {
       this._tab = e.currentTarget.dataset.tabBtn;
@@ -1136,6 +1169,14 @@ class HassRecipesPanel extends HTMLElement {
       case "plan-this":
         this._planPending = id;
         this._go({ name: "plan", week: "" });
+        break;
+      case "foods":
+        this._go({ name: "foods" });
+        break;
+      case "food-new":
+        this._fdState().draft = null;
+        this._fdState().draftFor = null;
+        this._go({ name: "foods", id: "new" }, false, this._brCompact() ? undefined : "replace");
         break;
       case "plan-meals":
         this._planMealsDialog();
