@@ -56,6 +56,14 @@ The recipe page shows an estimate of energy, protein, fat, carbohydrates and die
 - **Custom ingredients**: add your own food with values per 100 g (from the label, or for something homemade). A custom ingredient named exactly like an ingredient line is used for it automatically. Custom ingredients and choices are included in the backup export.
 - Lines without a match or a weight are listed instead of guessed, so the total only counts what is known. Treat the numbers as an estimate.
 
+### Foods
+
+The **Foods** tab is your own list of what an ingredient line can be ("smør", "hakkede tomater"). A food has a name, other names it goes by ("butter"), what one unit of it weighs ("1 dl = 95 g", "1 dåse = 400 g"), a shop section, and its nutrition: a Frida food, your own values, or none.
+
+- **Needs review** lists the ingredient names in your recipes that are not a food yet, with a suggestion: a *standard choice* for everyday words or the *best guess* by its words. **Accept suggestion** makes a food of it (and **Accept N standard choices** does all the standard ones at once); **Create food** starts a food from the name; **Link to a food** makes the name another name of a food you have; **Don't count** leaves it out of the nutrition.
+- Click a food to edit it: change its names, weights and nutrition, see the recipes that use it, **merge** it into another food (its names and weights come along), or delete it. A weight written on an ingredient line, like "1 dåse (240 g)", always wins over the food's weight.
+- Foods that were made by choosing a food on a recipe's **Check ingredients** page, and the choices and custom ingredients of the version before the Foods tab, appear here too. Foods and their names are part of the backup export.
+
 Nutrition data: © The Danish Food Composition Database (https://frida.fooddata.dk), version 6.1, May 2026, DTU Food Institute, published under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The bundled file `data/frida.json` is a reduced extract (8 nutrients). To update it to a new Frida release, download the dataset from [DTU Data](https://doi.org/10.11583/DTU.32312844) and run `python dev/frida_convert.py FCDB_<version>_Dataset.xlsx <version> "<month year>"`.
 
 ## Try it

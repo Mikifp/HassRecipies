@@ -142,6 +142,12 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_nutrition_custom_list,
         ws_nutrition_custom_save,
         ws_nutrition_custom_delete,
+        ws_foods,
+        ws_foods_save,
+        ws_foods_delete,
+        ws_foods_merge,
+        ws_foods_adopt,
+        ws_foods_link,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -961,3 +967,97 @@ def ws_nutrition_custom_delete(
         connection.send_error(msg["id"], "not_found", "Custom ingredient not found")
         return
     connection.send_result(msg["id"])
+
+
+# ---- foods: the user's own list of what an ingredient line can be ----
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/foods"})
+@callback
+def ws_foods(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Every food, and the ingredient names in recipes that are not a food yet."""
+    connection.send_result(msg["id"], _nutrition(hass).foods_overview())
+
+
+_FOOD_FIELDS = {
+    vol.Optional("name"): vol.All(str, vol.Length(min=1, max=120)),
+    vol.Optional("aliases"): [vol.All(str, vol.Length(max=120))],
+    vol.Optional("source"): vol.Any(SOURCE_FRIDA, SOURCE_CUSTOM, "none"),
+    vol.Optional("frida_id"): vol.Any(None, int),
+    vol.Optional("values"): {vol.Optional(key): _PER_100G for key in NUTRIENTS},
+    vol.Optional("unit_grams"): {vol.All(str, vol.Length(min=1, max=40)): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10000))},
+    vol.Optional("section"): vol.All(str, vol.Length(max=60)),
+}
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/foods_save", vol.Optional("food_id"): str, **_FOOD_FIELDS}
+)
+@callback
+@_edits
+def ws_foods_save(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Create a food, or change one: only the fields given change."""
+    data = {k: v for k, v in msg.items() if k not in ("id", "type", "food_id")}
+    try:
+        food = _nutrition(hass).save_food(data, msg.get("food_id"))
+    except NutritionError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], food)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/foods_delete", vol.Required("food_id"): str})
+@callback
+@_edits
+def ws_foods_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if not _nutrition(hass).delete_food(msg["food_id"]):
+        connection.send_error(msg["id"], "not_found", "Food not found")
+        return
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/foods_merge",
+        vol.Required("target"): str,
+        vol.Required("sources"): vol.All([str], vol.Length(min=1, max=50)),
+    }
+)
+@callback
+@_edits
+def ws_foods_merge(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Fold foods into another one: their names become names of the target."""
+    try:
+        food = _nutrition(hass).merge_foods(msg["target"], msg["sources"])
+    except NutritionError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], food)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/foods_link",
+        vol.Required("key"): vol.All(str, vol.Length(min=1, max=200)),
+        vol.Required("food_id"): str,
+    }
+)
+@callback
+@_edits
+def ws_foods_link(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Say that an ingredient name is one of the foods: it becomes another name of it."""
+    try:
+        food = _nutrition(hass).link_to_food(msg["key"], msg["food_id"])
+    except NutritionError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], food)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/foods_adopt", vol.Required("keys"): vol.All([vol.All(str, vol.Length(max=200))], vol.Length(max=500))}
+)
+@callback
+@_edits
+def ws_foods_adopt(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Make foods of ingredient names, accepting what the calculation already picks for them."""
+    connection.send_result(msg["id"], {"added": _nutrition(hass).adopt(msg["keys"])})

@@ -247,7 +247,7 @@ def test_export_and_import_bring_custom_ingredients_and_links():
     document = nutrition.export()
 
     _recipes2, other = _make()
-    assert other.import_data(document) == 1
+    assert other.import_data(document) == 2  # the custom food and the Frida food
     links = other.links()
     new_id = other.custom_foods()[0]["id"]
     assert links["grøn pesto"] == {"source": "custom", "id": new_id, "unit_grams": {"jar": 190}}
