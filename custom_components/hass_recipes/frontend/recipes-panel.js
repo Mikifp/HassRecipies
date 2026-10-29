@@ -451,7 +451,7 @@ const STYLE = `
   .nu-table tr.nu-sub th { padding-inline-start: 14px; color: var(--secondary-text-color); font-size: 13px; }
   .nu .nu-table { max-width: 560px; }
   .nu-status { margin-top: 10px; }
-  .nu-warn { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--warning-color, #b26a00); font-size: 13px; --mdc-icon-size: 18px; }
+  .nu-warn { display: block; margin-top: 6px; }
   .nu-src { padding: 0 16px 12px; font-size: 11px; color: var(--secondary-text-color); }
   .nu .nu-src { padding: 16px 0 0; }
   .nu-src a { color: inherit; }
@@ -464,25 +464,19 @@ const STYLE = `
   .nu-kcal { color: var(--secondary-text-color); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .nu-match { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 14px; --mdc-icon-size: 16px; color: var(--secondary-text-color); }
   .nu-match b { color: var(--primary-text-color); font-weight: 500; }
-  .nu-tag { font-size: 11px; border-radius: 10px; padding: 1px 8px; background: var(--secondary-background-color); color: var(--secondary-text-color); white-space: nowrap; }
-  .nu-tag.ok { background: color-mix(in srgb, var(--success-color, #43a047) 16%, transparent); color: var(--success-color, #2e7d32); }
-  .nu-tag.auto { background: color-mix(in srgb, var(--warning-color, #ffa600) 18%, transparent); color: var(--warning-color, #b26a00); }
+  .nu-tag { --ha-assist-chip-container-shape: 10px; --md-assist-chip-container-height: 24px; --md-assist-chip-label-text-size: 11px; }
+  .nu-tag.ok { --ha-assist-chip-container-color: color-mix(in srgb, var(--success-color, #43a047) 16%, transparent); }
+  .nu-tag.auto { --ha-assist-chip-container-color: color-mix(in srgb, var(--warning-color, #ffa600) 18%, transparent); }
   .nu-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .nu-acts .btn, .nu-cacts .btn, .nu-unit .btn { padding: 4px 10px; font-size: 13px; }
-  .nu-unit { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 14px; }
-  .nu-unit input { width: 90px; }
+  .nu-unit { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .nu-unit ha-input { width: 220px; }
   .nu-picker { margin-top: 10px; padding: 10px; border: 1px solid var(--divider-color); border-radius: 8px; }
   .nu-results { margin-top: 6px; max-height: 320px; overflow-y: auto; }
-  .nu-results button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: start; padding: 8px; background: none; border: 0; border-radius: 6px; font: inherit; color: inherit; cursor: pointer; }
-  .nu-results button:hover, .nu-results button:focus-visible { background: var(--secondary-background-color); }
-  .nu-custom li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--divider-color); }
-  .nu-cacts { display: flex; gap: 6px; flex-shrink: 0; }
+  .nu-picker ha-input-search { display: block; }
+  .nu-custom { margin: 0 calc(-1 * var(--ha-space-4, 16px)); }
+  .nu-cacts { display: flex; gap: 2px; }
   .nu-form { margin-top: 16px; }
   .nu-form h3 { margin-top: 0; }
-  .nu-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-  .nu-f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--secondary-text-color); }
-  .nu-f.wide { margin-bottom: 4px; }
-  .nu-f input { color: var(--primary-text-color); }
   .panel { background: var(--card-background-color); border-radius: 12px; padding: 16px 20px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
 `;
 class HassRecipesPanel extends HTMLElement {
