@@ -21,7 +21,7 @@ from .images import MAX_IMAGE_BYTES, image_url
 from .ingredients import link_ingredients
 from .mealplan import MealPlanError
 from .migrate import from_mealie
-from .nutrition import NUTRIENTS, SOURCE_CUSTOM, SOURCE_FRIDA, SOURCE_IGNORE, food_key as _key
+from .nutrition import NUTRIENTS, SOURCE_CUSTOM, SOURCE_FRIDA, SOURCE_IGNORE, SOURCE_USDA, food_key as _key
 from .nutrition_store import Nutrition, NutritionError
 from .scraper import RecipeImportError, async_import_html, async_import_text, async_import_url
 from .store import RecipeStore
@@ -880,7 +880,7 @@ def ws_nutrition_search(hass: HomeAssistant, connection: websocket_api.ActiveCon
         vol.Required("type"): f"{DOMAIN}/nutrition_link",
         vol.Required("food"): vol.All(str, vol.Length(min=1, max=200)),
         # None forgets the link, so the ingredient is matched automatically again
-        vol.Required("source"): vol.Any(None, SOURCE_FRIDA, SOURCE_CUSTOM, SOURCE_IGNORE),
+        vol.Required("source"): vol.Any(None, SOURCE_FRIDA, SOURCE_USDA, SOURCE_CUSTOM, SOURCE_IGNORE),
         vol.Optional("food_id"): vol.Any(None, int, str),
     }
 )
@@ -981,8 +981,9 @@ def ws_foods(hass: HomeAssistant, connection: websocket_api.ActiveConnection, ms
 _FOOD_FIELDS = {
     vol.Optional("name"): vol.All(str, vol.Length(min=1, max=120)),
     vol.Optional("aliases"): [vol.All(str, vol.Length(max=120))],
-    vol.Optional("source"): vol.Any(SOURCE_FRIDA, SOURCE_CUSTOM, "none"),
+    vol.Optional("source"): vol.Any(SOURCE_FRIDA, SOURCE_USDA, SOURCE_CUSTOM, "none"),
     vol.Optional("frida_id"): vol.Any(None, int),
+    vol.Optional("usda_id"): vol.Any(None, int),
     vol.Optional("values"): {vol.Optional(key): _PER_100G for key in NUTRIENTS},
     vol.Optional("unit_grams"): {vol.All(str, vol.Length(min=1, max=40)): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10000))},
     vol.Optional("section"): vol.All(str, vol.Length(max=60)),

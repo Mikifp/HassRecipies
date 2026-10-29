@@ -262,3 +262,34 @@ def test_numbers_pick_the_right_variant():
 
 def test_a_compound_ending_is_a_closer_match_than_its_start():
     assert nu.score("mælk", "Sødmælk, økologisk") > nu.score("mælk", "Mælkebøtte, blade, rå")
+
+
+# ---- USDA Foundation Foods -----------------------------------------------------------
+
+def test_usda_foundation_foods_are_bundled_with_their_credit():
+    assert len(DB.usda) > 300
+    assert DB.usda_meta["license"].startswith("Public domain") and "FoodData Central" in DB.usda_meta["attribution"]
+    cheddar = next(f for f in DB.usda.values() if f["name_en"] == "Cheese, cheddar")
+    assert 380 < cheddar["kcal"] < 430
+
+
+def test_a_name_only_usda_knows_is_matched_by_it_while_frida_stays_first_where_it_is_clear():
+    recipes, nutrition = _make()
+    r = recipes.create({"name": "x", "ingredients": ["100 g hummus", "2 æg", "100 g hvedemel"]})
+    result = nutrition.for_recipe(r["id"])
+    hummus = _item(result, "100 g hummus")["match"]
+    assert hummus["source"] == "usda" and hummus["auto"] and 150 < hummus["kcal"] < 400
+    assert _item(result, "2 æg")["match"]["source"] == "frida"
+    assert _item(result, "100 g hvedemel")["match"]["source"] == "frida"
+    assert [s["source"] for s in result["sources"]] == ["frida", "usda"]
+
+
+def test_search_lists_usda_foods_and_a_link_to_one_counts_its_values():
+    recipes, nutrition = _make()
+    assert any(h["source"] == "usda" for h in nutrition.search("hummus", 10))
+    r = recipes.create({"name": "x", "ingredients": ["100 g kikærtepure"]})
+    usda_id = next(h["id"] for h in nutrition.search("hummus", 10) if h["source"] == "usda")
+    nutrition.set_link("kikærtepure", "usda", usda_id)
+    item = _item(nutrition.for_recipe(r["id"]), "100 g kikærtepure")
+    assert item["status"] == "ok" and item["match"]["source"] == "usda" and item["match"]["linked"]
+    assert item["values"]["kcal"] == DB.get_usda(usda_id)["kcal"]

@@ -51,7 +51,7 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 
 The recipe page shows an estimate of energy, protein, fat, carbohydrates and dietary fibre per serving (from the first number in *Servings*) and for the whole recipe; the **Check ingredients** page adds sugars, saturated fat and salt.
 
-- Each ingredient line is converted to grams by the ingredient parser, then matched to a food in the bundled **Frida** dataset (about 1,400 Danish foods with lab-analysed values per 100 g). Everyday words ("æg", "mælk", "hakkede tomater", "butter"…) have a standard choice; other names are matched by search, and a clear hit is used but marked *Matched automatically* so you can confirm it.
+- Each ingredient line is converted to grams by the ingredient parser, then matched to a food in the bundled **Frida** dataset (and, for foods Frida does not have, the English **USDA Foundation Foods**) (about 1,400 Danish foods with lab-analysed values per 100 g). Everyday words ("æg", "mælk", "hakkede tomater", "butter"…) have a standard choice; other names are matched by search, and a clear hit is used but marked *Matched automatically* so you can confirm it.
 - On **Check ingredients** you can choose another food, mark a line as *Don't count* (water, salt to taste), or give the weight of a unit the parser cannot weigh ("1 dåse = 400 g"). Choices are remembered by ingredient name and apply to every recipe.
 - **Custom ingredients**: add your own food with values per 100 g (from the label, or for something homemade). A custom ingredient named exactly like an ingredient line is used for it automatically. Custom ingredients and choices are included in the backup export.
 - Lines without a match or a weight are listed instead of guessed, so the total only counts what is known. Treat the numbers as an estimate.
@@ -67,6 +67,8 @@ The **Foods** tab is your own list of what an ingredient line can be ("smør", "
 - Foods that were made by choosing a food on a recipe's **Check ingredients** page, and the choices and custom ingredients of the version before the Foods tab, appear here too. Foods and their names are part of the backup export.
 
 Nutrition data: © The Danish Food Composition Database (https://frida.fooddata.dk), version 6.1, May 2026, DTU Food Institute, published under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The bundled file `data/frida.json` is a reduced extract (8 nutrients). To update it to a new Frida release, download the dataset from [DTU Data](https://doi.org/10.11583/DTU.32312844) and run `python dev/frida_convert.py FCDB_<version>_Dataset.xlsx <version> "<month year>"`.
+
+The **USDA Foundation Foods** (about 370 generic foods, English names) are from FoodData Central: U.S. Department of Agriculture, Agricultural Research Service, https://fdc.nal.usda.gov, public domain ([CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)). `data/usda.json` is a reduced extract built by `dev/usda_convert.py`; a Frida food wins where both have a clear match, so USDA fills the gaps ("hummus", "tortilla") and is there to search and choose.
 
 ## Try it
 ```bash
@@ -197,7 +199,7 @@ node --test tests/js/*.test.mjs                     # front-end helpers and tran
 
 CI runs both test suites, a syntax check of the front-end, hassfest and the HACS validation on every pull request.
 
-- `custom_components/hass_recipes/` – integration (store, websocket API, scraper, nutrition, config flow, diagnostics, repairs); `data/frida.json` is the bundled food data, built by `dev/frida_convert.py`
+- `custom_components/hass_recipes/` – integration (store, websocket API, scraper, nutrition, config flow, diagnostics, repairs); `data/frida.json` and `data/usda.json` are the bundled food data, built by `dev/frida_convert.py` and `dev/usda_convert.py`
 - `custom_components/hass_recipes/frontend/` – dependency-free front-end, no build step: `recipes-panel.js` is the panel shell, split into `panel-*.js` modules (browse, recipe, nutrition, form, editor, plan, progress, timers, data); `recipes-cards.js` the dashboard cards; `recipes-shared.js` and `recipes-i18n.js` are used by both
 - `custom_components/hass_recipes/brand/` – icon and logo
 - `tests/` – back-end tests, and `tests/js/` front-end tests

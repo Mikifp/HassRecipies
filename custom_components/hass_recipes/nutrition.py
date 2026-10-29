@@ -30,9 +30,11 @@ from typing import Any
 NUTRIENTS = ("kcal", "protein", "fat", "carbs", "fibre", "sugars", "sat_fat", "salt")
 SOURCE_FRIDA = "frida"
 SOURCE_CUSTOM = "custom"
+SOURCE_USDA = "usda"  # USDA FoodData Central, Foundation Foods
 SOURCE_IGNORE = "ignore"  # "salt to taste", "water": counted as nothing, on purpose
 
 DATA_FILE = Path(__file__).parent / "data" / "frida.json"
+USDA_FILE = Path(__file__).parent / "data" / "usda.json"
 
 # An unconfirmed best hit is used only when it is at least this good (see score()).
 AUTO_MATCH_SCORE = 1.05
@@ -176,8 +178,14 @@ def score(query: str, name: str) -> float:
 class FoodDatabase:
     """The bundled Frida foods, searchable by Danish or English name."""
 
-    def __init__(self, data: dict[str, Any]) -> None:
+    def __init__(self, data: dict[str, Any], usda: dict[str, Any] | None = None) -> None:
         self.meta = {k: v for k, v in data.items() if k not in ("foods", "fields")}
+        # USDA Foundation Foods: English names, a second source beside Frida (Frida wins a tie)
+        self.usda_meta = {k: v for k, v in (usda or {}).items() if k not in ("foods", "fields")}
+        self.usda: dict[int, dict[str, Any]] = {}
+        for row in (usda or {}).get("foods", []):
+            item = dict(zip(usda["fields"], row))
+            self.usda[int(item["id"])] = item
         fields = data["fields"]
         self.foods: dict[int, dict[str, Any]] = {}
         for row in data["foods"]:
@@ -189,8 +197,23 @@ class FoodDatabase:
         }
 
     @classmethod
-    def load(cls, path: Path = DATA_FILE) -> FoodDatabase:
-        return cls(json.loads(path.read_text(encoding="utf-8")))
+    def load(cls, path: Path = DATA_FILE, usda_path: Path | None = USDA_FILE) -> FoodDatabase:
+        usda = json.loads(usda_path.read_text(encoding="utf-8")) if usda_path and usda_path.exists() else None
+        return cls(json.loads(path.read_text(encoding="utf-8")), usda)
+
+    def get_usda(self, food_id: int | str) -> dict[str, Any] | None:
+        try:
+            return self.usda.get(int(food_id))
+        except (TypeError, ValueError):
+            return None
+
+    def search_usda(self, query: str, limit: int = 10) -> list[tuple[float, dict[str, Any]]]:
+        """Best USDA matches first, as (score, food)."""
+        if not _tokens(query):
+            return []
+        hits = [(s, food) for food in self.usda.values() if (s := score(query, food["name_en"])) > 0.3]
+        hits.sort(key=lambda h: (-h[0], len(h[1]["name_en"])))
+        return hits[:limit]
 
     def get(self, food_id: int | str) -> dict[str, Any] | None:
         try:
@@ -246,6 +269,9 @@ def describe(source: str, food: dict[str, Any]) -> dict[str, Any]:
     if source == SOURCE_CUSTOM:
         return {"source": SOURCE_CUSTOM, "id": food["id"], "name": food["name"], "name_en": "", "group": "",
                 **{k: food.get(k) for k in NUTRIENTS}}
+    if source == SOURCE_USDA:
+        return {"source": SOURCE_USDA, "id": food["id"], "name": food["name_en"], "name_en": food["name_en"],
+                "group": food.get("group", ""), **{k: food.get(k) for k in NUTRIENTS}}
     return {"source": SOURCE_FRIDA, "id": food["id"], "name": food["name_da"], "name_en": food["name_en"],
             "group": food.get("group", ""), **{k: food.get(k) for k in NUTRIENTS}}
 
@@ -257,6 +283,7 @@ def search(
     # the user's own ingredients go before Frida foods that match about as well
     hits = [(s + 0.15, describe(SOURCE_CUSTOM, f)) for s, f in _custom_hits(query, custom)]
     hits += [(s, describe(SOURCE_FRIDA, f)) for s, f in db.search(query, limit)]
+    hits += [(s - 0.05, describe(SOURCE_USDA, f)) for s, f in db.search_usda(query, limit)]  # a Frida food wins a tie
     hits.sort(key=lambda h: -h[0])
     return [{**food, "score": round(s, 3)} for s, food in hits[:limit]]
 
@@ -273,7 +300,12 @@ def resolve(
         source = link.get("source")
         if source == SOURCE_IGNORE:
             return {"source": SOURCE_IGNORE, "id": None, "name": "", "auto": False, "linked": True, "unit_grams": {}}
-        target = custom.get(str(link.get("id"))) if source == SOURCE_CUSTOM else db.get(link.get("id"))
+        if source == SOURCE_CUSTOM:
+            target = custom.get(str(link.get("id")))
+        elif source == SOURCE_USDA:
+            target = db.get_usda(link.get("id"))
+        else:
+            target = db.get(link.get("id"))
         if target is not None:
             return {
                 **describe(source, target),
@@ -295,6 +327,9 @@ def resolve(
     hits = db.search(food, 2)
     if hits and hits[0][0] >= AUTO_MATCH_SCORE:
         return {**describe(SOURCE_FRIDA, hits[0][1]), "auto": True, "unit_grams": unit_grams}
+    usda_hits = db.search_usda(food, 2)  # only when Frida has nothing clear
+    if usda_hits and usda_hits[0][0] >= AUTO_MATCH_SCORE:
+        return {**describe(SOURCE_USDA, usda_hits[0][1]), "auto": True, "unit_grams": unit_grams}
     return None
 
 
@@ -393,4 +428,9 @@ def calculate(
         "unconfirmed": sum(1 for i in items if i["match"] and i["match"].get("auto")),
         "complete": counted > 0 and not missing,
         "source": {k: db.meta.get(k) for k in ("version", "date", "license", "license_url", "attribution", "url")},
+        "sources": [
+            {k: meta.get(k) for k in ("source", "version", "date", "license", "license_url", "attribution", "url")}
+            for meta in (db.meta, db.usda_meta)
+            if meta
+        ],
     }
