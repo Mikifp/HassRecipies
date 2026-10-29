@@ -224,6 +224,20 @@ def test_a_name_can_be_linked_to_a_food_of_your_own_and_unlinked_again():
     assert n.book.foods[food["id"]]["aliases"] == []
 
 
+def test_several_names_are_linked_to_one_food_all_or_none():
+    _recipes, n = _make()
+    food = n.save_food({"name": "Hvedemel", "source": "frida", "frida_id": HVEDEMEL})
+    n.save_food({"name": "Kartoffelmel"})
+    linked = n.link_many(["mel", "Hvid mel", "flour", "mel"], food["id"])  # a repeat is one name
+    assert linked["aliases"] == ["mel", "hvid mel", "flour"]
+    assert all(n.links()[k]["id"] == HVEDEMEL for k in ("mel", "hvid mel", "flour"))
+    # one name that cannot be linked (it is the name of another food) leaves the others as they were
+    before = [a for a in n.book.foods[food["id"]]["aliases"]]
+    assert _raises(lambda: n.link_many(["bagepulver", "kartoffelmel"], food["id"]))
+    assert n.book.foods[food["id"]]["aliases"] == before and "bagepulver" not in n.links()
+    assert _raises(lambda: n.link_many(["x"], "nope"))
+
+
 # ---- the overview and adopting suggestions ---------------------------------------
 
 def test_the_overview_lists_foods_with_use_and_names_in_recipes_that_need_a_food():

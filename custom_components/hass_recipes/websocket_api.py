@@ -1038,16 +1038,21 @@ def ws_foods_merge(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/foods_link",
-        vol.Required("key"): vol.All(str, vol.Length(min=1, max=200)),
+        vol.Optional("key"): vol.All(str, vol.Length(min=1, max=200)),
+        vol.Optional("keys"): vol.All([vol.All(str, vol.Length(min=1, max=200))], vol.Length(min=1, max=200)),
         vol.Required("food_id"): str,
     }
 )
 @callback
 @_edits
 def ws_foods_link(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Say that an ingredient name is one of the foods: it becomes another name of it."""
+    """Say that an ingredient name (or several at once) is one of the foods: they become other names of it."""
+    keys = msg.get("keys") or ([msg["key"]] if msg.get("key") else [])
+    if not keys:
+        connection.send_error(msg["id"], "invalid", "Give the ingredient names to link")
+        return
     try:
-        food = _nutrition(hass).link_to_food(msg["key"], msg["food_id"])
+        food = _nutrition(hass).link_many(keys, msg["food_id"])
     except NutritionError as err:
         connection.send_error(msg["id"], "invalid", str(err))
         return
