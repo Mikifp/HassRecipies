@@ -93,10 +93,11 @@ export default function (h) {
     },
 
     _nuSourceHtml(d) {
-      const s = d.source || {};
-      return `<div class="nu-src">Nutrition data: <a href="${esc(s.url || "https://frida.fooddata.dk")}" target="_blank" rel="noopener noreferrer">${esc(
+      const sources = d.sources && d.sources.length ? d.sources : [d.source || {}];
+      const line = (s) => `<div class="nu-src">${esc(h.T("Nutrition data"))}: <a href="${esc(s.url || "https://frida.fooddata.dk")}" target="_blank" rel="noopener noreferrer">${esc(
         s.attribution || "The Danish Food Composition Database"
       )}</a>, <a href="${esc(s.license_url || "https://creativecommons.org/licenses/by/4.0/")}" target="_blank" rel="noopener noreferrer">${esc(s.license || "CC BY 4.0")}</a></div>`;
+      return sources.map(line).join("");
     },
 
     /** The Nutrition card on the recipe page. */
@@ -219,12 +220,18 @@ export default function (h) {
             .map((f) => `<ha-list-item-button data-nu-own="${esc(f.id)}" headline="${esc(f.name)}" supporting-text="${esc([f.aliases.join(", "), f.values.kcal != null ? `${num(f.values.kcal, 0)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`)
             .join("")
         ) +
-        group(
-          "Frida",
-          res
-            .map((f, n) => `<ha-list-item-button data-nu-pick="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.group, f.kcal != null ? `${num(f.kcal, 0)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`)
-            .join("")
-        )
+        ["frida", "usda"]
+          .map((source) =>
+            group(
+              source === "frida" ? "Frida" : "USDA",
+              res
+                .map((f, n) => [f, n])
+                .filter(([f]) => f.source === source)
+                .map(([f, n]) => `<ha-list-item-button data-nu-pick="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.group, f.kcal != null ? `${num(f.kcal, 0)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`)
+                .join("")
+            )
+          )
+          .join("")
       );
     },
 
@@ -271,7 +278,7 @@ export default function (h) {
       const res = await this._nuCall({ type: "hass_recipes/nutrition_search", query, limit: 20 });
       if (ticket !== this._nu.ticket) return; // a newer search is on its way
       this._nu.searching = false;
-      this._nu.results = (res || []).filter((f) => f.source === "frida"); // your own foods are listed from the Foods data
+      this._nu.results = (res || []).filter((f) => f.source === "frida" || f.source === "usda"); // your own foods are listed from the Foods data
       this._nuPaintResults();
     },
 
@@ -284,12 +291,12 @@ export default function (h) {
       box.querySelectorAll("[data-nu-own]").forEach((el) => el.addEventListener("click", () => this._nuPickOwn(el.dataset.nuOwn)));
     },
 
-    /** A Frida food: it becomes one of your foods, with this ingredient name as another name. */
+    /** A Frida or USDA food: it becomes one of your foods, with this ingredient name as another name. */
     async _nuPick(n) {
       const food = this._nu.results[n];
       const item = this._nuItem(this._nu.open);
       if (!food || !item) return;
-      const ok = await this._nuCall({ type: "hass_recipes/nutrition_link", food: item.food, source: "frida", food_id: food.id });
+      const ok = await this._nuCall({ type: "hass_recipes/nutrition_link", food: item.food, source: food.source, food_id: food.id });
       if (ok === undefined) return;
       await this._nuClosePicker();
     },
@@ -370,11 +377,12 @@ export default function (h) {
         case "create": {
           // the Foods page, with a new food started from this name (and the suggestion, if there is one)
           if (!item) return;
-          const m = item.match && item.match.source === "frida" ? item.match : null;
+          const m = item.match && (item.match.source === "frida" || item.match.source === "usda") ? item.match : null;
           const fd = this._fdState();
           fd.draft = {
             id: "", name: item.key.charAt(0).toUpperCase() + item.key.slice(1), aliases: [], section: "", unit_rows: [], used_in: 0, recipes: [],
-            source: m ? "frida" : "none", frida_id: m ? m.id : null, frida_name: m ? m.name : "",
+            source: m ? m.source : "none", frida_id: m && m.source === "frida" ? m.id : null, frida_name: m && m.source === "frida" ? m.name : "",
+            usda_id: m && m.source === "usda" ? m.id : null, usda_name: m && m.source === "usda" ? m.name : "",
             values: m ? { kcal: m.kcal, fat: m.fat, carbs: m.carbs, protein: m.protein } : {},
           };
           fd.draftFor = "new";

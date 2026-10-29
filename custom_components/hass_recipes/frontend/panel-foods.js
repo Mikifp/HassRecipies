@@ -25,7 +25,7 @@ export default function (h) {
     Object.entries(grams || {})
       .map(([unit, g]) => `1 ${unit} = ${num(g, 1)} g`)
       .join(", ");
-  const blank = () => ({ id: "", name: "", aliases: [], source: "none", frida_id: null, frida_name: "", values: {}, unit_rows: [], section: "", used_in: 0, recipes: [] });
+  const blank = () => ({ id: "", name: "", aliases: [], source: "none", frida_id: null, frida_name: "", usda_id: null, usda_name: "", values: {}, unit_rows: [], section: "", used_in: 0, recipes: [] });
 
   return {
     // ---- data ----
@@ -107,8 +107,8 @@ export default function (h) {
           }));
       }
       return d.foods
-        .filter((f) => (st.filter === "mine" ? f.source === "custom" : st.filter === "frida" ? f.source === "frida" : true))
-        .filter((f) => !q || [f.name, ...f.aliases, f.frida_name].some((x) => String(x).toLowerCase().includes(q)))
+        .filter((f) => (st.filter === "mine" ? f.source === "custom" : st.filter === "frida" ? f.source === "frida" : st.filter === "usda" ? f.source === "usda" : true))
+        .filter((f) => !q || [f.name, ...f.aliases, f.frida_name, f.usda_name].some((x) => String(x).toLowerCase().includes(q)))
         .map((f) => ({
           id: f.id,
           name: f.name,
@@ -166,17 +166,17 @@ export default function (h) {
       if (st.error && !st.data) return `<ha-alert alert-type="error">${esc(st.error)}</ha-alert>`;
       if (compact && sel) return `<div class="fd-detail-page">${this._fdDetailHtml()}</div>`;
       if (canEdit) this._fab = `<ha-button class="fab ${compact ? "above-tabs" : ""}" size="l" data-act="food-new"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("New food"))}</ha-button>`;
-      const c = (st.data && st.data.counts) || { foods: 0, mine: 0, frida: 0, review: 0 };
+      const c = (st.data && st.data.counts) || { foods: 0, mine: 0, frida: 0, usda: 0, review: 0 };
       const chip = (key, label, n) =>
         `<ha-assist-chip data-ffilter="${key}" label="${esc(T(label))}${n != null ? ` ${n}` : ""}" ${st.filter === key ? "active" : ""}><ha-icon slot="icon" icon="mdi:${
-          key === "review" ? "link-off" : key === "mine" ? "account-outline" : "database-outline"
+          key === "review" ? "link-off" : key === "mine" ? "account-outline" : key === "usda" ? "flag-variant-outline" : "database-outline"
         }"></ha-icon></ha-assist-chip>`;
       const standard = st.data ? st.data.review.filter((r) => r.suggestion && r.suggestion.confidence === "standard").length : 0;
       return `<div class="fd-page">
           <div class="fd-main">
             <div class="fd-tool">
               ${compact ? "" : `<ha-input-search id="fsearch" appearance="outlined" placeholder="${esc(T("Search foods"))}" value="${esc(st.q)}"></ha-input-search>`}
-              ${chip("review", "Needs review", c.review)}${chip("mine", "Mine", c.mine)}${chip("frida", "From Frida", c.frida)}
+              ${chip("review", "Needs review", c.review)}${chip("mine", "Mine", c.mine)}${chip("frida", "From Frida", c.frida)}${c.usda ? chip("usda", "From USDA", c.usda) : ""}
               ${st.filter === "review" && standard && canEdit ? `<ha-button size="s" appearance="filled" data-fd="adopt-all"><ha-icon slot="start" icon="mdi:check-all"></ha-icon>${esc(`${T("Accept")} ${standard} ${T("standard choices")}`)}</ha-button>` : ""}
             </div>
             <div id="fd-table"></div>
@@ -196,17 +196,19 @@ export default function (h) {
       if (!d) return `<div class="fd-detail"><p class="muted">${esc(T(this._fdState().data ? "This food no longer exists." : "Loading…"))}</p></div>`;
       const src = (key, label) => `<ha-assist-chip data-fsrc="${key}" label="${esc(T(label))}" ${d.source === key ? "active" : ""}></ha-assist-chip>`;
       let nutrition = "";
-      if (d.source === "frida")
+      if (d.source === "frida" || d.source === "usda") {
+        const id = d[`${d.source}_id`];
+        const name = d.source === "frida" ? d.frida_name : d.usda_name;
         nutrition = `<div class="fd-frida">${
-          d.frida_id
-            ? `<b>${esc(d.frida_name || "Frida")}</b><div class="muted">${esc(
+          id
+            ? `<b>${esc(name || (d.source === "frida" ? "Frida" : "USDA"))}</b><div class="muted">${esc(
                 [d.values.kcal != null ? `${num(d.values.kcal)} kcal` : "", d.values.fat != null ? `${T("Fat")} ${num(d.values.fat, 1)} g` : "", d.values.carbs != null ? `${T("Carbohydrates")} ${num(d.values.carbs, 1)} g` : "", d.values.protein != null ? `${T("Protein")} ${num(d.values.protein, 1)} g` : ""]
                   .filter(Boolean)
                   .join(" · ")
               )}</div>`
-            : `<span class="muted">${esc(T("No Frida food chosen yet."))}</span>`
-        }${canEdit ? `<ha-button size="s" appearance="plain" data-fd="pick-frida">${esc(T(d.frida_id ? "Change" : "Choose a Frida food"))}</ha-button>` : ""}</div>`;
-      else if (d.source === "custom") nutrition = `<p class="muted">${esc(T("Values per 100 g, as on the nutrition label. Only the energy is required."))}</p><ha-form id="fd-values"></ha-form>`;
+            : `<span class="muted">${esc(T(d.source === "frida" ? "No Frida food chosen yet." : "No USDA food chosen yet."))}</span>`
+        }${canEdit ? `<ha-button size="s" appearance="plain" data-fd="pick-${d.source}">${esc(T(id ? "Change" : d.source === "frida" ? "Choose a Frida food" : "Choose a USDA food"))}</ha-button>` : ""}</div>`;
+      } else if (d.source === "custom") nutrition = `<p class="muted">${esc(T("Values per 100 g, as on the nutrition label. Only the energy is required."))}</p><ha-form id="fd-values"></ha-form>`;
       else nutrition = `<p class="muted">${esc(T("No values yet, so this food is left out of the nutrition."))}</p>`;
       const rows = d.unit_rows
         .map(
@@ -225,7 +227,7 @@ export default function (h) {
           ${compact ? "" : `<div class="fd-dhead"><h2>${esc(d.name || T("New food"))}</h2>${close}</div>`}
           <ha-form id="fd-form"></ha-form>
           <h3>${esc(T("Nutrition per 100 g"))}</h3>
-          <div class="fd-srcs">${src("frida", "Frida")}${src("custom", "My values")}${src("none", "None")}</div>
+          <div class="fd-srcs">${src("frida", "Frida")}${src("usda", "USDA")}${src("custom", "My values")}${src("none", "None")}</div>
           ${nutrition}
           <h3>${esc(T("Weights"))}</h3>
           ${rows}
@@ -291,6 +293,7 @@ export default function (h) {
     _fdSaveBody(d) {
       const body = { name: d.name.trim(), aliases: d.aliases.map((a) => String(a).trim()).filter(Boolean), source: d.source, section: d.section || "" };
       if (d.source === "frida") body.frida_id = d.frida_id;
+      if (d.source === "usda") body.usda_id = d.usda_id;
       if (d.source === "custom") body.values = Object.fromEntries(FORM.filter(([k]) => d.values[k] != null).map(([k]) => [k, d.values[k]]));
       body.unit_grams = Object.fromEntries(d.unit_rows.filter(([u, g]) => String(u).trim() && g > 0).map(([u, g]) => [String(u).trim(), Number(g)]));
       return body;
@@ -333,7 +336,10 @@ export default function (h) {
           break;
         }
         case "pick-frida":
-          this._fdPickFrida(d);
+          this._fdPickSource(d, "frida");
+          break;
+        case "pick-usda":
+          this._fdPickSource(d, "usda");
           break;
         case "merge":
           this._fdPickFood(d);
@@ -360,7 +366,8 @@ export default function (h) {
         case "create": {
           const r = this._fdReview(this._view.id);
           const s = r.suggestion;
-          st.draft = { ...blank(), name: title(r.key), source: s && s.source === "frida" ? "frida" : "none", frida_id: s && s.source === "frida" ? s.id : null, frida_name: s && s.source === "frida" ? s.name : "", values: s && s.source === "frida" ? { kcal: s.kcal, fat: s.fat, carbs: s.carbs, protein: s.protein } : {} };
+          const ext = s && (s.source === "frida" || s.source === "usda") ? s : null;
+          st.draft = { ...blank(), name: title(r.key), source: ext ? ext.source : "none", [`${ext ? ext.source : "frida"}_id`]: ext ? ext.id : null, [`${ext ? ext.source : "frida"}_name`]: ext ? ext.name : "", values: ext ? { kcal: ext.kcal, fat: ext.fat, carbs: ext.carbs, protein: ext.protein } : {} };
           st.draftFor = "new";
           this._go({ name: "foods", id: "new" }, false, this._brCompact() ? undefined : "replace");
           break;
@@ -380,10 +387,10 @@ export default function (h) {
       }
     },
 
-    /** Pick a Frida food for the food being edited. */
-    _fdPickFrida(d) {
+    /** Pick a Frida or USDA food for the food being edited. */
+    _fdPickSource(d, source) {
       const html = `<ha-input-search id="fp-q" appearance="outlined" placeholder="${esc(T("Search foods"))}" value="${esc(d.name)}"></ha-input-search><div id="fp-res"></div>`;
-      this._planDialog(T("Choose a Frida food"), html, (dlg, close) => {
+      this._planDialog(T(source === "frida" ? "Choose a Frida food" : "Choose a USDA food"), html, (dlg, close) => {
         const res = dlg.querySelector("#fp-res");
         let ticket = 0;
         let found = [];
@@ -393,9 +400,9 @@ export default function (h) {
             res.innerHTML = "";
             return;
           }
-          const hits = await this._ws({ type: "hass_recipes/nutrition_search", query: q, limit: 30 }).catch(() => []);
+          const hits = await this._ws({ type: "hass_recipes/nutrition_search", query: q, limit: 50 }).catch(() => []);
           if (mine !== ticket) return;
-          found = hits.filter((x) => x.source === "frida");
+          found = hits.filter((x) => x.source === source).slice(0, 30);
           res.innerHTML = found.length
             ? `<ha-list-base>${found
                 .map((f, n) => `<ha-list-item-button data-n="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`)
@@ -406,9 +413,9 @@ export default function (h) {
           const item = e.target.closest("[data-n]");
           if (!item) return;
           const f = found[+item.dataset.n];
-          d.source = "frida";
-          d.frida_id = f.id;
-          d.frida_name = f.name;
+          d.source = source;
+          d[`${source}_id`] = f.id;
+          d[`${source}_name`] = f.name;
           d.values = Object.fromEntries(FORM.map(([k]) => [k, f[k]]));
           close();
           this._render();

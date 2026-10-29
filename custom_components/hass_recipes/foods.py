@@ -18,6 +18,7 @@ from .nutrition import (
     SOURCE_CUSTOM,
     SOURCE_FRIDA,
     SOURCE_IGNORE,
+    SOURCE_USDA,
     FoodDatabase,
     clean_custom,
     food_key,
@@ -165,7 +166,7 @@ class FoodBook:
                 continue
             link: dict[str, Any] = {
                 "source": food["source"],
-                "id": food["frida_id"] if food["source"] == SOURCE_FRIDA else food["id"],
+                "id": food["frida_id"] if food["source"] == SOURCE_FRIDA else food["usda_id"] if food["source"] == SOURCE_USDA else food["id"],
             }
             if food["unit_grams"]:
                 link["unit_grams"] = dict(food["unit_grams"])
@@ -184,6 +185,7 @@ class FoodBook:
             raise FoodError("A food needs a name")
         source = data.get("source") or SOURCE_NONE
         frida_id = None
+        usda_id = None
         values: dict[str, Any] = {k: None for k in NUTRIENTS}
         if source == SOURCE_FRIDA:
             found = self.db.get(data.get("frida_id"))
@@ -193,6 +195,14 @@ class FoodBook:
                 source = SOURCE_NONE
             else:
                 frida_id = int(found["id"])
+        elif source == SOURCE_USDA:
+            found = self.db.get_usda(data.get("usda_id"))
+            if found is None:
+                if check:
+                    raise FoodError(f"Unknown USDA food: {data.get('usda_id')!r}")
+                source = SOURCE_NONE
+            else:
+                usda_id = int(found["id"])
         elif source == SOURCE_CUSTOM:
             cleaned = clean_custom({"name": name, **(data.get("values") or {})})
             if cleaned["kcal"] is None:
@@ -209,6 +219,7 @@ class FoodBook:
             "aliases": clean_names(data.get("aliases")),
             "source": source,
             "frida_id": frida_id,
+            "usda_id": usda_id,
             "values": values,
             "unit_grams": clean_unit_grams(data.get("unit_grams")),
             "section": str(data.get("section") or "").strip()[:60],
@@ -236,7 +247,7 @@ class FoodBook:
         if fid not in self.foods:
             raise FoodError("Food not found")
         old = self.foods[fid]
-        merged = {**old, **{k: v for k, v in data.items() if k in ("name", "aliases", "source", "frida_id", "values", "unit_grams", "section")}}
+        merged = {**old, **{k: v for k, v in data.items() if k in ("name", "aliases", "source", "frida_id", "usda_id", "values", "unit_grams", "section")}}
         if data.get("source") == SOURCE_CUSTOM and "values" not in data:
             merged["values"] = old["values"]
         food = self._clean(merged, fid)
@@ -266,7 +277,7 @@ class FoodBook:
             target["aliases"] = clean_names(target["aliases"])
             target["unit_grams"] = {**source["unit_grams"], **target["unit_grams"]}
             if target["source"] == SOURCE_NONE and source["source"] != SOURCE_NONE:
-                for k in ("source", "frida_id", "values"):
+                for k in ("source", "frida_id", "usda_id", "values"):
                     target[k] = source[k]
             if not target["section"]:
                 target["section"] = source["section"]
@@ -298,6 +309,18 @@ class FoodBook:
         food = self._clean(
             {"name": _title(key) or "Food", "source": SOURCE_FRIDA, "frida_id": frida_id, "auto": True}, uuid.uuid4().hex
         )
+        self.foods[food["id"]] = food
+        return food
+
+    def ensure_usda_food(self, usda_id: int, key: str) -> dict[str, Any]:
+        """The food for a USDA food: one that already has this name, else one that is already that USDA food, else a new one."""
+        found = self.food_for_key(key)
+        if found and found["source"] == SOURCE_USDA and found["usda_id"] == usda_id:
+            return found
+        for food in self.foods.values():
+            if food["source"] == SOURCE_USDA and food["usda_id"] == usda_id:
+                return food
+        food = self._clean({"name": _title(key) or "Food", "source": SOURCE_USDA, "usda_id": usda_id, "auto": True}, uuid.uuid4().hex)
         self.foods[food["id"]] = food
         return food
 

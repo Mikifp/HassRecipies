@@ -21,6 +21,7 @@ from .nutrition import (
     SOURCE_CUSTOM,
     SOURCE_FRIDA,
     SOURCE_IGNORE,
+    SOURCE_USDA,
     FoodDatabase,
     calculate,
     clean_custom,
@@ -117,6 +118,11 @@ class Nutrition:
                     raise NutritionError(f"Unknown Frida food: {food_id!r}")
                 target = self.book.ensure_frida_food(int(food_id), key)
                 self.book.link_key(key, target["id"], unit_grams)
+            elif source == SOURCE_USDA:
+                if self.db.get_usda(food_id) is None:
+                    raise NutritionError(f"Unknown USDA food: {food_id!r}")
+                target = self.book.ensure_usda_food(int(food_id), key)
+                self.book.link_key(key, target["id"], unit_grams)
             elif source == SOURCE_CUSTOM:
                 target = self.book.foods.get(str(food_id))
                 if target is None or target["source"] != SOURCE_CUSTOM:
@@ -139,10 +145,11 @@ class Nutrition:
         found = self.book.food_for_key(key)
         if found is None:
             current = resolve(self.db, *self._views(), food)
-            if not current or current.get("source") not in (SOURCE_FRIDA, SOURCE_CUSTOM):
+            if not current or current.get("source") not in (SOURCE_FRIDA, SOURCE_USDA, SOURCE_CUSTOM):
                 raise NutritionError("Choose the food first")
-            if current["source"] == SOURCE_FRIDA:
-                found = self.book.ensure_frida_food(int(current["id"]), key)
+            if current["source"] in (SOURCE_FRIDA, SOURCE_USDA):
+                ensure = self.book.ensure_frida_food if current["source"] == SOURCE_FRIDA else self.book.ensure_usda_food
+                found = ensure(int(current["id"]), key)
                 self.book.link_key(key, found["id"])
             else:
                 found = self.book.foods.get(str(current["id"]))
@@ -206,11 +213,9 @@ class Nutrition:
 
     def _describe_food(self, food: dict[str, Any], used: dict[str, set[str]]) -> dict[str, Any]:
         frida = self.db.get(food["frida_id"]) if food["source"] == SOURCE_FRIDA else None
-        values = (
-            {k: frida.get(k) for k in NUTRIENTS}
-            if frida
-            else {k: food["values"].get(k) for k in NUTRIENTS}
-        )
+        usda = self.db.get_usda(food["usda_id"]) if food["source"] == SOURCE_USDA else None
+        found = frida or usda
+        values = {k: found.get(k) for k in NUTRIENTS} if found else {k: food["values"].get(k) for k in NUTRIENTS}
         recipes: set[str] = set()
         for key in self.book._keys(food):
             recipes |= used.get(key, set())
@@ -218,9 +223,11 @@ class Nutrition:
             "id": food["id"],
             "name": food["name"],
             "aliases": list(food["aliases"]),
-            "source": food["source"] if (frida or food["source"] != SOURCE_FRIDA) else SOURCE_NONE,
+            "source": food["source"] if (found or food["source"] not in (SOURCE_FRIDA, SOURCE_USDA)) else SOURCE_NONE,
             "frida_id": food["frida_id"],
             "frida_name": frida["name_da"] if frida else "",
+            "usda_id": food["usda_id"],
+            "usda_name": usda["name_en"] if usda else "",
             "values": values,
             "unit_grams": dict(food["unit_grams"]),
             "section": food["section"],
@@ -240,7 +247,7 @@ class Nutrition:
                 continue
             guess = resolve(self.db, custom, links, key)
             suggestion = None
-            if guess and guess.get("source") in (SOURCE_FRIDA, SOURCE_CUSTOM):
+            if guess and guess.get("source") in (SOURCE_FRIDA, SOURCE_USDA, SOURCE_CUSTOM):
                 suggestion = {
                     **{k: guess[k] for k in ("source", "id", "name", "name_en", "group", *NUTRIENTS)},
                     # "standard": an everyday word with a standard choice; "guess": the best search hit
@@ -264,6 +271,7 @@ class Nutrition:
                 "foods": len(foods),
                 "mine": sum(1 for f in foods if f["source"] == SOURCE_CUSTOM),
                 "frida": sum(1 for f in foods if f["source"] == SOURCE_FRIDA),
+                "usda": sum(1 for f in foods if f["source"] == SOURCE_USDA),
                 "none": sum(1 for f in foods if f["source"] == SOURCE_NONE),
                 "review": len(review),
             },
@@ -328,8 +336,9 @@ class Nutrition:
             if not guess or (standard_only and not guess.get("default")):
                 continue
             try:
-                if guess["source"] == SOURCE_FRIDA:
-                    food = self.book.ensure_frida_food(int(guess["id"]), key)
+                if guess["source"] in (SOURCE_FRIDA, SOURCE_USDA):
+                    ensure = self.book.ensure_frida_food if guess["source"] == SOURCE_FRIDA else self.book.ensure_usda_food
+                    food = ensure(int(guess["id"]), key)
                     self.book.link_key(key, food["id"])
                 elif guess["source"] == SOURCE_CUSTOM and str(guess["id"]) in self.book.foods:
                     self.book.link_key(key, str(guess["id"]))

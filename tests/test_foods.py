@@ -238,7 +238,7 @@ def test_the_overview_lists_foods_with_use_and_names_in_recipes_that_need_a_food
     assert set(review) == {"æg", "drageblod", "mælk"}
     assert review["æg"]["suggestion"]["confidence"] == "standard" and review["æg"]["used_in"] == 1
     assert review["drageblod"]["suggestion"] is None
-    assert overview["counts"] == {"foods": 1, "mine": 0, "frida": 1, "none": 0, "review": 3}
+    assert overview["counts"] == {"foods": 1, "mine": 0, "frida": 1, "usda": 0, "none": 0, "review": 3}
 
 
 def test_adopting_suggestions_makes_foods_the_calculation_already_used():
@@ -297,3 +297,33 @@ def test_saving_a_recipe_makes_foods_of_its_standard_names_but_not_of_guesses():
     assert {f["name"] for f in n.foods_overview()["foods"]} == {"Æg"}
     mine = n.save_food({"name": "Kokos"})
     assert _raises(lambda: n.set_link("kokos", "ignore"))  # a food you made is not removed by Don't count
+
+
+# ---- USDA foods ------------------------------------------------------------------
+
+def _usda(name):
+    return next(f["id"] for f in DB.usda.values() if f["name_en"] == name)
+
+
+def test_a_food_can_be_a_usda_food_and_its_values_come_from_there():
+    _recipes, n = _make()
+    food = n.save_food({"name": "Hummus", "aliases": ["kikærtepure"], "source": "usda", "usda_id": _usda("Hummus, commercial")})
+    assert food["source"] == "usda" and food["usda_name"] == "Hummus, commercial" and 150 < food["values"]["kcal"] < 400
+    assert n.links()["kikærtepure"] == {"source": "usda", "id": _usda("Hummus, commercial")}
+    assert n.foods_overview()["counts"]["usda"] == 1
+    assert _raises(lambda: n.save_food({"name": "X", "source": "usda", "usda_id": 1}))
+    assert _raises(lambda: n.set_link("x", "usda", 1))
+
+
+def test_suggestions_can_be_usda_foods_and_accepting_one_makes_a_usda_food():
+    recipes, n = _make()
+    recipes.create({"name": "A", "ingredients": ["100 g hummus", "1 tortilla"]})
+    review = {r["key"]: r for r in n.foods_overview()["review"]}
+    assert review["hummus"]["suggestion"]["source"] == "usda" and review["hummus"]["suggestion"]["confidence"] == "guess"
+    assert n.adopt(["hummus"]) == 1
+    [food] = n.foods_overview()["foods"]
+    assert food["source"] == "usda" and food["name"] == "Hummus"
+    # the weight of a unit given on a line is kept with a USDA food too
+    n.set_unit_grams("tortilla", "piece", 40)
+    assert n.book.food_for_key("tortilla")["unit_grams"] == {"piece": 40.0}
+    assert n.book.food_for_key("tortilla")["source"] == "usda"
