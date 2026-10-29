@@ -59,3 +59,22 @@ test("a food's other names are found from the line's food or its words", () => {
   assert.deepEqual(f.namesForLine(groups, ["smør"]), []);
   assert.equal(f.nameKey("  Brun   Farin, 200 g"), "brun farin g");
 });
+
+test("a split of the energy becomes grams", () => {
+  assert.deepEqual(f.gramsFromSplit(2000, f.MACRO_PRESETS[0].split), { protein: 100, carbs: 250, fat: 67 });
+  assert.deepEqual(f.gramsFromSplit(1500, { protein: 30, carbs: 25, fat: 45 }), { protein: 113, carbs: 94, fat: 75 });
+});
+
+test("a split from body weight keeps protein at 1.6 g a kg", () => {
+  assert.deepEqual(f.suggestFromWeight(1500, 78), { protein: 125, carbs: 156, fat: 42 });
+  assert.equal(f.suggestFromWeight(600, 100).carbs, 0); // a small target leaves nothing for carbs: never negative
+});
+
+test("macro grams add up to energy with each share, and carbs can be fitted to the kcal goal", () => {
+  const e = f.macroEnergy({ protein: 100, carbs: 250, fat: 67 });
+  assert.equal(e.kcal, 2003);
+  assert.deepEqual(e.share, { protein: 20, carbs: 50, fat: 30 });
+  assert.deepEqual(f.macroEnergy({}), { kcal: 0, share: { protein: 0, carbs: 0, fat: 0 } });
+  assert.equal(f.carbsToFit({ kcal: 2000, protein: 100, fat: 70 }), 243);
+  assert.equal(f.carbsToFit({ kcal: 500, protein: 150, fat: 70 }), 0);
+});

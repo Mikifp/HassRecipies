@@ -398,6 +398,10 @@ const STYLE = `
   .tk-pace { cursor: pointer; border: 2px solid transparent; box-shadow: none; outline: 1px solid var(--divider-color); }
   .tk-pace.on { border-color: var(--primary-color); outline: none; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 10%, transparent)); }
   .tk-note { margin-top: 8px; font-size: 0.85em; }
+  .tk-gsum { display: flex; flex-direction: column; gap: 6px; }
+  .tk-grow { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; }
+  .tk-grow b { font-weight: 500; }
+  .tk-gtotal { border-top: 1px solid var(--divider-color); padding-top: 6px; }
   #tk-body { display: flex; flex-direction: column; gap: var(--ha-space-3, 12px); }
   .nu-selbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; position: sticky; top: 0; z-index: 2; min-height: 48px; padding: 0 8px; margin: 4px 0; border-radius: 8px; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, var(--card-background-color))); }
   .nu-selbar[hidden] { display: none; }

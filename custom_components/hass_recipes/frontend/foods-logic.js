@@ -102,3 +102,44 @@ export function namesForLine(groups, candidates) {
   }
   return [];
 }
+
+// ---- macro goals: a split for a kcal goal, and what the grams add up to ----
+const KCAL_PER_G = { protein: 4, carbs: 4, fat: 9 };
+
+/** Ready-made splits of the energy (percent of kcal): a starting point, not a prescription. */
+export const MACRO_PRESETS = [
+  { id: "balanced", label: "Balanced", split: { protein: 20, carbs: 50, fat: 30 } },
+  { id: "high_protein", label: "High protein", split: { protein: 30, carbs: 40, fat: 30 } },
+  { id: "low_carb", label: "Low carb", split: { protein: 30, carbs: 25, fat: 45 } },
+];
+
+/** Grams of each macro for a kcal goal split by percent. */
+export function gramsFromSplit(kcal, split) {
+  return {
+    protein: Math.round(((kcal * split.protein) / 100) / KCAL_PER_G.protein),
+    carbs: Math.round(((kcal * split.carbs) / 100) / KCAL_PER_G.carbs),
+    fat: Math.round(((kcal * split.fat) / 100) / KCAL_PER_G.fat),
+  };
+}
+
+/** A split from body weight: protein 1.6 g a kg, fat a quarter of the energy, carbs the rest (the calculator's own). */
+export function suggestFromWeight(kcal, weightKg) {
+  const protein = 1.6 * weightKg;
+  const fat = (0.25 * kcal) / 9;
+  const carbs = Math.max(0, (kcal - protein * 4 - fat * 9) / 4);
+  return { protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat) };
+}
+
+/** What the macro goals come to in energy, and each one's share of it. */
+export function macroEnergy(goals) {
+  const part = (k) => (Number(goals[k]) > 0 ? Number(goals[k]) * KCAL_PER_G[k] : 0);
+  const total = part("protein") + part("carbs") + part("fat");
+  const share = (k) => (total ? Math.round((part(k) / total) * 100) : 0);
+  return { kcal: Math.round(total), share: { protein: share("protein"), carbs: share("carbs"), fat: share("fat") } };
+}
+
+/** The carbs that make the macros add up to the kcal goal (what is left after protein and fat; never below 0). */
+export function carbsToFit(goals) {
+  const rest = Number(goals.kcal) - (Number(goals.protein) || 0) * 4 - (Number(goals.fat) || 0) * 9;
+  return Math.max(0, Math.round(rest / 4));
+}
