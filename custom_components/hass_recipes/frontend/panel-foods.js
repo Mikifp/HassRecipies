@@ -187,11 +187,114 @@ export default function (h) {
               ${chip("review", "Needs review", c.review)}${chip("mine", "Mine", c.mine)}${chip("frida", "From Frida", c.frida)}${c.usda ? chip("usda", "From USDA", c.usda) : ""}
               ${st.filter === "review" && standard && canEdit ? `<ha-button size="s" appearance="filled" data-fd="adopt-all"><ha-icon slot="start" icon="mdi:check-all"></ha-icon>${esc(`${T("Accept")} ${standard} ${T("standard choices")}`)}</ha-button>` : ""}
             </div>
+            ${st.filter === "review" ? this._fdGroupsHtml() : ""}
             <div id="fd-selbar" class="fd-selbar" hidden></div>
             <div id="fd-table"></div>
           </div>
           ${!compact && sel ? `<aside class="fd-pane">${this._fdDetailHtml()}</aside>` : ""}
         </div>`;
+    },
+
+    // ---- suggested groups: names that look like the same food ----
+    _fdGroups() {
+      const st = this._fdState();
+      const hidden = st.hiddenGroups || (st.hiddenGroups = new Set());
+      return ((st.data && st.data.groups) || []).filter((g) => !hidden.has(g.id));
+    },
+
+    _fdGroupHtml(g) {
+      const t = g.target;
+      const where =
+        g.reason === "food"
+          ? `${esc(T("Assign to"))} <b>${esc(t.name)}</b> (${esc(T("a food you have"))})`
+          : g.reason === "guess"
+            ? `${esc(T("New food"))} <b>${esc(t.name)}</b> ${esc(T("from"))} ${t.source === "usda" ? "USDA" : "Frida"}: ${esc(g.why)}`
+            : `${esc(T("New food"))} <b>${esc(t.name)}</b> ${esc(T("without nutrition values: you add them after"))}`;
+      const why = g.reason === "words" ? `${esc(T("Names that share"))} “${esc(g.why)}”` : "";
+      return `<div class="fd-group">
+          <div class="fd-group-main">
+            <div class="fd-group-names">${g.keys.map((k) => `<ha-assist-chip label="${esc(k)}"></ha-assist-chip>`).join("")}</div>
+            <div class="fd-group-to">${where}</div>
+            ${why ? `<div class="fd-group-why">${why}</div>` : ""}
+          </div>
+          <div class="fd-group-btns">
+            <ha-button size="s" appearance="${g.match ? "filled" : "plain"}" data-fgrp="assign" data-g="${esc(g.id)}">${esc(T("Assign"))}</ha-button>
+            <ha-icon-button data-fgrp="edit" data-g="${esc(g.id)}" label="${esc(T("Edit group"))}"><ha-icon icon="mdi:pencil-outline"></ha-icon></ha-icon-button>
+            <ha-icon-button data-fgrp="dismiss" data-g="${esc(g.id)}" label="${esc(T("Dismiss group"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>
+          </div>
+        </div>`;
+    },
+
+    _fdGroupsHtml() {
+      const st = this._fdState();
+      const canEdit = this._canEdit !== false;
+      const groups = this._fdGroups();
+      if (!st.data || !groups.length || !canEdit) return "";
+      const names = groups.reduce((n, g) => n + g.keys.length, 0);
+      const matched = groups.filter((g) => g.match);
+      return `<ha-card class="fd-groups">
+          <div class="fd-groups-head">
+            <ha-icon icon="mdi:creation-outline"></ha-icon>
+            <div class="fd-groups-title"><b>${groups.length} ${esc(T(groups.length === 1 ? "group looks like the same food" : "groups look like the same food"))}</b>
+              <div class="fd-group-why">${names} ${esc(T("of the"))} ${st.data.review.length} ${esc(T("names. Check each group, or assign the ones with a match."))}</div></div>
+            ${matched.length > 1 ? `<ha-button size="s" appearance="filled" data-fgrp="all">${esc(`${T("Assign")} ${matched.length} ${T("with a match")}`)}</ha-button>` : ""}
+          </div>
+          ${groups.map((g) => this._fdGroupHtml(g)).join("")}
+        </ha-card>`;
+    },
+
+    /** What to send to assign a group (its names, and the food they go to). */
+    _fdGroupPayload(g, keys) {
+      const t = g.target;
+      return t.kind === "food" ? { keys, food_id: t.food_id } : { keys, name: t.name, source: t.source, source_id: t.source_id };
+    },
+
+    async _fdAssignGroups(groups) {
+      const payload = groups.map((g) => this._fdGroupPayload(g, g.keys));
+      const { ok, res } = await this._fdCall({ type: "hass_recipes/foods_assign", groups: payload });
+      if (ok) {
+        await this._fdRefresh();
+        this._flash(`${res.assigned} ${T("names assigned.")}`);
+      }
+    },
+
+    _fdGroupAct(act, id) {
+      const st = this._fdState();
+      const g = this._fdGroups().find((x) => x.id === id);
+      if (act === "all") return this._fdAssignGroups(this._fdGroups().filter((x) => x.match));
+      if (!g) return;
+      if (act === "assign") return this._fdAssignGroups([g]);
+      if (act === "dismiss") {
+        st.hiddenGroups.add(g.id);
+        return this._render();
+      }
+      if (act === "edit") return this._fdEditGroup(g);
+    },
+
+    /** Take names out of a group, or choose another food for the rest. */
+    _fdEditGroup(g) {
+      const html = `<p class="muted">${esc(T("Untick the names that do not belong. They stay in the list."))}</p>
+        <div class="fd-group-edit">${g.keys.map((k) => `<ha-formfield label="${esc(k)}"><ha-checkbox checked data-k="${esc(k)}"></ha-checkbox></ha-formfield>`).join("")}</div>
+        <div class="fd-actions">
+          <ha-button appearance="filled" data-ge="assign">${esc(T("Assign"))}</ha-button>
+          <ha-button appearance="plain" data-ge="other">${esc(T("Choose another food"))}</ha-button>
+        </div>`;
+      this._planDialog(T("Edit group"), html, (dlg, close) => {
+        const keys = () => [...dlg.querySelectorAll("ha-checkbox")].filter((c) => c.checked).map((c) => c.dataset.k);
+        dlg.addEventListener("click", async (e) => {
+          const b = e.target.closest("[data-ge]");
+          if (!b) return;
+          const picked = keys();
+          if (!picked.length) return;
+          close();
+          if (b.dataset.ge === "other") return this._fdPickFood({ keys: picked });
+          const { ok, res } = await this._fdCall({ type: "hass_recipes/foods_assign", groups: [this._fdGroupPayload(g, picked)] });
+          if (ok) {
+            await this._fdRefresh();
+            this._flash(`${res.assigned} ${T("names assigned.")}`);
+          }
+        });
+      });
     },
 
     // ---- several rows at once ----
@@ -603,6 +706,7 @@ export default function (h) {
         this._go({ name: "foods" }, false, "replace");
       });
       on("[data-fd]", "click", (e) => this._fdAct(e.currentTarget.dataset.fd, e.currentTarget));
+      on("[data-fgrp]", "click", (e) => this._fdGroupAct(e.currentTarget.dataset.fgrp, e.currentTarget.dataset.g));
       on("[data-fsrc]", "click", (e) => {
         const d = this._fdDraft();
         d.source = e.currentTarget.dataset.fsrc;

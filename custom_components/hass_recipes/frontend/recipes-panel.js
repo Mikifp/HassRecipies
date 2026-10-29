@@ -348,6 +348,17 @@ const STYLE = `
   .fm-res { max-height: 45vh; overflow-y: auto; }
   .fd-selbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 0 var(--ha-space-4, 16px); min-height: 48px; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, transparent)); }
   .fd-selbar[hidden] { display: none; }
+  .fd-groups { margin: 0 var(--ha-space-4, 16px) var(--ha-space-3, 12px); }
+  .fd-groups-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+  .fd-groups-head > ha-icon { color: var(--primary-color); flex: none; }
+  .fd-groups-title { flex: 1; min-width: 0; }
+  .fd-group { display: flex; align-items: flex-start; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--divider-color); }
+  .fd-group-main { flex: 1; min-width: 0; }
+  .fd-group-names { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .fd-group-to { font-size: 0.9em; }
+  .fd-group-why { font-size: 0.85em; color: var(--secondary-text-color); }
+  .fd-group-btns { display: flex; align-items: center; flex: none; }
+  .fd-group-edit { display: flex; flex-direction: column; margin-bottom: 12px; }
   .fd-seln { font-weight: 500; margin-inline: 4px 12px; }
   .plan-cal { flex: 1; min-height: 0; display: flex; }
   .plan-cal ha-full-calendar { flex: 1; min-width: 0; height: 100%; }
