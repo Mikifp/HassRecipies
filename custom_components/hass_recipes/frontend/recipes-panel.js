@@ -451,11 +451,11 @@ const STYLE = `
   .cstep { background: var(--card-background-color); border: 1px solid var(--divider-color); border-left: 4px solid var(--divider-color); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; cursor: pointer; }
   .cstep.current { border-left-color: var(--primary-color); box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,.18)); }
   .cstep-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary-text-color); margin-bottom: 6px; }
-  .cstep .tick { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--divider-color); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .cstep .tick:not(.ing-chip) { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--divider-color); display: flex; align-items: center; justify-content: center; font-size: 13px; }
   .cstep-text { font-size: 1.25rem; line-height: 1.55; white-space: pre-line; }
   .cstep.done { border-left-color: var(--success-color, #43a047); }
   .cstep.done .cstep-text { text-decoration: line-through; opacity: .5; }
-  .cstep.done .tick { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
+  .cstep.done .tick:not(.ing-chip) { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
   .cstep .ing-chip { font-size: 14px; }
   @container (max-width: 680px) {
     .cook-cols { grid-template-columns: 1fr; gap: 14px; }
