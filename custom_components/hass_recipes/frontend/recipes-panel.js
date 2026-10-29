@@ -376,6 +376,18 @@ const STYLE = `
   .tk-fhead { margin-bottom: 4px; }
   .tk-preview { min-height: 1.4em; }
   .tk-loading { padding: 24px; }
+  .tk-pin { position: sticky; top: 56px; z-index: 1; margin: 0 calc(-1 * var(--ha-space-4, 16px)); padding: 8px var(--ha-space-4, 16px); background: var(--card-background-color); border-bottom: 1px solid var(--divider-color); font-size: 0.95em; }
+  .tk-pin[hidden] { display: none; }
+  .tk-pin b { font-size: 1.2em; font-weight: 500; }
+  .tk-quick { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tk-quick ha-assist-chip, .tk-chips ha-assist-chip { cursor: pointer; }
+  .tk-copy { margin-top: 12px; }
+  .tk-copy ha-assist-chip { cursor: pointer; }
+  .tk-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tk-stepper { display: flex; align-items: center; justify-content: center; gap: 12px; }
+  .tk-stepper ha-icon-button { --mdc-icon-button-size: 56px; --mdc-icon-size: 28px; border: 1px solid var(--divider-color); border-radius: 50%; }
+  .tk-stepper ha-input { width: 120px; --ha-font-size-m: 1.6rem; text-align: center; }
+  .tk-preview { text-align: center; }
   #tk-body { display: flex; flex-direction: column; gap: var(--ha-space-3, 12px); }
   .tk-fhead { font-size: 1.1em; }
   .nu-selbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; position: sticky; top: 0; z-index: 2; min-height: 48px; padding: 0 8px; margin: 4px 0; border-radius: 8px; background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 14%, var(--card-background-color))); }

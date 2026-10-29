@@ -162,6 +162,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_tracker_favourite,
         ws_tracker_log_plan,
         ws_tracker_recipe,
+        ws_tracker_copy,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -1334,3 +1335,15 @@ def ws_tracker_recipe(hass: HomeAssistant, connection: websocket_api.ActiveConne
         connection.send_error(msg["id"], "not_found", "Recipe not found")
         return
     connection.send_result(msg["id"], basis)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/tracker_copy", vol.Required("person_id"): str, vol.Required("source"): _DAY, vol.Required("date"): _DAY}
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_copy(hass, connection, msg, tracker) -> None:
+    """Log a day's entries again on another day (yesterday's breakfast on today)."""
+    if msg["source"] == msg["date"]:
+        raise TrackerError("Pick another day to copy from")
+    connection.send_result(msg["id"], tracker.copy_day(msg["person_id"], msg["source"], msg["date"]))

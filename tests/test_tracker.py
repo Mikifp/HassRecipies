@@ -219,6 +219,29 @@ def test_recent_items_are_distinct_newest_first_and_can_be_starred():
     assert t.toggle_favourite(anna["id"], entry["id"]) is False and t.day(anna["id"], DAY)["favourites"] == []
 
 
+def test_the_usual_items_of_a_meal_and_copying_a_day():
+    _h, recipes, _p, n, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    oats = _food(n)
+    for day in ("2026-10-26", "2026-10-27", "2026-10-28"):
+        t.add(anna["id"], day, "breakfast", "food", food_id=oats["id"], amount=60)
+    t.add(anna["id"], "2026-10-28", "breakfast", "quick", name="Kaffe", kcal=5)
+    t.add(anna["id"], "2026-10-28", "lunch", "quick", name="Suppe", kcal=250)
+    d = t.day(anna["id"], DAY)
+    usual = d["usual"]
+    assert [u["name"] for u in usual["breakfast"]] == ["Havregryn", "Kaffe"]  # most often first
+    assert usual["breakfast"][0]["food_id"] == oats["id"] and usual["lunch"][0]["name"] == "Suppe"
+    t.add(anna["id"], DAY, "breakfast", "food", food_id=oats["id"], amount=60)
+    assert [u["name"] for u in t.day(anna["id"], DAY)["usual"]["breakfast"]] == ["Kaffe"]  # already eaten today
+    assert d["previous"] == {"date": "2026-10-28", "count": 3}
+    assert t.previous(anna["id"], "2026-10-29") == {"date": "2026-10-28", "count": 3}
+    assert t.copy_day(anna["id"], "2026-10-28", "2026-10-30") == {"added": 3, "skipped": 0}
+    copied = t.day(anna["id"], "2026-10-30")
+    assert [e["name"] for e in copied["entries"]] == ["Havregryn", "Kaffe", "Suppe"] and copied["totals"]["kcal"] == 477
+    n.delete_food(oats["id"])
+    assert t.copy_day(anna["id"], "2026-10-28", "2026-10-31") == {"added": 2, "skipped": 1}  # the food is gone
+
+
 def test_changes_are_announced_and_saved():
     hass, _r, _p, _n, t = _make()
     anna = t.ensure_user("u1", "Anna")
