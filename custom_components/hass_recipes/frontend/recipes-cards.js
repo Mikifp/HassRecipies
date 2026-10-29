@@ -68,6 +68,13 @@ const I18N = {
     open_in: "Open in Recipes",
     mark_done: "Mark as done",
     is_done: "Done",
+    cal_title: "Calories today",
+    cal_left: "kcal left",
+    cal_over: "kcal over",
+    cal_goal: "Goal",
+    cal_none: "No goal set",
+    cal_open: "Open tracker",
+    ed_person: "Person (a name; empty for you)",
     plan_title: "Meal plan",
     plan_today: "Today",
     plan_tomorrow: "Tomorrow",
@@ -157,6 +164,13 @@ const I18N = {
     open_in: "Åbn i Opskrifter",
     mark_done: "Markér som færdig",
     is_done: "Færdig",
+    cal_title: "Kalorier i dag",
+    cal_left: "kcal tilbage",
+    cal_over: "kcal over",
+    cal_goal: "Mål",
+    cal_none: "Intet mål sat",
+    cal_open: "Åbn tracker",
+    ed_person: "Person (et navn; tomt for dig selv)",
     plan_title: "Madplan",
     plan_today: "I dag",
     plan_tomorrow: "I morgen",
@@ -1454,6 +1468,93 @@ class HassRecipesPlanCard extends RecipesBase {
   }
 }
 
+/** Calories today for one person of the calorie tracker. */
+class HassRecipesCaloriesCard extends RecipesBase {
+  getGridOptions() {
+    return { columns: 6, min_columns: 3, rows: "auto", min_rows: 2 };
+  }
+  static getStubConfig() {
+    return {};
+  }
+  setConfig(config) {
+    this._config = { ...config };
+    if (this._day) this._render();
+  }
+  getCardSize() {
+    return 3;
+  }
+  async _start() {
+    this._started = true;
+    await this._load();
+    this._sub(() => this._hass.connection.subscribeEvents(() => this._load(), "hass_recipes_tracker_changed"));
+    this._today = isoLocal(new Date());
+    this._tick = setInterval(() => {
+      if (isoLocal(new Date()) !== this._today) {
+        this._today = isoLocal(new Date());
+        this._load();
+      }
+    }, 60000);
+  }
+  async _load() {
+    try {
+      let personId;
+      const name = String(this._config.person || "").trim().toLowerCase();
+      if (name) {
+        const first = await this._hass.callWS({ type: "hass_recipes/tracker_day" });
+        const found = first.persons.find((p) => p.name.toLowerCase() === name);
+        if (!found) throw new Error(`No person called ${this._config.person}`);
+        personId = found.id;
+      }
+      this._day = await this._hass.callWS({ type: "hass_recipes/tracker_day", ...(personId ? { person_id: personId } : {}) });
+      this._error = "";
+    } catch (err) {
+      this._error = err.message || "Could not load the tracker";
+    }
+    this._render();
+  }
+  async _gauge() {
+    if (customElements.get("ha-gauge") || !window.loadCardHelpers) return;
+    try {
+      const helpers = await window.loadCardHelpers();
+      await helpers.createCardElement({ type: "gauge", entity: "sun.sun" });
+    } catch (_) { /* the card works without the gauge */ }
+  }
+  _render() {
+    if (!this._config) return;
+    const d = this._day;
+    const num = (v) => new Intl.NumberFormat(this._hass?.language || undefined, { maximumFractionDigits: 0 }).format(v);
+    let body;
+    if (this._error) body = `<div class="empty">${esc(this._error)}</div>`;
+    else if (!d) body = `<div class="empty">${esc(this._t("loading"))}</div>`;
+    else {
+      const goal = d.person.goals.kcal;
+      const eaten = d.totals.kcal;
+      const left = goal == null ? null : goal - eaten;
+      body = `<div style="display:flex;align-items:center;gap:16px;padding:8px 16px 16px;flex-wrap:wrap">
+          <ha-gauge id="g" style="width:150px"></ha-gauge>
+          <div><div style="font-size:calc(28px * var(--hr-fs, 1));font-weight:500;line-height:1.1">${left == null ? num(eaten) : num(Math.abs(left))} <span class="muted" style="font-size:.5em;font-weight:400">${esc(left == null ? "kcal" : this._t(left >= 0 ? "cal_left" : "cal_over"))}</span></div>
+            <div class="muted">${esc(goal == null ? this._t("cal_none") : `${num(eaten)} / ${num(goal)} kcal`)}</div>
+            <div class="muted" style="margin-top:6px">${[["protein", "P"], ["carbs", "C"], ["fat", "F"]].map(([k, l]) => `${l} ${num(d.totals[k])} g`).join(" · ")}</div></div></div>`;
+    }
+    const title = this._config.title ?? `${this._t("cal_title")}${d ? ` · ${d.person.name}` : ""}`;
+    this._paint(`<div class="head"><span class="title">${esc(title)}</span><button class="btn" id="open">${esc(this._t("cal_open"))}</button></div>${body}`);
+    const root = this.shadowRoot;
+    root.getElementById("open").onclick = () => this._openPath("/recipes#/tracker");
+    if (d && !this._error) this._gauge().then(() => {
+      const g = root.getElementById("g");
+      if (!g) return;
+      const goal = d.person.goals.kcal;
+      const eaten = d.totals.kcal;
+      g.min = 0;
+      g.max = Math.max(goal || 0, eaten, 1);
+      g.value = eaten;
+      g.label = "kcal";
+      g.valueText = num(eaten);
+      g.levels = goal ? [{ level: 0, stroke: "var(--primary-color)" }, { level: goal + 0.01, stroke: "var(--error-color)" }] : [{ level: 0, stroke: "var(--primary-color)" }];
+    });
+  }
+}
+
 /* ---- visual editor ------------------------------------------------------- */
 /** HA only loads ha-form when one of its own card editors is opened; make sure it exists. */
 const ensureHaForm = async () => {
@@ -1554,6 +1655,8 @@ class HassRecipesCardEditor extends HTMLElement {
           { name: "show_empty", selector: { boolean: {} } },
           num("list_height"),
         ];
+      case "calories":
+        return [{ name: "title", selector: { text: {} } }, { name: "person", selector: { text: {} } }];
       case "list":
         return [{ name: "title", selector: { text: {} } }, ...list];
       case "cooking":
@@ -1635,6 +1738,7 @@ HassRecipesCookingCard.getConfigElement = editorFor("cooking");
 HassRecipesCookCard.getConfigElement = editorFor("cook");
 HassRecipesKitchenCard.getConfigElement = editorFor("kitchen");
 HassRecipesPlanCard.getConfigElement = editorFor("plan");
+HassRecipesCaloriesCard.getConfigElement = editorFor("calories");
 
 for (const [tag, cls, name, description] of [
   ["hass-recipes-list-card", HassRecipesListCard, "Recipes list", "Search and open your recipes"],
@@ -1642,6 +1746,7 @@ for (const [tag, cls, name, description] of [
   ["hass-recipes-cook-card", HassRecipesCookCard, "Recipe cook mode", "Cook one recipe a step at a time"],
   ["hass-recipes-kitchen-card", HassRecipesKitchenCard, "Recipe kitchen", "Cook mode with the recipe list underneath"],
   ["hass-recipes-plan-card", HassRecipesPlanCard, "Meal plan", "What is planned for the coming days"],
+  ["hass-recipes-calories-card", HassRecipesCaloriesCard, "Calories today", "Calories eaten and left today, for one person"],
 ]) {
   if (!customElements.get(tag)) customElements.define(tag, cls);
   window.customCards = window.customCards || [];

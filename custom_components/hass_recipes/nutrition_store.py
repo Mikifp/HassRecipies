@@ -86,6 +86,31 @@ class Nutrition:
         result["standard"] = standard
         return result
 
+    # ---- amounts for the calorie tracker ----
+    def food_amount(self, food_id: str, amount: float, unit: str = "g") -> dict[str, Any]:
+        """Grams of a food and its energy and macros for ``amount`` of ``unit`` (g, or a unit with a weight of the food's)."""
+        food = self.book.foods.get(food_id)
+        if food is None:
+            raise NutritionError("Food not found")
+        info = self._describe_food(food, {})
+        if unit in ("", "g"):
+            grams = float(amount)
+        else:
+            per = food["unit_grams"].get(unit)
+            if not isinstance(per, (int, float)) or per <= 0:
+                raise NutritionError(f"“{food['name']}” has no weight for “{unit}”")
+            grams = float(amount) * per
+        values = {k: None if info["values"].get(k) is None else info["values"][k] * grams / 100 for k in ("kcal", "protein", "carbs", "fat")}
+        return {"name": food["name"], "grams": grams, **values}
+
+    def recipe_amount(self, recipe_id: str, servings: float = 1.0) -> dict[str, Any] | None:
+        """Energy and macros of ``servings`` of a recipe (the whole recipe when it has no number of servings)."""
+        result = self.for_recipe(recipe_id)
+        if result is None:
+            return None
+        per = result["per_serving"] or result["total"]
+        return {k: None if per.get(k) is None else per[k] * servings for k in ("kcal", "protein", "carbs", "fat")}
+
     def shopping_food(self, parsed: dict[str, Any]) -> dict[str, Any] | None:
         """The user's food that an ingredient line is, with what the line weighs in grams (None if that cannot be told)."""
         name = parsed.get("food") or parsed.get("text", "")

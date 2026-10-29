@@ -1,0 +1,203 @@
+"""The calorie tracker: persons, entries that keep the nutrition they were logged with, days, ranges,
+the meal plan and recent items (no Home Assistant needed)."""
+
+import asyncio
+import importlib
+from pathlib import Path
+import sys
+import types
+
+
+def _stub(name, **attrs):
+    mod = types.ModuleType(name)
+    mod.__dict__.update(attrs)
+    sys.modules[name] = mod
+    return mod
+
+
+class _Store:
+    data: dict = {}
+
+    def __init__(self, _hass, _version, key):
+        self.key = key
+
+    async def async_load(self):
+        return _Store.data.get(self.key)
+
+    def async_delay_save(self, fn, delay=0):
+        _Store.data[self.key] = fn()
+
+
+class _Bus:
+    def __init__(self):
+        self.events = []
+
+    def async_fire(self, name, data=None):
+        self.events.append((name, data))
+
+
+class _HAError(Exception):
+    pass
+
+
+for pkg in ("homeassistant", "homeassistant.helpers"):
+    _stub(pkg)
+_stub("homeassistant.core", HomeAssistant=object)
+_stub("homeassistant.helpers.storage", Store=_Store)
+_stub("homeassistant.exceptions", HomeAssistantError=_HAError, ServiceValidationError=_HAError)
+
+pkg = types.ModuleType("hr_t")
+pkg.__path__ = [str(Path(__file__).parents[1] / "custom_components/hass_recipes")]
+sys.modules["hr_t"] = pkg
+store_mod = importlib.import_module("hr_t.store")
+plan_mod = importlib.import_module("hr_t.mealplan")
+nu = importlib.import_module("hr_t.nutrition")
+ns = importlib.import_module("hr_t.nutrition_store")
+tr = importlib.import_module("hr_t.tracker")
+
+DB = nu.FoodDatabase.load()
+DAY = "2026-10-29"
+
+
+def _make():
+    _Store.data = {}
+    hass = types.SimpleNamespace(bus=_Bus(), data={})
+    recipes = store_mod.RecipeStore(hass)
+    asyncio.run(recipes.async_load())
+    plan = plan_mod.MealPlan(hass, recipes)
+    asyncio.run(plan.async_load())
+    nutrition = ns.Nutrition(hass, recipes, DB)
+    asyncio.run(nutrition.async_load())
+    tracker = tr.Tracker(hass, nutrition, plan)
+    asyncio.run(tracker.async_load())
+    return hass, recipes, plan, nutrition, tracker
+
+
+def _raises(fn):
+    try:
+        fn()
+    except tr.TrackerError:
+        return True
+    return False
+
+
+def _food(nutrition, name="Havregryn", kcal=370, **extra):
+    return nutrition.save_food({"name": name, "source": "custom", "values": {"kcal": kcal, "protein": 13, "carbs": 60, "fat": 7}, **extra})
+
+
+def test_a_person_is_made_once_for_a_user_and_one_by_name():
+    *_, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    assert t.ensure_user("u1", "Anna Changed")["id"] == anna["id"] and len(t.persons()) == 1
+    mikkel = t.add_person("  Mikkel ")
+    assert mikkel["name"] == "Mikkel" and mikkel["user_id"] is None
+    assert _raises(lambda: t.add_person("mikkel")) and _raises(lambda: t.add_person(" "))
+
+
+def test_a_food_is_logged_in_grams_or_a_unit_with_its_nutrition_kept():
+    _h, _r, _p, n, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    oats = _food(n, unit_grams={"dl": 40})
+    e = t.add(anna["id"], DAY, "breakfast", "food", food_id=oats["id"], amount=60, unit="g")
+    assert (e["name"], e["grams"], e["kcal"], e["protein"]) == ("Havregryn", 60, 222, 7.8)
+    e2 = t.add(anna["id"], DAY, "breakfast", "food", food_id=oats["id"], amount=2, unit="dl")
+    assert e2["grams"] == 80 and e2["kcal"] == 296
+    assert _raises(lambda: t.add(anna["id"], DAY, "breakfast", "food", food_id=oats["id"], amount=1, unit="spsk"))
+    # a snapshot: changing the food later leaves the logged day as it was
+    n.save_food({"values": {"kcal": 100}}, oats["id"])
+    assert t.entry(e["id"])["kcal"] == 222
+
+
+def test_a_recipe_is_logged_by_servings_and_a_quick_entry_by_its_energy():
+    _h, recipes, _p, n, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    oats = _food(n)
+    r = recipes.create({"name": "Grød", "servings": "2", "ingredients": ["100 g havregryn"]})
+    n.link_to_food("havregryn", oats["id"])
+    one = t.add(anna["id"], DAY, "breakfast", "recipe", recipe_id=r["id"])
+    assert one["name"] == "Grød" and one["kcal"] == 185  # 370 kcal for the recipe, 2 servings
+    assert t.add(anna["id"], DAY, "breakfast", "recipe", recipe_id=r["id"], servings=3)["kcal"] == 555
+    q = t.add(anna["id"], DAY, "snack", "quick", name="Kage", kcal=300, fat=12)
+    assert (q["kcal"], q["fat"], q["protein"]) == (300, 12, None)
+    assert _raises(lambda: t.add(anna["id"], DAY, "snack", "quick", name="Kage"))
+    assert _raises(lambda: t.add(anna["id"], DAY, "brunchish", "quick", name="x", kcal=1))
+    assert _raises(lambda: t.add(anna["id"], DAY, "snack", "food", food_id="nope", amount=1))
+    assert _raises(lambda: t.add(anna["id"], DAY, "snack", "quick", name="x", kcal=-5))
+
+
+def test_a_day_has_totals_against_the_goal_and_entries_can_be_changed_and_removed():
+    _h, _r, _p, n, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    assert t.set_goals(anna["id"], {"kcal": "1900", "protein": 95, "fat": ""})["goals"] == {"kcal": 1900, "protein": 95}
+    a = t.add(anna["id"], DAY, "lunch", "quick", name="Suppe", kcal=250, protein=10)
+    t.add(anna["id"], DAY, "breakfast", "quick", name="Kaffe", kcal=50)
+    day = t.day(anna["id"], DAY)
+    assert [e["name"] for e in day["entries"]] == ["Kaffe", "Suppe"]  # in the order of the meals
+    assert day["totals"] == {"kcal": 300, "protein": 10, "carbs": 0, "fat": 0}
+    t.update(a["id"], kcal=400, meal="dinner")
+    assert t.entry(a["id"])["meal"] == "dinner" and t.day(anna["id"], DAY)["totals"]["kcal"] == 450
+    assert t.today_totals(anna["id"], __import__("datetime").date(2026, 10, 29))["remaining"] == 1450
+    assert t.delete(a["id"]) and not t.delete(a["id"])
+    assert t.day(anna["id"], DAY)["totals"]["kcal"] == 50
+
+
+def test_each_person_has_their_own_log_and_deleting_a_person_deletes_it():
+    *_, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    mikkel = t.add_person("Mikkel")
+    t.add(anna["id"], DAY, "lunch", "quick", name="A", kcal=100)
+    t.add(mikkel["id"], DAY, "lunch", "quick", name="M", kcal=500)
+    assert t.day(anna["id"], DAY)["totals"]["kcal"] == 100 and t.day(mikkel["id"], DAY)["totals"]["kcal"] == 500
+    assert t.delete_person(mikkel["id"]) is True
+    assert not t.delete_person(mikkel["id"]) and [p["name"] for p in t.persons()] == ["Anna"]
+    assert t.day(anna["id"], DAY)["totals"]["kcal"] == 100 and not [e for e in t._entries.values() if e["person_id"] == mikkel["id"]]
+
+
+def test_a_range_gives_each_day_and_averages_the_days_that_were_logged():
+    *_, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    t.add(anna["id"], "2026-10-26", "lunch", "quick", name="A", kcal=1800)
+    t.add(anna["id"], "2026-10-28", "lunch", "quick", name="B", kcal=2000, protein=100)
+    r = t.range(anna["id"], "2026-10-26", "2026-10-29")
+    assert [d["kcal"] for d in r["days"]] == [1800, 0, 2000, 0]
+    assert [d["logged"] for d in r["days"]] == [True, False, True, False]
+    assert r["average"]["kcal"] == 1900 and r["logged_days"] == 2
+    assert _raises(lambda: t.range(anna["id"], "2026-10-29", "2026-10-26"))
+
+
+def test_a_planned_meal_is_offered_until_it_is_logged_as_eaten():
+    _h, recipes, plan, n, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    oats = _food(n)
+    r = recipes.create({"name": "Grød", "servings": "1", "ingredients": ["100 g havregryn"]})
+    n.link_to_food("havregryn", oats["id"])
+    planned = plan.add(DAY, "dinner", recipe_id=r["id"])
+    plan.add(DAY, "lunch", title="Eating out")  # no recipe: nothing to count
+    [offer] = t.planned(anna["id"], DAY)
+    assert offer["plan_id"] == planned["id"] and offer["kcal"] == 370 and offer["meal"] == "dinner"
+    t.add(anna["id"], DAY, "dinner", "recipe", recipe_id=r["id"], plan_id=planned["id"])
+    assert t.planned(anna["id"], DAY) == []
+    other = t.add_person("Mikkel")
+    assert len(t.planned(other["id"], DAY)) == 1  # it is still planned for someone who did not log it
+
+
+def test_recent_items_are_distinct_newest_first_and_can_be_starred():
+    *_, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    for name in ("A", "B", "A"):
+        t.add(anna["id"], DAY, "snack", "quick", name=name, kcal=100)
+    assert [x["name"] for x in t.recent(anna["id"])] == ["A", "B"]
+    entry = t.entries(anna["id"], DAY, DAY)[0]
+    assert t.toggle_favourite(anna["id"], entry["id"]) is True
+    assert [f["name"] for f in t.day(anna["id"], DAY)["favourites"]] == ["A"]
+    assert t.toggle_favourite(anna["id"], entry["id"]) is False and t.day(anna["id"], DAY)["favourites"] == []
+
+
+def test_changes_are_announced_and_saved():
+    hass, _r, _p, _n, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    seen = []
+    t.add_listener(lambda: seen.append(1))
+    t.add(anna["id"], DAY, "snack", "quick", name="A", kcal=100)
+    assert seen == [1] and hass.bus.events[-1][0] == "hass_recipes_tracker_changed"
+    assert _Store.data["hass_recipes.tracker"]["entries"][0]["name"] == "A"

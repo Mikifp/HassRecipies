@@ -8,16 +8,19 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_change
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, EVENT_COOKING_RECIPE_CHANGED, SIGNAL_TIMERS, TIMER_UNIQUE_PREFIX
-from .entity import DEVICE_INFO, get_manager
+from .entity import DEVICE_INFO, TRACKER_DEVICE, get_manager
 from .store import RecipeStore, cooking_pages
+from .tracker import Tracker
 from .timers import TimerManager
 
 
@@ -47,6 +50,30 @@ async def async_setup_entry(
 
     _sync()
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_TIMERS, _sync))
+
+    # two sensors for every person in the calorie tracker (made as people are added)
+    tracker: Tracker = hass.data[f"{DOMAIN}_tracker"]
+    people: set[str] = set()
+
+    @callback
+    def _people() -> None:
+        new = [p["id"] for p in tracker.persons() if p["id"] not in people]
+        people.update(new)
+        async_add_entities([TrackerSensor(tracker, pid, kind) for pid in new for kind in ("today", "remaining")])
+        for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if reg_entry.unique_id.startswith("tracker_") and reg_entry.unique_id.split("_")[1] not in {p["id"] for p in tracker.persons()}:
+                registry.async_remove(reg_entry.entity_id)
+
+    _people()
+    entry.async_on_unload(tracker.add_listener(_people))
+
+    @callback
+    def _midnight(_now) -> None:
+        # a new day starts at zero: the sensors read the date again
+        for sensor in list(TrackerSensor.live):
+            sensor.async_write_ha_state()
+
+    entry.async_on_unload(async_track_time_change(hass, _midnight, hour=0, minute=0, second=5))
 
 
 class RecipeTimerSensor(SensorEntity):
@@ -144,3 +171,63 @@ class CookingSensor(SensorEntity):
 
         for event in (EVENT_COOKING_RECIPE_CHANGED, f"{DOMAIN}_recipe_updated", f"{DOMAIN}_recipe_deleted"):
             self.async_on_remove(self.hass.bus.async_listen(event, _changed))
+
+
+class TrackerSensor(SensorEntity):
+    """Calories eaten today, or left of the day's goal, for one person of the calorie tracker."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = "kcal"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:fire"
+    _attr_device_info = TRACKER_DEVICE
+    live: set["TrackerSensor"] = set()
+
+    def __init__(self, tracker: Tracker, person_id: str, kind: str) -> None:
+        self._tracker = tracker
+        self._person_id = person_id
+        self._kind = kind
+        self._attr_unique_id = f"tracker_{person_id}_{kind}"
+
+    @property
+    def name(self) -> str:
+        person = self._tracker._persons.get(self._person_id)
+        who = person["name"] if person else ""
+        return f"{who} calories {'today' if self._kind == 'today' else 'remaining'}".strip()
+
+    def _totals(self) -> dict | None:
+        if self._person_id not in self._tracker._persons:
+            return None
+        return self._tracker.today_totals(self._person_id, dt_util.now().date())
+
+    @property
+    def available(self) -> bool:
+        return self._person_id in self._tracker._persons
+
+    @property
+    def native_value(self):
+        totals = self._totals()
+        if totals is None:
+            return None
+        return totals["kcal"] if self._kind == "today" else totals["remaining"]
+
+    @property
+    def extra_state_attributes(self):
+        totals = self._totals()
+        if totals is None:
+            return {}
+        return {"protein": totals["protein"], "carbs": totals["carbs"], "fat": totals["fat"], "goal": totals["goal"]}
+
+    async def async_added_to_hass(self) -> None:
+        TrackerSensor.live.add(self)
+        self._stop = self._tracker.add_listener(self._update)
+
+    async def async_will_remove_from_hass(self) -> None:
+        TrackerSensor.live.discard(self)
+        self._stop()
+
+    @callback
+    def _update(self) -> None:
+        if self.hass is not None and self.entity_id:
+            self.async_write_ha_state()

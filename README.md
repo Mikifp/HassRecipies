@@ -75,6 +75,22 @@ Nutrition data: © The Danish Food Composition Database (https://frida.fooddata.
 
 The **USDA Foundation Foods** (about 370 generic foods, English names) are from FoodData Central: U.S. Department of Agriculture, Agricultural Research Service, https://fdc.nal.usda.gov, public domain ([CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)). `data/usda.json` is a reduced extract built by `dev/usda_convert.py`; a Frida food wins where both have a clear match, so USDA fills the gaps ("hummus", "tortilla") and is there to search and choose.
 
+## Calorie tracker
+
+The **Tracker** tab keeps a daily log of what each person eats, with kcal first and the macros beside it.
+
+- **People:** every Home Assistant user gets a log of their own on first use, and you can add people by name. Everyone can look at every log; only the person (the user), an administrator, or anyone for a name added by hand can change it.
+- **Day view:** a gauge for kcal against the goal, smaller ones for protein, carbs and fat, and the meals of the day (the meal plan's own meals). Step through the days with the arrows.
+- **Add food:** search recipes and foods in one list, pick a favourite or a recent item, or write a quick entry (a name and kcal). A recipe is logged by servings, a food by grams or one of its units (for example *2 æg*).
+- **Meal plan:** a planned meal that is not logged yet is offered as **Log as eaten**.
+- **Goals:** kcal, protein, carbs and fat per person (the menu next to the people).
+- **Week and month:** a chart of kcal per day against the goal, and the average of the days you logged.
+- **Entries keep their nutrition:** what an entry came to is saved with it, so changing a food or a recipe later does not change a past day.
+- **Sensors:** two sensors per person, `sensor.calorie_tracker_<name>_calories_today` and `..._calories_remaining` (the macros and the goal are attributes), and the event `hass_recipes_tracker_changed`.
+- **Dashboard card:** `type: custom:hass-recipes-calories-card` shows today for you, or for `person: <name>`.
+
+The tracker log is not part of the recipe backup yet.
+
 ## Try it
 ```bash
 docker compose up        # then open http://localhost:8123 and finish onboarding
