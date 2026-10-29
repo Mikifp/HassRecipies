@@ -155,7 +155,16 @@ export default function (h) {
     },
 
     /** The goal card: kcal in Home Assistant's gauge, the macros in smaller ones. */
-    _tkSummaryHtml(totals, goals, editable) {
+    /** A slim summary that stays at the top while the meals scroll (shown once the gauges have scrolled away). */
+    _tkPinHtml(d) {
+      const goals = d.person.goals;
+      const t = d.totals;
+      const left = goals.kcal != null ? goals.kcal - t.kcal : null;
+      const macros = MACROS.map(([k, l]) => `${T(l).charAt(0)} ${num(t[k])}${goals[k] ? `/${num(goals[k])}` : ""}`).join(" · ");
+      return `<div id="tk-pin" class="tk-pin" hidden><b class="${left != null && left < 0 ? "tk-over" : ""}">${left == null ? num(t.kcal) : num(Math.abs(left))}</b> ${esc(left == null ? "kcal" : T(left >= 0 ? "kcal left" : "kcal over"))}<span class="muted"> · ${num(t.kcal)}${goals.kcal ? ` / ${num(goals.kcal)}` : ""} kcal · ${esc(macros)}</span></div>`;
+    },
+
+    _tkSummaryHtml(totals, goals, editable, d) {
       const left = goals.kcal != null ? goals.kcal - totals.kcal : null;
       const macros = MACROS.map(
         ([k, label]) => `<div class="tk-macro"><ha-gauge id="tk-g-${k}"></ha-gauge><div class="tk-mlabel">${esc(T(label))}<br><b>${num(totals[k])}</b>${goals[k] ? ` / ${num(goals[k])} g` : " g"}</div></div>`
@@ -175,6 +184,11 @@ export default function (h) {
             </div>
           </div>
           <div class="tk-macros">${macros}</div>
+          ${
+            d && editable && d.previous && d.previous.count
+              ? `<div class="tk-copy"><ha-assist-chip data-tkact="copy" label="${esc(T("Copy yesterday"))}"><ha-icon slot="icon" icon="mdi:content-copy"></ha-icon></ha-assist-chip></div>`
+              : ""
+          }
         </div></ha-card>`;
     },
 
@@ -203,11 +217,17 @@ export default function (h) {
             .join("");
           return `<ha-card class="tk-meal"><div class="card-content tk-mhead"><b>${esc(this._planLabel(m.id))}</b><span class="muted">${rows.length ? `${num(kcal)} kcal` : ""}</span></div>
               ${list ? `<ha-list-base>${list}</ha-list-base>` : ""}
-              ${edit ? `<div class="card-actions"><ha-button size="s" appearance="plain" data-tkadd="${esc(m.id)}"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(`${T("Add to")} ${this._planLabel(m.id).toLowerCase()}`)}</ha-button></div>` : ""}
+              ${
+                edit
+                  ? `<div class="card-actions tk-quick">${((d.usual || {})[m.id] || [])
+                      .map((t, i) => `<ha-assist-chip data-tkusual="${esc(m.id)}:${i}" label="+ ${esc(t.name)}"><ha-icon slot="icon" icon="mdi:${t.kind === "recipe" ? "chef-hat" : t.kind === "food" ? "food-apple-outline" : "pencil-outline"}"></ha-icon></ha-assist-chip>`)
+                      .join("")}<ha-assist-chip data-tkadd="${esc(m.id)}" label="${esc(T("More"))}"><ha-icon slot="icon" icon="mdi:plus"></ha-icon></ha-assist-chip></div>`
+                  : ""
+              }
             </ha-card>`;
         })
         .join("");
-      return `${this._tkSummaryHtml(d.totals, p.goals, edit)}${planned}${cards}`;
+      return `${this._tkPinHtml(d)}${this._tkSummaryHtml(d.totals, p.goals, edit, d)}${planned}${cards}`;
     },
 
     _tkRangeHtml(st) {
@@ -248,6 +268,14 @@ export default function (h) {
       const menu = root.getElementById("tk-menu");
       if (menu) menu.addEventListener("wa-select", (e) => this._tkMenu(e.detail.item.value));
       if (st.mode === "day") {
+        // the slim summary shows once the gauges have scrolled out of sight
+        const pin = root.getElementById("tk-pin");
+        const card = root.querySelector(".tk-summary");
+        if (this._tkObs) this._tkObs.disconnect();
+        if (pin && card && "IntersectionObserver" in window) {
+          this._tkObs = new IntersectionObserver(([entry]) => (pin.hidden = entry.isIntersecting || entry.boundingClientRect.top > 0), { threshold: 0 });
+          this._tkObs.observe(card);
+        }
         const ready = await this._tkElement("ha-gauge", { type: "gauge", entity: "sun.sun" });
         if (!ready && !customElements.get("ha-gauge")) await new Promise((r) => setTimeout(r, 3000));
         if (!root.getElementById("tk-g-kcal")) return;
@@ -364,6 +392,27 @@ export default function (h) {
           return this._tkAddDialog(el.dataset.tkadd);
         case "goals":
           return this._tkGoalsDialog();
+        case "usual": {
+          const [meal, i] = el.dataset.tkusual.split(":");
+          const t = (d.usual[meal] || [])[Number(i)];
+          if (!t) return;
+          const { ok } = await this._tkCall({ type: "hass_recipes/tracker_add", person_id: d.person.id, date: d.date, ...this._tkPayload({ ...t, meal }) });
+          if (ok) {
+            await this._tkLoad();
+            this._flash(`${T("Added")} ${t.name}.`);
+          }
+          return;
+        }
+        case "copy": {
+          const already = d.entries.length;
+          if (already && !confirm(T("This day already has entries. Copy yesterday's on top of them?"))) return;
+          const { ok, res } = await this._tkCall({ type: "hass_recipes/tracker_copy", person_id: d.person.id, source: d.previous.date, date: d.date });
+          if (ok) {
+            await this._tkLoad();
+            this._flash(`${res.added} ${T("items copied.")}${res.skipped ? ` ${res.skipped} ${T("could not be copied.")}` : ""}`);
+          }
+          return;
+        }
         case "person-add":
           return this._tkPersonDialog();
         case "plan": {
@@ -498,6 +547,10 @@ export default function (h) {
         }
         if (draft.amount == null) draft.amount = ctx.start(draft.by);
       }
+      if (draft.kind !== "quick") {
+        const units = draft.kind === "food" ? ["g", ...Object.keys((ctx.food && ctx.food.unit_grams) || {})] : [];
+        return this._tkStepper(body, draft, ctx, draft.kind === "recipe" ? ways : units.map((u) => ({ value: u, label: u })), { onSave, onDelete, onStar, starred, onBack, saveLabel });
+      }
       const num0 = (min, step) => ({ number: { min, max: 100000, step, mode: "box" } });
       const schema = [];
       if (draft.kind === "recipe") {
@@ -543,6 +596,75 @@ export default function (h) {
         preview();
       });
       preview();
+      body.querySelector("#tk-save").addEventListener("click", () => onSave(draft));
+      if (onBack) body.querySelector("#tk-back").addEventListener("click", onBack);
+      if (onStar) body.querySelector("#tk-star").addEventListener("click", onStar);
+      if (onDelete) body.querySelector("#tk-del").addEventListener("click", onDelete);
+    },
+
+    /** Recipes and foods: the amount with big steppers, the unit and the meal as chips, what it comes to underneath. */
+    _tkStepper(body, draft, ctx, ways, { onSave, onDelete, onStar, starred, onBack, saveLabel }) {
+      const isRecipe = draft.kind === "recipe";
+      const key = isRecipe ? "by" : "unit";
+      if (!isRecipe && !draft.unit) draft.unit = "g";
+      const step = () => {
+        const w = draft[key];
+        if (isRecipe) return w === "grams" ? 10 : w === "yield" ? 1 : 0.5;
+        return w === "g" ? 10 : 0.5;
+      };
+      const chips = (list, current, attr) => list.map((x) => `<ha-assist-chip ${attr}="${esc(x.value)}" label="${esc(x.label)}" ${x.value === current ? "active" : ""}></ha-assist-chip>`).join("");
+      const meals = this._planMeals();
+      body.innerHTML = `<div class="tk-fhead"><b>${esc(draft.name || "")}</b></div>
+        ${ways.length > 1 ? `<div class="tk-chips" id="tk-ways">${chips(ways, draft[key], "data-way")}</div>` : ""}
+        <div class="tk-stepper">
+          <ha-icon-button id="tk-minus" label="${esc(T("Less"))}"><ha-icon icon="mdi:minus"></ha-icon></ha-icon-button>
+          <ha-input id="tk-amt" type="number" appearance="outlined" inputmode="decimal" min="0"></ha-input>
+          <ha-icon-button id="tk-plus" label="${esc(T("More"))}"><ha-icon icon="mdi:plus"></ha-icon></ha-icon-button>
+        </div>
+        <div class="tk-preview muted" id="tk-pv"></div>
+        <div class="tk-chips" id="tk-meals">${chips(meals.map((m) => ({ value: m.id, label: this._planLabel(m.id) })), draft.meal, "data-meal")}</div>
+        <div class="pd-actions">
+          <ha-button appearance="filled" size="l" id="tk-save">${esc(saveLabel)}</ha-button>
+          ${onBack ? `<ha-button appearance="plain" id="tk-back">${esc(T("Back"))}</ha-button>` : ""}
+          ${onStar ? `<ha-button appearance="plain" id="tk-star"><ha-icon slot="start" icon="mdi:${starred ? "star" : "star-outline"}"></ha-icon>${esc(T(starred ? "Favourite" : "Make favourite"))}</ha-button>` : ""}
+          ${onDelete ? `<ha-button appearance="plain" variant="danger" id="tk-del"><ha-icon slot="start" icon="mdi:delete-outline"></ha-icon>${esc(T("Delete"))}</ha-button>` : ""}
+        </div>`;
+      const input = body.querySelector("#tk-amt");
+      const preview = () => {
+        const c = this._tkCalc(draft, ctx);
+        body.querySelector("#tk-pv").textContent = c && c.kcal != null ? `${num(c.kcal)} kcal${MACROS.map(([k, l]) => (c[k] != null ? ` · ${num(c[k])} g ${T(l).toLowerCase()}` : "")).join("")}` : isRecipe ? T("This recipe has no nutrition yet: link its ingredients to foods first.") : "";
+      };
+      const show = () => {
+        input.value = String(Math.round((Number(draft.amount) || 0) * 100) / 100);
+        preview();
+      };
+      const nudge = (dir) => {
+        draft.amount = Math.max(0, Math.round(((Number(draft.amount) || 0) + dir * step()) * 100) / 100);
+        show();
+      };
+      body.querySelector("#tk-minus").addEventListener("click", () => nudge(-1));
+      body.querySelector("#tk-plus").addEventListener("click", () => nudge(1));
+      input.addEventListener("input", () => {
+        draft.amount = parseFloat(String(input.value).replace(",", ".")) || 0;
+        preview();
+      });
+      body.querySelectorAll("[data-way]").forEach((chip) =>
+        chip.addEventListener("click", () => {
+          const before = draft[key];
+          draft[key] = chip.dataset.way;
+          // another unit starts from a sensible amount (a serving, a piece, an average portion, 100 g)
+          if (draft[key] !== before) draft.amount = isRecipe ? ctx.start(draft.by) : draft.unit === "g" ? 100 : 1;
+          body.querySelectorAll("[data-way]").forEach((c) => c.toggleAttribute("active", c === chip));
+          show();
+        })
+      );
+      body.querySelectorAll("[data-meal]").forEach((chip) =>
+        chip.addEventListener("click", () => {
+          draft.meal = chip.dataset.meal;
+          body.querySelectorAll("[data-meal]").forEach((c) => c.toggleAttribute("active", c === chip));
+        })
+      );
+      show();
       body.querySelector("#tk-save").addEventListener("click", () => onSave(draft));
       if (onBack) body.querySelector("#tk-back").addEventListener("click", onBack);
       if (onStar) body.querySelector("#tk-star").addEventListener("click", onStar);
@@ -698,6 +820,7 @@ export default function (h) {
       on("[data-tkact]", "click", (e) => this._tkAct(e.currentTarget.dataset.tkact, e.currentTarget));
       on("[data-tkadd]", "click", (e) => this._tkAct("add", e.currentTarget));
       on("[data-tkplan]", "click", (e) => this._tkAct("plan", e.currentTarget));
+      on("[data-tkusual]", "click", (e) => this._tkAct("usual", e.currentTarget));
       on("[data-tkentry]", "click", (e) => this._tkAct("entry", e.currentTarget));
     },
   };

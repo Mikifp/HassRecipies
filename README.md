@@ -83,6 +83,7 @@ The **Tracker** tab keeps a daily log of what each person eats, with kcal first 
 - **Day view:** a gauge for kcal against the goal, smaller ones for protein, carbs and fat, and the meals of the day (the meal plan's own meals). Step through the days with the arrows.
 - **Add food:** search recipes and foods in one list, pick a favourite or a recent item, or write a quick entry (a name and kcal). A recipe is logged in servings, by what it makes (*2 boller* of a recipe that makes 12) or by weight (*250 g* of a porridge), a food by grams or one of its units (for example *2 æg*). A recipe weighs what its ingredients weigh.
 - **Meal plan:** a planned meal that is not logged yet is offered as **Log as eaten**.
+- **Quick logging:** each meal shows chips for what you most often eat in it (one tap logs it), **Copy yesterday** logs yesterday's entries again in the same meals, and a slim summary stays at the top while you scroll. On a phone, Add food opens as a sheet with large steppers for the amount.
 - **Goals:** kcal, protein, carbs and fat per person (the menu next to the people).
 - **Week and month:** a chart of kcal per day against the goal, and the average of the days you logged.
 - **Entries keep their nutrition:** what an entry came to is saved with it, so changing a food or a recipe later does not change a past day.

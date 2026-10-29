@@ -262,6 +262,8 @@ class Tracker:
             "planned": self.planned(person_id, day),
             "recent": self.recent(person_id),
             "favourites": list(person.get("favourites", [])),
+            "usual": self.usual(person_id, entries),
+            "previous": self.previous(person_id, day),
         }
 
     def planned(self, person_id: str, day: str) -> list[dict[str, Any]]:
@@ -316,6 +318,43 @@ class Tracker:
             if len(out) >= limit:
                 break
         return out
+
+    def usual(self, person_id: str, today: list[dict[str, Any]], limit: int = 3) -> dict[str, list[dict[str, Any]]]:
+        """What the person eats most in each meal (not what is already logged there today): one tap adds it."""
+        counts: dict[str, list[list[Any]]] = {}
+        mine = sorted((e for e in self._entries.values() if e["person_id"] == person_id), key=lambda e: e["created"], reverse=True)
+        for e in mine:
+            template = self._template(e)
+            slot = counts.setdefault(e["meal"], [])
+            found = next((c for c in slot if self._same(c[0], template)), None)
+            if found:
+                found[1] += 1
+            else:
+                slot.append([template, 1])
+        usual: dict[str, list[dict[str, Any]]] = {}
+        for meal, slot in counts.items():
+            here = [self._template(e) for e in today if e["meal"] == meal]
+            ranked = sorted(slot, key=lambda c: -c[1])  # a stable sort: the newest first among equals
+            usual[meal] = [c[0] for c in ranked if not any(self._same(c[0], h) for h in here)][:limit]
+        return usual
+
+    def previous(self, person_id: str, day: str) -> dict[str, Any]:
+        """The day before: its date and how many entries it has (to offer copying it)."""
+        before = (parse_date(day) - timedelta(days=1)).isoformat()
+        return {"date": before, "count": len(self.entries(person_id, before, before))}
+
+    def copy_day(self, person_id: str, source: str, target: str) -> dict[str, int]:
+        """Log what was eaten on ``source`` again on ``target``, in the same meals (what cannot be logged now is skipped)."""
+        added = skipped = 0
+        for e in self.entries(person_id, source, source):
+            # a recipe or a food is given by what it is (its name comes from it); a quick entry carries its own
+            fields = {k: v for k, v in self._template(e).items() if k != "kind" and (k != "name" or e["kind"] == "quick")}
+            try:
+                self.add(person_id, target, e["meal"], e["kind"], **fields)
+                added += 1
+            except TrackerError:
+                skipped += 1
+        return {"added": added, "skipped": skipped}
 
     def toggle_favourite(self, person_id: str, entry_id: str) -> bool:
         """Star (or unstar) what an entry is. Returns whether it is a favourite now."""
