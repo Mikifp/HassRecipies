@@ -21,6 +21,8 @@ from .images import MAX_IMAGE_BYTES, image_url
 from .ingredients import link_ingredients
 from .mealplan import MealPlanError
 from .migrate import from_mealie
+from .nutrition import NUTRIENTS, SOURCE_CUSTOM, SOURCE_FRIDA, SOURCE_IGNORE, food_key as _key
+from .nutrition_store import Nutrition, NutritionError
 from .scraper import RecipeImportError, async_import_html, async_import_text, async_import_url
 from .store import RecipeStore
 
@@ -133,6 +135,13 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_timer_start,
         ws_timer_dismiss,
         ws_migrate_mealie,
+        ws_nutrition,
+        ws_nutrition_search,
+        ws_nutrition_link,
+        ws_nutrition_unit_grams,
+        ws_nutrition_custom_list,
+        ws_nutrition_custom_save,
+        ws_nutrition_custom_delete,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -825,3 +834,130 @@ async def ws_migrate_mealie(
     connection.send_result(
         msg["id"], {**result, "found": len(slugs), "failed": failed}
     )
+
+
+# ---- nutrition: calories and macros from Frida and custom ingredients ----
+
+def _nutrition(hass: HomeAssistant) -> Nutrition:
+    return hass.data[f"{DOMAIN}_nutrition"]
+
+
+_PER_100G = vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=1000)))
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/nutrition", vol.Required("recipe_id"): str}
+)
+@callback
+def ws_nutrition(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    result = _nutrition(hass).for_recipe(msg["recipe_id"])
+    if result is None:
+        connection.send_error(msg["id"], "not_found", "Recipe not found")
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/nutrition_search",
+        vol.Required("query"): vol.All(str, vol.Length(max=120)),
+        vol.Optional("limit", default=15): vol.All(int, vol.Range(min=1, max=50)),
+    }
+)
+@callback
+def ws_nutrition_search(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    connection.send_result(msg["id"], _nutrition(hass).search(msg["query"], msg["limit"]))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/nutrition_link",
+        vol.Required("food"): vol.All(str, vol.Length(min=1, max=200)),
+        # None forgets the link, so the ingredient is matched automatically again
+        vol.Required("source"): vol.Any(None, SOURCE_FRIDA, SOURCE_CUSTOM, SOURCE_IGNORE),
+        vol.Optional("food_id"): vol.Any(None, int, str),
+    }
+)
+@callback
+@_edits
+def ws_nutrition_link(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    nutrition = _nutrition(hass)
+    keep = (nutrition.links().get(_key(msg["food"])) or {}).get("unit_grams")
+    try:
+        link = nutrition.set_link(msg["food"], msg["source"], msg.get("food_id"), keep)
+    except NutritionError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], link)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/nutrition_unit_grams",
+        vol.Required("food"): vol.All(str, vol.Length(min=1, max=200)),
+        vol.Required("unit"): vol.All(str, vol.Length(min=1, max=40)),
+        vol.Required("grams"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10000))),
+    }
+)
+@callback
+@_edits
+def ws_nutrition_unit_grams(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    try:
+        _nutrition(hass).set_unit_grams(msg["food"], msg["unit"], msg["grams"])
+    except NutritionError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/nutrition_custom_list"})
+@callback
+def ws_nutrition_custom_list(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    connection.send_result(msg["id"], _nutrition(hass).custom_foods())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/nutrition_custom_save",
+        vol.Optional("food_id"): str,
+        vol.Required("name"): vol.All(str, vol.Length(min=1, max=120)),
+        **{vol.Optional(key): _PER_100G for key in NUTRIENTS},
+        # link these ingredient names to the new food straight away ("hjemmelavet pesto")
+        vol.Optional("link_food"): vol.All(str, vol.Length(min=1, max=200)),
+    }
+)
+@callback
+@_edits
+def ws_nutrition_custom_save(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    nutrition = _nutrition(hass)
+    try:
+        food = nutrition.save_custom(
+            {k: msg[k] for k in ("name", *NUTRIENTS) if k in msg}, msg.get("food_id")
+        )
+        if msg.get("link_food"):
+            keep = (nutrition.links().get(_key(msg["link_food"])) or {}).get("unit_grams")
+            nutrition.set_link(msg["link_food"], SOURCE_CUSTOM, food["id"], keep)
+    except NutritionError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], food)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/nutrition_custom_delete", vol.Required("food_id"): str}
+)
+@callback
+@_edits
+def ws_nutrition_custom_delete(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    if not _nutrition(hass).delete_custom(msg["food_id"]):
+        connection.send_error(msg["id"], "not_found", "Custom ingredient not found")
+        return
+    connection.send_result(msg["id"])

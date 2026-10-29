@@ -7,6 +7,7 @@ WebSocket message, so the panel talks to these plain HTTP views instead.
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,20 @@ def attach_images(images: ImageStore, recipes: list[dict[str, Any]]) -> None:
             continue  # unsupported/oversized photo: keep the recipe without it
 
 
+def nutrition_section(data: bytes) -> dict[str, Any] | None:
+    """The custom ingredients and links in one of our own exports (None otherwise)."""
+    if not data.lstrip()[:1] == b"{":
+        return None
+    try:
+        document = json.loads(data)
+    except ValueError:
+        return None
+    if not isinstance(document, dict) or document.get("format") != "hass_recipes":
+        return None
+    section = document.get("nutrition")
+    return section if isinstance(section, dict) else None
+
+
 class RecipesImportView(HomeAssistantView):
     """POST raw file bytes to /api/hass_recipes/import."""
 
@@ -60,16 +75,19 @@ class RecipesImportView(HomeAssistantView):
         if not data:
             return self.json_message("Empty upload", 400)
 
-        def work() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        def work() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
             recipes, cookbooks = parse_upload(data)  # CPU-bound: keep off the event loop
             attach_images(_images(hass), recipes)
-            return recipes, cookbooks
+            return recipes, cookbooks, nutrition_section(data)
 
         try:
-            recipes, cookbooks = await hass.async_add_executor_job(work)
+            recipes, cookbooks, nutrition_data = await hass.async_add_executor_job(work)
         except MigrationError as err:
             return self.json_message(str(err), 400)
-        return self.json(store.import_many(recipes, cookbooks))
+        result = store.import_many(recipes, cookbooks)
+        if nutrition_data and (nutrition := hass.data.get(f"{DOMAIN}_nutrition")) is not None:
+            result["ingredients"] = nutrition.import_data(nutrition_data)
+        return self.json(result)
 
 
 class RecipesExportView(HomeAssistantView):
@@ -85,6 +103,8 @@ class RecipesExportView(HomeAssistantView):
         if store is None:
             return self.json_message("Recipes is not loaded", 503)
         document = store.export()
+        if (nutrition := hass.data.get(f"{DOMAIN}_nutrition")) is not None:
+            document["nutrition"] = nutrition.export()
 
         def embed() -> None:
             images = _images(hass)

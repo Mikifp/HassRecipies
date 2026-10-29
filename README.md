@@ -36,6 +36,7 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Steps can link to ingredients and carry any number of countdown timers, each set in hours, minutes and seconds with an optional label ("roast", "rest"); the alarm sounds when each is done and timers survive page reloads. The step counts as done when its last timer finishes
 - Import from a URL using `recipe-scrapers` (hundreds of sites) with a built-in JSON-LD/HTML fallback; one URL gets a review step, several URLs (up to 25) import in bulk
 - Ingredients are parsed into quantity/unit/food; a Grams view converts weights exactly and volumes by density (≈ = estimate)
+- **Nutrition**: calories, protein, fat, carbohydrates and fibre per serving and for the whole recipe, estimated from the Danish Food Composition Database (Frida) and your own custom ingredients (see [Nutrition](#nutrition))
 - Units are understood in Danish, Swedish, Norwegian, German, Dutch, French, Spanish and Italian as well as English (for example `2 tsk`, `1 spsk`, `2 fed hvidløg`, `2 stk løg`, `3 dl`, `1 EL`, `1 Prise`, `2 cucharadas de azúcar`), including a link word such as *de* or *di*. Weights and volumes convert to grams for English and Danish food names; in other languages the amount is still scaled and converted to ml
 - Categories, tools and tags, with multi-select filters on the list page
 - Cookbooks: save any combination of category/tool/tag filters + search as a named view
@@ -45,6 +46,17 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - Cook mode: one big step at a time, linked ingredients, step timers, screen kept awake (arrow keys to navigate)
 - `hass_recipes.import_recipe` service for automations
 - Data lives in HA storage (`.storage/hass_recipes.recipes`) so it is included in HA backups
+
+## Nutrition
+
+The recipe page shows an estimate of energy, protein, fat, carbohydrates and dietary fibre per serving (from the first number in *Servings*) and for the whole recipe; the **Check ingredients** page adds sugars, saturated fat and salt.
+
+- Each ingredient line is converted to grams by the ingredient parser, then matched to a food in the bundled **Frida** dataset (about 1,400 Danish foods with lab-analysed values per 100 g). Everyday words ("æg", "mælk", "hakkede tomater", "butter"…) have a standard choice; other names are matched by search, and a clear hit is used but marked *Matched automatically* so you can confirm it.
+- On **Check ingredients** you can choose another food, mark a line as *Don't count* (water, salt to taste), or give the weight of a unit the parser cannot weigh ("1 dåse = 400 g"). Choices are remembered by ingredient name and apply to every recipe.
+- **Custom ingredients**: add your own food with values per 100 g (from the label, or for something homemade). A custom ingredient named exactly like an ingredient line is used for it automatically. Custom ingredients and choices are included in the backup export.
+- Lines without a match or a weight are listed instead of guessed, so the total only counts what is known. Treat the numbers as an estimate.
+
+Nutrition data: © The Danish Food Composition Database (https://frida.fooddata.dk), version 6.1, May 2026, DTU Food Institute, published under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The bundled file `data/frida.json` is a reduced extract (8 nutrients). To update it to a new Frida release, download the dataset from [DTU Data](https://doi.org/10.11583/DTU.32312844) and run `python dev/frida_convert.py FCDB_<version>_Dataset.xlsx <version> "<month year>"`.
 
 ## Try it
 ```bash
@@ -175,11 +187,11 @@ node --test tests/js/*.test.mjs                     # front-end helpers and tran
 
 CI runs both test suites, a syntax check of the front-end, hassfest and the HACS validation on every pull request.
 
-- `custom_components/hass_recipes/` – integration (store, websocket API, scraper, config flow, diagnostics, repairs)
-- `custom_components/hass_recipes/frontend/` – dependency-free front-end, no build step: `recipes-panel.js` is the panel shell, split into `panel-*.js` modules (browse, recipe, form, editor, plan, progress, timers, data); `recipes-cards.js` the dashboard cards; `recipes-shared.js` and `recipes-i18n.js` are used by both
+- `custom_components/hass_recipes/` – integration (store, websocket API, scraper, nutrition, config flow, diagnostics, repairs); `data/frida.json` is the bundled food data, built by `dev/frida_convert.py`
+- `custom_components/hass_recipes/frontend/` – dependency-free front-end, no build step: `recipes-panel.js` is the panel shell, split into `panel-*.js` modules (browse, recipe, nutrition, form, editor, plan, progress, timers, data); `recipes-cards.js` the dashboard cards; `recipes-shared.js` and `recipes-i18n.js` are used by both
 - `custom_components/hass_recipes/brand/` – icon and logo
 - `tests/` – back-end tests, and `tests/js/` front-end tests
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). The bundled nutrition data (`custom_components/hass_recipes/data/frida.json`) is from the Danish Food Composition Database, © DTU Food Institute, and is licensed separately under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
