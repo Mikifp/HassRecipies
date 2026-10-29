@@ -1091,7 +1091,7 @@ export default function (h) {
           });
         };
         pick();
-      }, { subtitle: `${dayLabel(d.date, d.today)} · ${d.person.name}` });
+      }, { subtitle: `${dayLabel(d.date, d.today)} · ${d.person.name}`, fill: true });
     },
 
     /** Change or delete what was logged. */

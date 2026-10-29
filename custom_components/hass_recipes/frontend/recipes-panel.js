@@ -441,6 +441,11 @@ const STYLE = `
   .plan-main ha-alert { display: block; margin: var(--ha-space-2, 8px) var(--ha-space-4, 16px) 0; }
   .pdlg { display: flex; flex-direction: column; gap: var(--ha-space-4, 16px); min-width: min(420px, 80vw); padding: var(--ha-space-1, 4px) var(--ha-space-1, 4px) var(--ha-space-2, 8px); }
   .pdlg ha-input-search { display: block; }
+  @media (max-width: 600px) {
+    .pdlg.fill { flex: 1 1 auto; min-height: 0; }
+    .pdlg.fill #tk-body { flex: 1; min-height: 0; }
+    .pdlg.fill .tk-res, .pdlg.fill .fm-res { flex: 1; min-height: 0; max-height: none; }
+  }
   .pdlg ha-list-base { --md-list-container-color: transparent; }
   .pdlg ha-form { display: block; }
   .pdlg ha-alert { display: block; }
