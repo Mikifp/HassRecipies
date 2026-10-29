@@ -1,9 +1,10 @@
-/* Recipes panel: calories and macros. Mixed into the panel class by recipes-panel.js.
+/* Recipes panel: calories and macros, and the foods behind them. Mixed into the panel class by recipes-panel.js.
  *
- * The server does the sums (nutrition.py); this module shows them on the recipe page and
- * offers a page (#/recipe/<id>/nutrition) to check which food each ingredient was matched
- * to, choose another one, give a weight for units the parser cannot weigh ("1 dåse"), and
- * keep your own custom ingredients.
+ * The server does the sums (nutrition.py); this module shows them on the recipe page and offers a page
+ * (#/recipe/<id>/nutrition) with every ingredient line and the food it is linked to: accept a suggestion,
+ * choose another food (one of yours, or a Frida food that becomes one of yours), create a food, give the
+ * weight of a unit the parser cannot weigh ("1 dåse"), or count a line as nothing. The foods themselves
+ * are managed on the Foods page (panel-foods.js).
  */
 export default function (h) {
   const { esc, state } = h;
@@ -24,18 +25,6 @@ export default function (h) {
   const ALL = ["kcal", "fat", "sat_fat", "carbs", "sugars", "fibre", "protein", "salt"].map((key) =>
     [...MAIN, ...MORE].find(([k]) => k === key)
   );
-  // custom-ingredient form fields, in the order of a nutrition label
-  const FORM = [
-    ["kcal", "Energy (kcal)"],
-    ["fat", "Fat"],
-    ["sat_fat", "of which saturated fat"],
-    ["carbs", "Carbohydrates"],
-    ["sugars", "of which sugars"],
-    ["fibre", "Dietary fibre"],
-    ["protein", "Protein"],
-    ["salt", "Salt"],
-  ];
-
   const num = (v, digits = 1) =>
     v == null || Number.isNaN(v) ? "–" : new Intl.NumberFormat(state.language || "en", { maximumFractionDigits: digits }).format(v);
   const amount = (v, unit) => (v == null ? "–" : `${num(v, unit === "kcal" ? 0 : 1)} ${unit}`);
@@ -135,19 +124,20 @@ export default function (h) {
       return `<ha-card class="rd-nut" header="Nutrition">${body}</ha-card>`;
     },
 
-    // ---- the nutrition page ----
+    // ---- the page: every ingredient line and its food ----
+    /** What to say about how a line got its food: [text, tone]. */
     _nuTag(item) {
       const m = item.match;
       if (item.status === "ignored") return ["Not counted", "muted"];
+      if (item.own_food) return [item.own_food.auto ? "Linked automatically" : "Confirmed", "ok"];
       if (!m) return ["", ""];
-      if (m.source === "custom") return ["Custom ingredient", "ok"];
-      if (m.auto) return ["Matched automatically", "auto"];
-      if (m.default) return ["Standard choice", "ok"];
-      return ["Your choice", "ok"];
+      if (m.default) return ["Standard choice, not saved yet", "auto"];
+      if (m.auto) return ["Best guess", "auto"];
+      return ["", ""];
     },
 
     _nuChip(tag, tone) {
-      return `<ha-assist-chip class="nu-tag ${tone}" label="${esc(tag)}"></ha-assist-chip>`;
+      return `<ha-assist-chip class="nu-tag ${tone}" label="${esc(h.T(tag))}"></ha-assist-chip>`;
     },
 
     _nuWarn(text) {
@@ -157,10 +147,11 @@ export default function (h) {
     _nuItemHtml(item, edit) {
       const [tag, tone] = this._nuTag(item);
       const m = item.match;
+      const food = item.own_food;
       const open = this._nu.open === item.index;
       const kcal = item.values && item.values.kcal != null ? `${num(item.values.kcal, 0)} kcal` : "";
       let detail = "";
-      if (item.status === "no_match") detail = this._nuWarn(h.T("Not matched to a food, so it is not counted."));
+      if (item.status === "no_match") detail = this._nuWarn(h.T("Not linked to a food, so it is not counted."));
       else if (item.status === "no_grams") {
         const unit = item.unit_text || item.unit || "";
         detail = this._nuWarn(h.T(item.quantity == null ? "No amount, so it is not counted." : "The weight is unknown, so it is not counted."));
@@ -169,21 +160,29 @@ export default function (h) {
             <ha-button size="s" appearance="filled" data-nu="unit" data-i="${item.index}" data-unit="${esc(item.unit || "piece")}">${esc(h.T("Save weight"))}</ha-button></div>`;
       }
       const ug = m && m.unit_grams ? Object.entries(m.unit_grams) : [];
+      const linked = !!food;
       const acts = edit
         ? `<div class="nu-acts">
-            <ha-button appearance="plain" size="s" data-nu="change" data-i="${item.index}">${esc(h.T(open ? "Close" : m ? "Change food" : "Choose food"))}</ha-button>
+            ${!linked && m && m.source !== "ignore" ? `<ha-button appearance="filled" size="s" data-nu="accept" data-i="${item.index}"><ha-icon slot="start" icon="mdi:check"></ha-icon>${esc(h.T("Accept"))}</ha-button>` : ""}
+            <ha-button appearance="plain" size="s" data-nu="change" data-i="${item.index}">${esc(h.T(open ? "Close" : linked ? "Change" : "Link to a food"))}</ha-button>
+            ${!linked && (!m || m.source === "ignore") ? "" : ""}
+            ${!linked && item.status !== "ignored" && !m ? `<ha-button appearance="plain" size="s" data-nu="create" data-i="${item.index}">${esc(h.T("Create food"))}</ha-button>` : ""}
+            ${linked ? `<ha-button appearance="plain" size="s" data-nu="food" data-i="${item.index}">${esc(h.T("Edit food"))}</ha-button>` : ""}
             ${item.status !== "ignored" ? `<ha-button appearance="plain" size="s" data-nu="ignore" data-i="${item.index}">${esc(h.T("Don't count"))}</ha-button>` : ""}
-            ${m && m.linked ? `<ha-button appearance="plain" size="s" data-nu="reset" data-i="${item.index}">${esc(h.T("Reset"))}</ha-button>` : ""}
+            ${m && m.linked && item.status === "ignored" ? `<ha-button appearance="plain" size="s" data-nu="reset" data-i="${item.index}">${esc(h.T("Reset"))}</ha-button>` : ""}
           </div>`
         : "";
-      const matchLine =
+      const via =
         m && m.source !== "ignore"
-          ? `<div class="nu-match"><ha-icon icon="mdi:arrow-right-bottom"></ha-icon><span><b>${esc(m.name)}</b>${
-              item.grams != null ? ` · ${num(item.grams)} g` : ""
-            }${ug.length ? ` · ${ug.map(([u, g]) => `1 ${esc(u === item.unit && item.unit_text ? item.unit_text : u)} = ${num(g)} g`).join(", ")}` : ""}</span>${tag ? this._nuChip(tag, tone) : ""}</div>`
-          : tag
-          ? `<div class="nu-match">${this._nuChip(tag, tone)}</div>`
+          ? `${esc(m.name)}${item.grams != null ? ` · ${num(item.grams)} g` : ""}${ug.length ? ` · ${ug.map(([u, g]) => `1 ${esc(u === item.unit && item.unit_text ? item.unit_text : u)} = ${num(g)} g`).join(", ")}` : ""}`
           : "";
+      const matchLine = food
+        ? `<div class="nu-match"><ha-icon icon="mdi:link-variant"></ha-icon><span><b>${esc(food.name)}</b>${via ? ` <span class="nu-via">· ${via}</span>` : ""}</span>${tag ? this._nuChip(tag, tone) : ""}</div>`
+        : m && m.source !== "ignore"
+        ? `<div class="nu-match"><ha-icon icon="mdi:arrow-right-bottom"></ha-icon><span><b>${esc(m.name)}</b>${item.grams != null ? ` · ${num(item.grams)} g` : ""}</span>${tag ? this._nuChip(tag, tone) : ""}</div>`
+        : tag
+        ? `<div class="nu-match">${this._nuChip(tag, tone)}</div>`
+        : "";
       return `<li class="nu-item s-${item.status}">
           <div class="nu-line"><span class="nu-text">${esc(item.text)}</span><span class="nu-kcal">${esc(kcal)}</span></div>
           ${matchLine}${detail}${acts}
@@ -191,87 +190,67 @@ export default function (h) {
         </li>`;
     },
 
+    /** Choose the food for a line: one of yours, or a Frida food that becomes one of yours. */
     _nuPickerHtml(item) {
       return `<div class="nu-picker">
           <ha-input-search id="nu-q" appearance="outlined" placeholder="${esc(h.T("Search foods"))}" value="${esc(this._nu.query)}"></ha-input-search>
           <div id="nu-results">${this._nuResultsHtml()}</div>
-          <ha-button appearance="plain" size="s" data-nu="custom-new" data-i="${item.index}">${esc(h.T("New custom ingredient…"))}</ha-button>
+          <ha-button appearance="plain" size="s" data-nu="create" data-i="${item.index}"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(h.T("Create food"))}</ha-button>
         </div>`;
+    },
+
+    /** Your foods that match the search first, then Frida foods. */
+    _nuMineMatches() {
+      const q = (this._nu.query || "").trim().toLowerCase();
+      const foods = (this._nu.foods && this._nu.foods.foods) || [];
+      return foods.filter((f) => !q || [f.name, ...f.aliases].some((x) => x.toLowerCase().includes(q))).slice(0, 8);
     },
 
     _nuResultsHtml() {
+      const mine = this._nuMineMatches();
       const res = this._nu.results;
-      if (this._nu.searching && !res.length) return `<div class="muted">${esc(h.T("Searching…"))}</div>`;
-      if (!res.length) return this._nu.query ? `<div class="muted">${esc(h.T("No foods found. Try another word, or make a custom ingredient."))}</div>` : "";
-      return `<ha-list-base class="nu-results">${res
-        .map(
-          (f, n) => `<ha-list-item-button data-nu-pick="${n}" headline="${esc(f.name)}" supporting-text="${esc(
-            [f.group, f.kcal != null ? `${num(f.kcal, 0)} kcal / 100 g` : ""].filter(Boolean).join(" · ")
-          )}">${f.source === "custom" ? `<ha-assist-chip slot="end" label="${esc(h.T("Custom"))}"></ha-assist-chip>` : ""}</ha-list-item-button>`
+      if (this._nu.searching && !res.length && !mine.length) return `<div class="muted">${esc(h.T("Searching…"))}</div>`;
+      if (!res.length && !mine.length) return this._nu.query ? `<div class="muted">${esc(h.T("No foods found. Try another word."))}</div>` : "";
+      const group = (label, body) => (body ? `<div class="nu-group">${esc(h.T(label))}</div><ha-list-base class="nu-results">${body}</ha-list-base>` : "");
+      return (
+        group(
+          "Your foods",
+          mine
+            .map((f) => `<ha-list-item-button data-nu-own="${esc(f.id)}" headline="${esc(f.name)}" supporting-text="${esc([f.aliases.join(", "), f.values.kcal != null ? `${num(f.values.kcal, 0)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`)
+            .join("")
+        ) +
+        group(
+          "Frida",
+          res
+            .map((f, n) => `<ha-list-item-button data-nu-pick="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.group, f.kcal != null ? `${num(f.kcal, 0)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`)
+            .join("")
         )
-        .join("")}</ha-list-base>`;
-    },
-
-    /** The custom ingredient form is Home Assistant's own ha-form; it is given its schema and data after the render. */
-    _nuFormHtml() {
-      const f = this._nu.form;
-      if (!f) return "";
-      return `<div class="nu-form" id="nu-form">
-          <h3>${esc(h.T(f.id ? "Edit custom ingredient" : "New custom ingredient"))}</h3>
-          ${f.link_food ? `<p class="muted">${esc(`It will be used for “${f.link_food}”.`)}</p>` : ""}
-          <p class="muted">${esc(h.T("Values per 100 g, as on the nutrition label. Only the energy is required."))}</p>
-          <ha-form id="nu-form-ha"></ha-form>
-          <div class="nu-acts">
-            <ha-button appearance="filled" data-nu="custom-save">${esc(h.T("Save"))}</ha-button>
-            <ha-button appearance="plain" data-nu="custom-cancel">${esc(h.T("Cancel"))}</ha-button>
-          </div>
-        </div>`;
+      );
     },
 
     _nutritionHtml(r) {
-      this._nu = this._nu || { open: null, query: "", results: [], form: null, custom: null };
-      if (this._nu.custom === null) this._nuLoadCustom();
+      this._nu = this._nu || { open: null, query: "", results: [], foods: null };
       const edit = this._canEdit !== false;
       const st = this._nuData(r);
       const k = this._scale || 1;
       if (!st.data && st.loading) return `<ha-card class="nu"><div class="card-content muted">${esc(h.T("Calculating…"))}</div></ha-card>`;
       if (!st.data) return `<ha-card class="nu"><div class="card-content muted">${esc(st.error)}</div></ha-card>`;
       const d = st.data;
-      const custom = this._nu.custom || [];
+      const banner = d.unlinked
+        ? `<ha-alert class="nu-banner" alert-type="warning">${esc(`${d.unlinked} ${h.T("ingredients are not linked to a food yet, so they are matched by their words each time.")}`)}
+            ${edit && d.standard.length ? `<ha-button slot="action" size="s" appearance="filled" data-nu="adopt-all">${esc(`${h.T("Accept")} ${d.standard.length} ${h.T("standard choices")}`)}</ha-button>` : ""}</ha-alert>`
+        : "";
       return `<ha-card class="nu"><div class="card-content">
           <h2>${esc(r.name)}</h2>
-          <p class="muted">Calories and macros are estimated from what each ingredient weighs and the food it is matched to. Check the matches below; your choices are remembered for every recipe that uses the same ingredient.</p>
+          <p class="muted">${esc(h.T("Every ingredient line is linked to a food. The food knows its other names, what a unit of it weighs and its nutrition, so the calories and macros follow from it."))}</p>
           ${d.counted ? this._nuTableHtml(d, k, true) : ""}
           <div class="muted nu-status">${esc(this._nuStatusText(d))}</div>
-          <h3>Ingredients</h3>
+          <h3>${esc(h.T("Ingredients and foods"))}</h3>
+          ${banner}
           <ul class="nu-items">${d.items.map((i) => this._nuItemHtml(i, edit)).join("")}</ul>
-          ${this._nuFormHtml()}
-          <h3>Custom ingredients</h3>
-          ${
-            custom.length
-              ? `<ha-list-base class="nu-custom">${custom
-                  .map(
-                    (c) => `<ha-list-item-base headline="${esc(c.name)}" supporting-text="${esc(
-                      ALL.filter(([key]) => c[key] != null).map(([key, label, unit]) => `${label.replace(/^of which /, "")} ${amount(c[key], unit)}`).slice(0, 4).join(" · ")
-                    )} / 100 g">${
-                      edit
-                        ? `<span slot="end" class="nu-cacts"><ha-icon-button data-nu="custom-edit" data-id="${esc(c.id)}" label="${esc(h.T("Edit"))}"><ha-icon icon="mdi:pencil-outline"></ha-icon></ha-icon-button><ha-icon-button data-nu="custom-delete" data-id="${esc(c.id)}" label="${esc(h.T("Delete"))}"><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button></span>`
-                        : ""
-                    }</ha-list-item-base>`
-                  )
-                  .join("")}</ha-list-base>`
-              : `<p class="muted">${esc(h.T("For homemade things and products Frida does not have: give the values per 100 g once and use them in any recipe."))}</p>`
-          }
-          ${edit && !this._nu.form ? `<ha-button appearance="plain" data-nu="custom-new"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(h.T("New custom ingredient…"))}</ha-button>` : ""}
+          <ha-button appearance="plain" data-act="foods"><ha-icon slot="start" icon="mdi:food-apple-outline"></ha-icon>${esc(h.T("Manage foods"))}</ha-button>
           ${this._nuSourceHtml(d)}
         </div></ha-card>`;
-    },
-
-    async _nuLoadCustom() {
-      this._nu.custom = [];
-      const custom = await this._nuCall({ type: "hass_recipes/nutrition_custom_list" });
-      this._nu.custom = custom || [];
-      if (this._view.name === "nutrition") this._render();
     },
 
     _nuItem(index) {
@@ -292,7 +271,7 @@ export default function (h) {
       const res = await this._nuCall({ type: "hass_recipes/nutrition_search", query, limit: 20 });
       if (ticket !== this._nu.ticket) return; // a newer search is on its way
       this._nu.searching = false;
-      this._nu.results = res || [];
+      this._nu.results = (res || []).filter((f) => f.source === "frida"); // your own foods are listed from the Foods data
       this._nuPaintResults();
     },
 
@@ -302,22 +281,34 @@ export default function (h) {
       if (!box) return;
       box.innerHTML = this._nuResultsHtml();
       box.querySelectorAll("[data-nu-pick]").forEach((el) => el.addEventListener("click", () => this._nuPick(+el.dataset.nuPick)));
+      box.querySelectorAll("[data-nu-own]").forEach((el) => el.addEventListener("click", () => this._nuPickOwn(el.dataset.nuOwn)));
     },
 
+    /** A Frida food: it becomes one of your foods, with this ingredient name as another name. */
     async _nuPick(n) {
       const food = this._nu.results[n];
       const item = this._nuItem(this._nu.open);
       if (!food || !item) return;
-      const ok = await this._nuCall({ type: "hass_recipes/nutrition_link", food: item.food, source: food.source, food_id: food.id });
+      const ok = await this._nuCall({ type: "hass_recipes/nutrition_link", food: item.food, source: "frida", food_id: food.id });
       if (ok === undefined) return;
+      await this._nuClosePicker();
+    },
+
+    /** One of your own foods: the ingredient name becomes another name of it. */
+    async _nuPickOwn(id) {
+      const item = this._nuItem(this._nu.open);
+      if (!item) return;
+      const ok = await this._nuCall({ type: "hass_recipes/foods_link", key: item.key, food_id: id });
+      if (ok === undefined) return;
+      await this._nuClosePicker();
+    },
+
+    async _nuClosePicker() {
       this._nu.open = null;
       this._nu.results = [];
       this._nu.query = "";
+      this._nu.foods = null;
       await this._nuRefresh();
-    },
-
-    _nuReadForm() {
-      return { ...this._nu.form };
     },
 
     async _nuAct(act, el) {
@@ -331,6 +322,8 @@ export default function (h) {
           this._nu.results = [];
           this._render();
           if (opening) {
+            if (!this._nu.foods) this._nu.foods = await this._nuCall({ type: "hass_recipes/foods" });
+            this._render();
             const q = this.shadowRoot.getElementById("nu-q");
             if (q) {
               q.focus();
@@ -357,73 +350,53 @@ export default function (h) {
             await this._nuRefresh();
           break;
         }
-        case "custom-new":
-          this._nu.form = item ? { name: item.food, link_food: item.food } : { name: "" };
-          this._nu.open = null;
-          this._render();
-          this._nuFocusForm();
+        case "accept":
+          if (item && (await this._nuCall({ type: "hass_recipes/foods_adopt", keys: [item.key] })) !== undefined) await this._nuRefresh();
           break;
-        case "custom-edit": {
-          const c = (this._nu.custom || []).find((x) => x.id === el.dataset.id);
-          if (c) {
-            this._nu.form = { ...c };
-            this._render();
-            this._nuFocusForm();
+        case "adopt-all": {
+          const r = this._recipe(this._view.id);
+          const st = r && this._nuData(r);
+          const keys = st && st.data ? st.data.standard : [];
+          const res = await this._nuCall({ type: "hass_recipes/foods_adopt", keys });
+          if (res !== undefined) {
+            await this._nuRefresh();
+            this._flash(`${res.added} ${h.T("foods added from standard choices.")}`);
           }
           break;
         }
-        case "custom-cancel":
-          this._nu.form = null;
-          this._render();
+        case "food":
+          if (item && item.own_food) this._go({ name: "foods", id: item.own_food.id });
           break;
-        case "custom-save": {
-          const f = this._nuReadForm();
-          this._nu.form = f;
-          if (!f.name || !(f.kcal >= 0)) {
-            this._error = h.T("Give the ingredient a name and its energy in kcal per 100 g.");
-            this._render();
-            this._nuFocusForm();
-            return;
-          }
-          const msg = { type: "hass_recipes/nutrition_custom_save", name: f.name };
-          for (const [key] of FORM) if (f[key] != null && !Number.isNaN(f[key])) msg[key] = f[key];
-          if (f.id) msg.food_id = f.id;
-          if (f.link_food) msg.link_food = f.link_food;
-          if ((await this._nuCall(msg)) === undefined) return;
-          this._nu.form = null;
-          this._nu.custom = null; // reload the list
-          await this._nuRefresh();
-          break;
-        }
-        case "custom-delete": {
-          const c = (this._nu.custom || []).find((x) => x.id === el.dataset.id);
-          if (!c || !confirm(h.T(`Delete the custom ingredient “${c.name}”? Recipes that use it are matched again.`))) return;
-          if ((await this._nuCall({ type: "hass_recipes/nutrition_custom_delete", food_id: c.id })) === undefined) return;
-          this._nu.custom = null;
-          await this._nuRefresh();
+        case "create": {
+          // the Foods page, with a new food started from this name (and the suggestion, if there is one)
+          if (!item) return;
+          const m = item.match && item.match.source === "frida" ? item.match : null;
+          const fd = this._fdState();
+          fd.draft = {
+            id: "", name: item.key.charAt(0).toUpperCase() + item.key.slice(1), aliases: [], section: "", unit_rows: [], used_in: 0, recipes: [],
+            source: m ? "frida" : "none", frida_id: m ? m.id : null, frida_name: m ? m.name : "",
+            values: m ? { kcal: m.kcal, fat: m.fat, carbs: m.carbs, protein: m.protein } : {},
+          };
+          fd.draftFor = "new";
+          this._fdKeep = true;
+          this._go({ name: "foods", id: "new" });
           break;
         }
       }
     },
 
-    _nuFocusForm() {
-      const form = this.shadowRoot.getElementById("nu-form");
-      if (!form) return;
-      form.scrollIntoView({ block: "center", behavior: "smooth" });
-      const ha = form.querySelector("ha-form");
-      const name = ha && ha.shadowRoot && ha.shadowRoot.querySelector("ha-selector-text, ha-input");
-      if (name && name.focus) name.focus();
-    },
-
     _bindNutrition(root, on) {
       on("[data-nu]", "click", (e) => this._nuAct(e.currentTarget.dataset.nu, e.currentTarget));
       on("[data-nu-pick]", "click", (e) => this._nuPick(+e.currentTarget.dataset.nuPick));
+      on("[data-nu-own]", "click", (e) => this._nuPickOwn(e.currentTarget.dataset.nuOwn));
       const q = root.getElementById("nu-q");
       if (q) {
         let timer = null;
         q.addEventListener("input", () => {
           clearTimeout(timer);
           timer = setTimeout(() => this._nuSearch(q.value), 200);
+          this._nu.query = q.value;
+          this._nuPaintResults();
         });
         q.addEventListener("keydown", (e) => {
           if (e.key === "Enter" && this._nu.results.length) {
@@ -431,25 +404,6 @@ export default function (h) {
             this._nuPick(0);
           }
           if (e.key === "Escape") this._nuAct("change", { dataset: { i: String(this._nu.open) } });
-        });
-      }
-      // the custom ingredient form: Home Assistant's ha-form, kept in this._nu.form as it changes
-      const ff = root.getElementById("nu-form-ha");
-      if (ff) {
-        const f = this._nu.form;
-        ff.hass = this._hass;
-        ff.schema = [
-          { name: "name", required: true, selector: { text: {} } },
-          { type: "grid", name: "", schema: FORM.map(([key]) => ({ name: key, required: key === "kcal", selector: { number: { min: 0, step: "any", mode: "box" } } })) },
-        ];
-        ff.computeLabel = (sc) => (sc.name === "name" ? h.T("Name") : h.T((FORM.find(([k]) => k === sc.name) || [])[1] || sc.name));
-        ff.data = { name: f.name || "", ...Object.fromEntries(FORM.filter(([k]) => f[k] != null).map(([k]) => [k, f[k]])) };
-        ff.addEventListener("value-changed", (e) => {
-          e.stopPropagation();
-          const v = e.detail.value || {};
-          ff.data = v;
-          this._nu.form.name = String(v.name || "").trim();
-          for (const [key] of FORM) this._nu.form[key] = v[key] == null || Number.isNaN(v[key]) ? null : v[key];
         });
       }
       on(".nu-unit ha-input", "keydown", (e) => {

@@ -315,10 +315,13 @@ class FoodBook:
         return food
 
     def ignore_key(self, key: str) -> None:
+        """Count an ingredient name as nothing (water, salt to taste)."""
         key = food_key(key)
         owner = self.food_for_key(key)
         if owner and food_key(owner["name"]) == key:
-            raise FoodError(f"“{key}” is the name of {owner['name']}: delete or rename that food first")
+            if not owner["auto"]:
+                raise FoodError(f"“{owner['name']}” is one of your foods: delete or rename it on the Foods page first")
+            self.unlink_key(key)  # a food made for this name alone goes with it
         self._drop_name(key)
         if key and key not in self.ignored:
             self.ignored.append(key)
