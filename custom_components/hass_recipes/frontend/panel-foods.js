@@ -326,12 +326,9 @@ export default function (h) {
     /** Take names out of a group, or choose another food for the rest. */
     _fdEditGroup(g) {
       const html = `<p class="muted">${esc(T("Untick the names that do not belong. They stay in the list."))}</p>
-        <div class="fd-group-edit">${g.keys.map((k) => `<ha-formfield label="${esc(k)}"><ha-checkbox checked data-k="${esc(k)}"></ha-checkbox></ha-formfield>`).join("")}</div>
-        <div class="fd-actions">
-          <ha-button appearance="filled" data-ge="assign">${esc(T("Assign"))}</ha-button>
-          <ha-button appearance="plain" data-ge="other">${esc(T("Choose another food"))}</ha-button>
-        </div>`;
+        <div class="fd-group-edit">${g.keys.map((k) => `<ha-formfield label="${esc(k)}"><ha-checkbox checked data-k="${esc(k)}"></ha-checkbox></ha-formfield>`).join("")}</div>`;
       this._planDialog(T("Edit group"), html, (dlg, close) => {
+        this._planFooter(dlg, { primary: { label: T("Assign"), icon: "check", attrs: 'data-ge="assign"' }, secondary: [{ label: T("Choose another food"), attrs: 'data-ge="other"' }] });
         const keys = () => [...dlg.querySelectorAll("ha-checkbox")].filter((c) => c.checked).map((c) => c.dataset.k);
         dlg.addEventListener("click", async (e) => {
           const b = e.target.closest("[data-ge]");
@@ -458,10 +455,9 @@ export default function (h) {
         li("book-open-variant-outline", `${p.recipes} ${esc(T("recipes use these foods. They count the same after."))}`),
       ].join("");
       const html = `<p>${esc(T("Merge"))} <b>${esc(sources.map((s) => s.name).join(", "))}</b> ${esc(T("into"))} <b>${esc(target.name)}</b>?</p>
-        <ul class="fd-preview">${list}</ul>
-        <div class="fd-actions"><ha-button appearance="filled" data-mg="ok"><ha-icon slot="start" icon="mdi:call-merge"></ha-icon>${esc(T("Merge"))}</ha-button>
-        <ha-button appearance="plain" data-mg="cancel">${esc(T("Cancel"))}</ha-button></div>`;
+        <ul class="fd-preview">${list}</ul>`;
       this._planDialog(T("Merge foods"), html, (dlg, close) => {
+        this._planFooter(dlg, { primary: { label: T("Merge"), icon: "call-merge", attrs: 'data-mg="ok"' }, secondary: [{ label: T("Cancel"), attrs: 'data-mg="cancel"' }] });
         dlg.addEventListener("click", async (e) => {
           const b = e.target.closest("[data-mg]");
           if (!b) return;

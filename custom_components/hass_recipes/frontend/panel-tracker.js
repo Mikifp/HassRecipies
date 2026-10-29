@@ -486,8 +486,10 @@ export default function (h) {
 
     // ---- dialogs ----
     _tkPersonDialog() {
-      const html = `<ha-form id="tk-pf"></ha-form><div class="pd-actions"><ha-button appearance="filled" id="tk-pok">${esc(T("Add person"))}</ha-button></div>`;
+      const html = `<ha-form id="tk-pf"></ha-form>`;
       this._planDialog(T("Add person"), html, (dlg, close) => {
+        this._planFooter(dlg, { primary: { id: "tk-pok", label: T("Add person"), icon: "account-plus-outline" }, secondary: [{ id: "tk-pcancel", label: T("Cancel") }] });
+        dlg.querySelector("#tk-pcancel").addEventListener("click", close);
         const form = dlg.querySelector("#tk-pf");
         let data = { name: "" };
         form.hass = this._hass;
@@ -514,8 +516,10 @@ export default function (h) {
     _tkGoalsDialog() {
       const st = this._tkState();
       const p = st.data.person;
-      const html = `<ha-form id="tk-gf"></ha-form><div class="pd-actions"><ha-button appearance="filled" id="tk-gok">${esc(T("Save"))}</ha-button></div>`;
-      this._planDialog(`${p.name}: ${T("Goals")}`, html, (dlg, close) => {
+      const html = `<ha-form id="tk-gf"></ha-form>`;
+      this._planDialog(`${T("Goals")}`, html, (dlg, close) => {
+        this._planFooter(dlg, { primary: { id: "tk-gok", label: T("Save") }, secondary: [{ id: "tk-gcancel", label: T("Cancel") }] });
+        dlg.querySelector("#tk-gcancel").addEventListener("click", close);
         const form = dlg.querySelector("#tk-gf");
         let data = { kcal: p.goals.kcal ?? null, protein: p.goals.protein ?? null, carbs: p.goals.carbs ?? null, fat: p.goals.fat ?? null };
         const labels = { kcal: "Energy per day (kcal)", protein: "Protein (g)", carbs: "Carbohydrates (g)", fat: "Fat (g)" };
@@ -534,7 +538,7 @@ export default function (h) {
           const { ok } = await this._tkCall({ type: "hass_recipes/tracker_goals", person_id: p.id, goals: data });
           if (ok) await this._tkLoad();
         });
-      });
+      }, { subtitle: p.name });
     },
 
     _tkWeightDialog() {
@@ -542,9 +546,10 @@ export default function (h) {
       const p = st.data.person;
       const recent = Object.keys(p.weights || {}).sort().reverse().slice(0, 6);
       const html = `<div id="tk-body"><ha-form id="tk-wf"></ha-form>
-          <div class="pd-actions"><ha-button appearance="filled" id="tk-wok">${esc(T("Save"))}</ha-button></div>
-          ${recent.length ? `<ha-list-base>${recent.map((d) => `<ha-list-item-button data-wd="${esc(d)}" headline="${esc(`${num(p.weights[d], 1)} kg`)}" supporting-text="${esc(dayLabel(d, st.data.today))}"><ha-icon slot="end" icon="mdi:delete-outline"></ha-icon></ha-list-item-button>`).join("")}</ha-list-base>` : ""}</div>`;
-      this._planDialog(`${p.name}: ${T("Weight")}`, html, (dlg, close) => {
+          ${recent.length ? `<div class="fm-head">${esc(T("Earlier"))}</div><ha-list-base>${recent.map((d) => `<ha-list-item-button data-wd="${esc(d)}" headline="${esc(`${num(p.weights[d], 1)} kg`)}" supporting-text="${esc(dayLabel(d, st.data.today))}"><ha-icon slot="end" icon="mdi:delete-outline"></ha-icon></ha-list-item-button>`).join("")}</ha-list-base>` : ""}</div>`;
+      this._planDialog(T("Log weight"), html, (dlg, close) => {
+        this._planFooter(dlg, { primary: { id: "tk-wok", label: T("Save") }, secondary: [{ id: "tk-wcancel", label: T("Cancel") }] });
+        dlg.querySelector("#tk-wcancel").addEventListener("click", close);
         const last = recent[0] ? p.weights[recent[0]] : (p.profile && p.profile.weight_kg) || null;
         let data = { kg: last, date: st.data.today };
         const form = dlg.querySelector("#tk-wf");
@@ -573,7 +578,7 @@ export default function (h) {
             if (ok) await this._tkLoad();
           })
         );
-      });
+      }, { subtitle: p.name });
     },
 
     /** The calorie calculator: your numbers, maintenance, and a daily target for each pace of weight loss. */
@@ -594,7 +599,7 @@ export default function (h) {
       let result = null;
       const html = `<div id="tk-body"><ha-form id="tk-cf"></ha-form><div id="tk-cres" class="tk-cres"></div>
           <div class="muted tk-note">${esc(T("These are estimates (Mifflin-St Jeor). Real needs vary from person to person."))}</div></div>`;
-      this._planDialog(`${p.name}: ${T("Calorie calculator")}`, html, (dlg, close) => {
+      this._planDialog(T("Calorie calculator"), html, (dlg, close) => {
         const form = dlg.querySelector("#tk-cf");
         const out = dlg.querySelector("#tk-cres");
         const labels = { sex: "Sex", age: "Age", height_cm: "Height (cm)", weight_kg: "Weight (kg)", target_kg: "Target weight (kg)", activity: "Activity" };
@@ -619,6 +624,7 @@ export default function (h) {
         form.computeLabel = (sc) => T(labels[sc.name] || sc.name);
         const draw = () => {
           if (!result) {
+            this._planFooter(dlg);
             out.innerHTML = `<p class="muted">${esc(T("Fill in your age, height and weight."))}</p>`;
             return;
           }
@@ -633,7 +639,11 @@ export default function (h) {
             <div class="muted">${esc(T("Pace"))}</div><div class="tk-cgrid tk-paces">${paces}</div>
             ${chosen.below_minimum ? `<ha-alert alert-type="warning">${esc(`${num(chosen.kcal)} kcal ${T("is below")} ${num(result.minimum)} kcal ${T("a day. That is not advised without a doctor.")}`)}</ha-alert>` : ""}
             <ha-card><div class="card-content"><div>${when}</div><div class="muted">${esc(T("Suggested split"))}: ${esc(T("Protein"))} ${chosen.macros.protein} g · ${esc(T("Carbs"))} ${chosen.macros.carbs} g · ${esc(T("Fat"))} ${chosen.macros.fat} g</div></div></ha-card>
-            <div class="pd-actions"><ha-button appearance="filled" id="tk-goalall">${esc(`${T("Set as")} ${p.name}${T("'s goal")}`)}</ha-button><ha-button appearance="plain" id="tk-goalkcal">${esc(T("Set kcal only"))}</ha-button><ha-button appearance="plain" id="tk-saveprof">${esc(T("Save profile"))}</ha-button></div>`;
+            `;
+          this._planFooter(dlg, {
+            primary: { id: "tk-goalall", label: T("Set as goal"), icon: "target" },
+            secondary: [{ id: "tk-goalkcal", label: T("Set kcal only") }, { id: "tk-saveprof", label: T("Save profile") }],
+          });
           out.querySelectorAll("[data-pace]").forEach((c) => c.addEventListener("click", () => {
             pace = Number(c.dataset.pace);
             draw();
@@ -648,9 +658,9 @@ export default function (h) {
               this._flash(T(goals ? "Goal set." : "Profile saved."));
             }
           };
-          out.querySelector("#tk-goalall").addEventListener("click", () => save({ kcal: chosen.kcal, ...chosen.macros }));
-          out.querySelector("#tk-goalkcal").addEventListener("click", () => save({ kcal: chosen.kcal }));
-          out.querySelector("#tk-saveprof").addEventListener("click", () => save(null));
+          dlg.querySelector("#tk-goalall").addEventListener("click", () => save({ kcal: chosen.kcal, ...chosen.macros }));
+          dlg.querySelector("#tk-goalkcal").addEventListener("click", () => save({ kcal: chosen.kcal }));
+          dlg.querySelector("#tk-saveprof").addEventListener("click", () => save(null));
         };
         let timer = null;
         const calc = () => {
@@ -679,7 +689,7 @@ export default function (h) {
         });
         draw();
         calc();
-      });
+      }, { subtitle: p.name });
     },
 
     async _tkFoods() {
@@ -748,7 +758,7 @@ export default function (h) {
       }
       if (draft.kind !== "quick") {
         const units = draft.kind === "food" ? ["g", ...Object.keys((ctx.food && ctx.food.unit_grams) || {})] : [];
-        return this._tkStepper(body, draft, ctx, draft.kind === "recipe" ? ways : units.map((u) => ({ value: u, label: u })), { onSave, onDelete, onStar, starred, onBack, saveLabel });
+        return this._tkStepper(dlg, body, draft, ctx, draft.kind === "recipe" ? ways : units.map((u) => ({ value: u, label: u })), { onSave, onDelete, onStar, starred, onBack, saveLabel });
       }
       const num0 = (min, step) => ({ number: { min, max: 100000, step, mode: "box" } });
       const schema = [];
@@ -769,13 +779,8 @@ export default function (h) {
       const labels = { by: "Measured in", amount: "Amount", unit: "Unit", name: "Name", kcal: "Energy (kcal)", protein: "Protein (g)", carbs: "Carbohydrates (g)", fat: "Fat (g)", meal: "Meal" };
       body.innerHTML = `<div class="tk-fhead"><b>${esc(draft.name || "")}</b></div>
         <ha-form id="tk-f"></ha-form>
-        <div class="tk-preview muted" id="tk-pv"></div>
-        <div class="pd-actions">
-          <ha-button appearance="filled" id="tk-save">${esc(saveLabel)}</ha-button>
-          ${onBack ? `<ha-button appearance="plain" id="tk-back">${esc(T("Back"))}</ha-button>` : ""}
-          ${onStar ? `<ha-button appearance="plain" id="tk-star"><ha-icon slot="start" icon="mdi:${starred ? "star" : "star-outline"}"></ha-icon>${esc(T(starred ? "Favourite" : "Make favourite"))}</ha-button>` : ""}
-          ${onDelete ? `<ha-button appearance="plain" variant="danger" id="tk-del"><ha-icon slot="start" icon="mdi:delete-outline"></ha-icon>${esc(T("Delete"))}</ha-button>` : ""}
-        </div>`;
+        <div class="tk-preview muted" id="tk-pv"></div>`;
+      this._tkFooter(dlg, { onSave, onDelete, onStar, starred, onBack, saveLabel });
       const form = body.querySelector("#tk-f");
       const preview = () => {
         const c = this._tkCalc(draft, ctx);
@@ -795,14 +800,30 @@ export default function (h) {
         preview();
       });
       preview();
-      body.querySelector("#tk-save").addEventListener("click", () => onSave(draft));
-      if (onBack) body.querySelector("#tk-back").addEventListener("click", onBack);
-      if (onStar) body.querySelector("#tk-star").addEventListener("click", onStar);
-      if (onDelete) body.querySelector("#tk-del").addEventListener("click", onDelete);
+      this._tkFooterBind(dlg, draft, { onSave, onDelete, onStar, onBack });
+    },
+
+    /** Save (the main button), and Back, Favourite and Delete beside it, in the dialog's footer. */
+    _tkFooter(dlg, { onSave, onDelete, onStar, starred, onBack, saveLabel }) {
+      this._planFooter(dlg, {
+        primary: { id: "tk-save", label: saveLabel, icon: "check" },
+        secondary: [
+          ...(onDelete ? [{ id: "tk-del", label: T("Delete"), icon: "delete-outline", variant: "danger" }] : []),
+          ...(onStar ? [{ id: "tk-star", label: T("Favourite"), icon: starred ? "star" : "star-outline" }] : []),
+          ...(onBack ? [{ id: "tk-back", label: T("Back"), icon: "arrow-left" }] : []),
+        ],
+      });
+    },
+
+    _tkFooterBind(dlg, draft, { onSave, onDelete, onStar, onBack }) {
+      dlg.querySelector("#tk-save").addEventListener("click", () => onSave(draft));
+      if (onBack) dlg.querySelector("#tk-back").addEventListener("click", onBack);
+      if (onStar) dlg.querySelector("#tk-star").addEventListener("click", onStar);
+      if (onDelete) dlg.querySelector("#tk-del").addEventListener("click", onDelete);
     },
 
     /** Recipes and foods: the amount with big steppers, the unit and the meal as chips, what it comes to underneath. */
-    _tkStepper(body, draft, ctx, ways, { onSave, onDelete, onStar, starred, onBack, saveLabel }) {
+    _tkStepper(dlg, body, draft, ctx, ways, { onSave, onDelete, onStar, starred, onBack, saveLabel }) {
       const isRecipe = draft.kind === "recipe";
       const key = isRecipe ? "by" : "unit";
       if (!isRecipe && !draft.unit) draft.unit = "g";
@@ -820,14 +841,10 @@ export default function (h) {
           <ha-input id="tk-amt" type="number" appearance="outlined" inputmode="decimal" min="0"></ha-input>
           <ha-icon-button id="tk-plus" label="${esc(T("More"))}"><ha-icon icon="mdi:plus"></ha-icon></ha-icon-button>
         </div>
-        <div class="tk-preview muted" id="tk-pv"></div>
-        <div class="tk-chips" id="tk-meals">${chips(meals.map((m) => ({ value: m.id, label: this._planLabel(m.id) })), draft.meal, "data-meal")}</div>
-        <div class="pd-actions">
-          <ha-button appearance="filled" size="l" id="tk-save">${esc(saveLabel)}</ha-button>
-          ${onBack ? `<ha-button appearance="plain" id="tk-back">${esc(T("Back"))}</ha-button>` : ""}
-          ${onStar ? `<ha-button appearance="plain" id="tk-star"><ha-icon slot="start" icon="mdi:${starred ? "star" : "star-outline"}"></ha-icon>${esc(T(starred ? "Favourite" : "Make favourite"))}</ha-button>` : ""}
-          ${onDelete ? `<ha-button appearance="plain" variant="danger" id="tk-del"><ha-icon slot="start" icon="mdi:delete-outline"></ha-icon>${esc(T("Delete"))}</ha-button>` : ""}
-        </div>`;
+        <div class="tk-preview" id="tk-pv"></div>
+        <div class="tk-sub">${esc(T("Meal"))}</div>
+        <div class="tk-chips" id="tk-meals">${chips(meals.map((m) => ({ value: m.id, label: this._planLabel(m.id) })), draft.meal, "data-meal")}</div>`;
+      this._tkFooter(dlg, { onSave, onDelete, onStar, starred, onBack, saveLabel });
       const input = body.querySelector("#tk-amt");
       const preview = () => {
         const c = this._tkCalc(draft, ctx);
@@ -864,10 +881,7 @@ export default function (h) {
         })
       );
       show();
-      body.querySelector("#tk-save").addEventListener("click", () => onSave(draft));
-      if (onBack) body.querySelector("#tk-back").addEventListener("click", onBack);
-      if (onStar) body.querySelector("#tk-star").addEventListener("click", onStar);
-      if (onDelete) body.querySelector("#tk-del").addEventListener("click", onDelete);
+      this._tkFooterBind(dlg, draft, { onSave, onDelete, onStar, onBack });
     },
 
     /** The ws message that logs `draft` on a day in a meal. */
@@ -917,6 +931,7 @@ export default function (h) {
         const label = (item) => (item.kind === "recipe" ? "mdi:chef-hat" : item.kind === "food" ? "mdi:food-apple-outline" : "mdi:pencil-outline");
         const how = (t) => (t.kind === "quick" ? `${num(t.kcal)} kcal` : howText(t));
         const pick = () => {
+          this._planFooter(dlg);
           body.innerHTML = `<ha-input-search id="tk-q" appearance="outlined" placeholder="${esc(T("Search recipes and foods"))}"></ha-input-search><div id="tk-res" class="tk-res"></div>`;
           const res = body.querySelector("#tk-res");
           let shown = [];
@@ -954,7 +969,7 @@ export default function (h) {
           });
         };
         pick();
-      });
+      }, { subtitle: `${dayLabel(d.date, d.today)} · ${d.person.name}` });
     },
 
     /** Change or delete what was logged. */
@@ -988,7 +1003,7 @@ export default function (h) {
             }
           },
         });
-      });
+      }, { subtitle: `${this._planLabel(entry.meal)} · ${dayLabel(d.date, d.today)}` });
     },
 
     // ---- binding ----

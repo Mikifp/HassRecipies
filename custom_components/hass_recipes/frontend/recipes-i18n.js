@@ -425,6 +425,7 @@ const da = {
     "Save profile": "Gem profil",
     "Goal set.": "Mål sat.",
     "Profile saved.": "Profil gemt.",
+    "Earlier": "Tidligere",
     Day: "Dag",
     "Meals of the day": "Dagens måltider",
     "Edit the meals of the day": "Redigér dagens måltider",
