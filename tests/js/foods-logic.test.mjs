@@ -78,3 +78,12 @@ test("macro grams add up to energy with each share, and carbs can be fitted to t
   assert.equal(f.carbsToFit({ kcal: 2000, protein: 100, fat: 70 }), 243);
   assert.equal(f.carbsToFit({ kcal: 500, protein: 150, fat: 70 }), 0);
 });
+
+test("changing an entry sends only what the server takes for its kind", () => {
+  const recipe = { kind: "recipe", recipe_id: "r1", name: "Boller", by: "yield", amount: "4", unit: "boller", kcal: 330, meal: "lunch" };
+  assert.deepEqual(f.entryUpdate(recipe), { meal: "lunch", by: "yield", amount: 4 });
+  const food = { kind: "food", food_id: "f1", amount: 60, unit: "g", name: "Mel", kcal: 206, meal: "breakfast" };
+  assert.deepEqual(f.entryUpdate(food), { meal: "breakfast", amount: 60, unit: "g" });
+  const quick = { kind: "quick", name: "Kage", kcal: "300", protein: "", fat: 12, meal: "snack" };
+  assert.deepEqual(f.entryUpdate(quick), { meal: "snack", name: "Kage", kcal: 300, fat: 12 });
+});

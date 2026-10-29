@@ -1042,9 +1042,7 @@ export default function (h) {
           starred,
           onSave: async (x) => {
             close();
-            const p = this._tkPayload(x);
-            delete p.kind;
-            const { ok } = await this._tkCall({ type: "hass_recipes/tracker_update", entry_id: entry.id, ...p });
+            const { ok } = await this._tkCall({ type: "hass_recipes/tracker_update", entry_id: entry.id, ...fl.entryUpdate(x) });
             if (ok) await this._tkLoad();
           },
           onStar: async () => {
