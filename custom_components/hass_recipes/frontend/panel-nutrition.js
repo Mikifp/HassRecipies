@@ -90,7 +90,18 @@ export default function (h) {
       const plain = (v, unit) => (v == null ? "–" : num(v, unit === "kcal" ? 0 : 1));
       root.querySelectorAll(".nu-tablehost").forEach((host) => {
         const full = host.dataset.full === "1";
-        const rows = (full ? ALL : MAIN).map(([key, label, unit]) => ({
+        // the weight of what was counted: 100 g, one unit, one serving, the whole recipe
+        const w = d.weight || 0;
+        const weightRow = w > 0 && {
+          id: "weight",
+          name: "Weight",
+          unitText: "g",
+          p100: num(100, 0),
+          unit: d.makes ? num(w / d.makes, 0) : "–",
+          serving: d.servings ? num(w / d.servings, 0) : "–",
+          whole: num(w * k, 0),
+        };
+        const rows = [...(weightRow ? [weightRow] : []), ...(full ? ALL : MAIN).map(([key, label, unit]) => ({
           id: key,
           name: label,
           unitText: unit,
@@ -99,7 +110,7 @@ export default function (h) {
           serving: plain(d.per_serving && d.per_serving[key], unit),
           unit: plain(d.per_unit && d.per_unit[key], unit),
           whole: plain(d.total[key] == null ? null : d.total[key] * k, unit),
-        }));
+        }))];
         const col = (title, field, show, extra = {}) =>
           show ? { [field]: { title, type: "numeric", flex: 1, minWidth: "64px", showNarrow: true, template: (row) => row[field], ...extra } } : {};
         const t = document.createElement("ha-data-table");
