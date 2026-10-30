@@ -159,6 +159,7 @@ export default function (h) {
           </div>`;
       }
       return `
+        ${this._sitesHtml()}
         <ha-card class="data-card" header="${esc(T("Import from URL"))}">
           <div class="card-content"><p class="muted">${esc(T("Paste one URL to review it before saving, or several (one per line, up to 25) to import them all at once."))}</p>
             <ha-form id="import-urls-form"></ha-form></div>

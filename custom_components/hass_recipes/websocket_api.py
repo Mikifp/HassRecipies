@@ -25,6 +25,8 @@ from .nutrition import NUTRIENTS, SOURCE_CUSTOM, SOURCE_FRIDA, SOURCE_IGNORE, SO
 from .nutrition_store import Nutrition, NutritionError
 from .calorie_calc import CalcError, calculate
 from .tracker import Tracker, TrackerError
+from .page_session import page_session
+from .recipe_sites import MAX_RESULTS, SITES, RecipeSites
 from .scraper import RecipeImportError, async_import_html, async_import_text, async_import_url
 from .store import RecipeStore
 
@@ -183,6 +185,8 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_tracker_profile,
         ws_tracker_weight,
         ws_tracker_weight_delete,
+        ws_sites,
+        ws_sites_search,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -367,7 +371,7 @@ async def ws_import_url(
         connection.send_error(msg["id"], "unauthorized", _DENIED)
         return
     try:
-        data = await async_import_url(async_get_clientsession(hass), msg["url"])
+        data = await async_import_url(page_session(hass), msg["url"])
     except RecipeImportError as err:
         connection.send_error(msg["id"], "import_failed", str(err))
         return
@@ -446,7 +450,7 @@ async def ws_import_urls(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Import several URLs and save each success; failures are reported per URL."""
-    session = async_get_clientsession(hass)
+    session = page_session(hass)
     store = _store(hass)
     gate = asyncio.Semaphore(3)
 
@@ -1417,3 +1421,33 @@ async def ws_tracker_weight(hass, connection, msg, tracker) -> None:
 @_tracker_guard
 async def ws_tracker_weight_delete(hass, connection, msg, tracker) -> None:
     connection.send_result(msg["id"], {"deleted": tracker.delete_weight(msg["person_id"], msg["date"])})
+
+
+# ---- searching the recipe sites ---------------------------------------------------
+def _sites(hass: HomeAssistant) -> RecipeSites:
+    return hass.data[f"{DOMAIN}_sites"]
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/sites"})
+@callback
+def ws_sites(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The recipe sites that can be searched, and how many recipes of each have been read so far."""
+    known = _sites(hass).status()
+    connection.send_result(
+        msg["id"], [{"id": s.id, "name": s.name, "base": s.base, "recipes": known.get(s.id, 0)} for s in SITES.values()]
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/sites_search",
+        vol.Required("query"): vol.All(str, vol.Length(min=1, max=100)),
+        vol.Optional("sites"): [vol.In(list(SITES))],
+        vol.Optional("limit", default=MAX_RESULTS): vol.All(int, vol.Range(min=1, max=60)),
+    }
+)
+@websocket_api.async_response
+async def ws_sites_search(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Recipes on the sites whose name has every word of the query (open one with import_url to read it)."""
+    ids = msg.get("sites") or list(SITES)
+    connection.send_result(msg["id"], {"results": await _sites(hass).search(ids, msg["query"], msg["limit"])})

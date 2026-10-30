@@ -108,6 +108,15 @@ The **Tracker** tab keeps a daily log of what each person eats, with kcal first 
 
 The tracker log is not part of the recipe backup yet.
 
+## Recipe sites
+
+The **Import** page can search Danish recipe sites: Valdemarsro, Madens Verden, Louises madblog, DK-kogebogen and Arla. Type a dish, tick the sites you want, and open a result to read it into a draft that you review before saving (the page is kept as the recipe's source).
+
+- The sites are searched by their sitemaps: each recipe's address ends in its name, and a search matches the words of that name (so *risengrød* finds *risengroed*). Nothing but the sitemaps is read until you open a recipe.
+- The first search of a site reads its list of recipes, which can take half a minute; the lists are then kept for a day, also across restarts. The sites' robots.txt is respected.
+- A search in the recipe list that finds nothing offers to search the sites for the same words.
+- The idea, and the choice of sites, come from the integration [ha-middagsro](https://github.com/Dinnsen/ha-middagsro) (MIT license).
+
 ## Try it
 ```bash
 docker compose up        # then open http://localhost:8123 and finish onboarding
