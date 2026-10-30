@@ -159,7 +159,8 @@ export default function (h) {
           </div>`;
       }
       return `
-        <div class="panel">
+        ${this._sitesHtml()}
+        <div class="panel" style="margin-top:16px">
           <h2>Import from URL</h2>
           <p class="muted">Paste one URL to review it before saving, or several (one per line, up to 25) to import them all at once.</p>
           <form id="import">

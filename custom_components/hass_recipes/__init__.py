@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Any
+
+from aiohttp import ClientError, ClientTimeout
 
 from homeassistant.components import panel_custom
 from homeassistant.components.frontend import add_extra_js_url
@@ -14,8 +17,9 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.storage import Store
 import voluptuous as vol
 
 from .const import (
@@ -34,6 +38,8 @@ from .const import (
     SERVICE_PLAN_TO_SHOPPING_LIST,
     SERVICE_IMPORT_RECIPE,
     SERVICE_SNOOZE_TIMER,
+    SITES_STORAGE_KEY,
+    STORAGE_VERSION,
     SERVICE_STOP_TIMER_ALARM,
     SERVICE_TEST_TIMER_SOUND,
 )
@@ -53,6 +59,8 @@ from .scraper import RecipeImportError, async_import_url
 from .mealplan import MealPlan, MealPlanError
 from .nutrition import FoodDatabase
 from .nutrition_store import Nutrition
+from .page_session import page_session
+from .recipe_sites import RecipeSites
 from .tracker import Tracker
 from .shopping import (
     _base_servings,
@@ -93,6 +101,32 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+def _site_fetcher(hass: HomeAssistant):
+    """How the recipe sites are read: a page or a sitemap, up to a size, with an honest user agent."""
+    async def fetch(url: str, limit: int) -> str:
+        async with page_session(hass).get(
+            url,
+            timeout=ClientTimeout(total=30),
+            headers={"User-Agent": "Mozilla/5.0 (HomeAssistant hass_recipes)", "Accept": "*/*"},
+            allow_redirects=True,
+        ) as resp:
+            if resp.status >= 400:
+                raise ClientError(f"HTTP {resp.status}")
+            chunks: list[bytes] = []
+            size = 0
+            async for chunk in resp.content.iter_chunked(65536):
+                chunks.append(chunk)
+                size += len(chunk)
+                if size >= limit:
+                    break
+            try:
+                return b"".join(chunks).decode(resp.charset or "utf-8", errors="replace")
+            except LookupError:
+                return b"".join(chunks).decode("utf-8", errors="replace")
+
+    return fetch
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> bool:
     """Set up Recipes from a config entry."""
     store = RecipeStore(hass)
@@ -109,6 +143,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
     nutrition = Nutrition(hass, store, food_db)
     await nutrition.async_load()
     hass.data[f"{DOMAIN}_nutrition"] = nutrition
+
+    sites = RecipeSites(_site_fetcher(hass))
+    sites_store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, SITES_STORAGE_KEY)
+    sites.load(await sites_store.async_load())
+    sites.on_change(lambda: sites_store.async_delay_save(sites.to_data, 5))
+    hass.data[f"{DOMAIN}_sites"] = sites
 
     tracker = Tracker(hass, nutrition, plan)
     await tracker.async_load()
@@ -198,7 +238,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> b
 
     async def import_recipe(call: ServiceCall) -> ServiceResponse:
         try:
-            data = await async_import_url(async_get_clientsession(hass), call.data["url"])
+            data = await async_import_url(page_session(hass), call.data["url"])
         except RecipeImportError as err:
             raise HomeAssistantError(str(err)) from err
         recipe = store.create(data)
@@ -371,6 +411,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: RecipesConfigEntry) -> 
     hass.data.pop(f"{DOMAIN}_plan", None)
     hass.data.pop(f"{DOMAIN}_nutrition", None)
     hass.data.pop(f"{DOMAIN}_tracker", None)
+    hass.data.pop(f"{DOMAIN}_sites", None)
     hass.data.pop(f"{DOMAIN}_entry", None)
     hass.data.pop(f"{DOMAIN}_images", None)
     return True

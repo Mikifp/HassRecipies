@@ -348,7 +348,11 @@ export default function (h) {
 
     _brContentHtml(m) {
       const { b, shown, groups } = m;
-      if (!shown.length) return `<div class="empty">${this._recipes.length ? "No recipes match." : "No recipes yet. Create one or import from a URL."}</div>`;
+      if (!shown.length) {
+        const q = this._search.trim();
+        const more = this._recipes.length && q ? `<div class="empty-act"><ha-button appearance="filled" data-act="sites-search"><ha-icon slot="start" icon="mdi:web"></ha-icon>${esc(`${T("Search recipe sites for")} “${q}”`)}</ha-button></div>` : "";
+        return `<div class="empty">${this._recipes.length ? "No recipes match." : "No recipes yet. Create one or import from a URL."}${more}</div>`;
+      }
       if (b.view === "list") return `<div class="tblhost"></div>`;
       return groups
         .map((g) => {

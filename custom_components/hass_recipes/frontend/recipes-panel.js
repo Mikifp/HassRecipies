@@ -11,7 +11,7 @@ const __v = new URL(import.meta.url).searchParams.get("v");
 const load = (name) => import(`./${name}.js${__v ? `?v=${__v}` : ""}`);
 const helpers = (await load("panel-helpers")).default;
 const { esc, isHeader, clock, scaleBasis, observeTranslations, T, state, isoDate, addDays, mondayOf } = helpers;
-const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-nutrition", "panel-foods", "panel-tracker", "panel-form", "panel-editor"].map(load));
+const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse", "panel-plan", "panel-data", "panel-recipe", "panel-nutrition", "panel-foods", "panel-tracker", "panel-sites", "panel-form", "panel-editor"].map(load));
 
 const STYLE = `
   :host { --hq-loud: var(--ha-color-fill-primary-loud-resting, var(--primary-color)); --hq-on-loud: var(--ha-color-on-primary-loud, #fff); --hq-normal: var(--ha-color-fill-primary-normal-resting, color-mix(in srgb, var(--primary-color) 14%, #fff)); --hq-on-normal: var(--ha-color-on-primary-normal, var(--primary-color)); --hq-outline: var(--outline-color, var(--divider-color)); display: block; height: 100%; overflow: auto; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
@@ -184,6 +184,7 @@ const STYLE = `
   }
   .muted { color: var(--secondary-text-color); font-size: 13px; }
   .empty { text-align: center; padding: 48px 16px; color: var(--secondary-text-color); }
+  .empty-act { margin-top: 16px; }
   .detail { background: var(--card-background-color); border-radius: 12px; overflow: hidden; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
   .detail .hero { width: 100%; height: 240px; object-fit: cover; display: block; }
   .detail .content { padding: 16px 20px 24px; }
@@ -391,6 +392,10 @@ const STYLE = `
   .tk-fhead { font-size: 1.15em; margin-bottom: 0; }
   .tk-sub { font-size: 0.8em; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--secondary-text-color); margin-bottom: -8px; }
   .tk-loading { padding: 24px; }
+  .st-panel ha-input-search { display: block; margin-bottom: 8px; }
+  .st-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .st-chips ha-assist-chip { cursor: pointer; }
+  .st-note { padding: 8px 0; display: flex; align-items: center; gap: 8px; }
   .tk-pin { position: sticky; top: 56px; z-index: 1; margin: 0 calc(-1 * var(--ha-space-4, 16px)); padding: 8px var(--ha-space-4, 16px); background: var(--card-background-color); border-bottom: 1px solid var(--divider-color); font-size: 0.95em; }
   .tk-pin[hidden] { display: none; }
   .tk-pin b { font-size: 1.2em; font-weight: 500; }
@@ -1208,6 +1213,7 @@ class HassRecipesPanel extends HTMLElement {
       await this._load();
       this._go({ name: "detail", id: e.currentTarget.dataset.openNew });
     });
+    if (this._view.name === "import") this._bindSites(root);
     const imp = root.getElementById("import");
     if (imp) imp.addEventListener("submit", (e) => this._import(e, imp));
     const impHtml = root.getElementById("import-html");
@@ -1284,6 +1290,12 @@ class HassRecipesPanel extends HTMLElement {
         break;
       case "foods":
         this._go({ name: "foods" });
+        break;
+      case "sites-search":
+        // the words typed in the recipe list, searched on the recipe sites
+        this._siteState().q = this._search.trim();
+        this._siteState().results = null;
+        this._go({ name: "import" });
         break;
       case "tracker":
         this._go({ name: "tracker" });
