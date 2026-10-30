@@ -64,7 +64,7 @@ The typed form `200 g butter || 180 g coconut oil // room temperature` is only a
 
 ## Nutrition
 
-The recipe page shows an estimate of energy, protein, fat, carbohydrates and dietary fibre per serving (from the first number in *Servings*) and for the whole recipe; the **Check ingredients** page adds sugars, saturated fat and salt.
+The recipe page shows an estimate of energy, protein, fat, carbohydrates and dietary fibre **per 100 g**, **per serving** (from the first number in *Servings*), **per unit the recipe makes** (per *bolle* when it makes 24 boller) and for the whole recipe, in Home Assistant's own data table (per 100 g is of the ingredients that were counted, which is what the totals are of); the **Check ingredients** page adds sugars, saturated fat and salt.
 
 - Each ingredient line is converted to grams by the ingredient parser, then matched to a food in the bundled **Frida** dataset (and, for foods Frida does not have, the English **USDA Foundation Foods**) (about 1,400 Danish foods with lab-analysed values per 100 g). Everyday words ("æg", "mælk", "hakkede tomater", "butter"…) have a standard choice; other names are matched by search, and a clear hit is used but marked *Matched automatically* so you can confirm it.
 - On **Check ingredients** you can choose another food, mark a line as *Don't count* (water, salt to taste), or give the weight of a unit the parser cannot weigh ("1 dåse = 400 g"). Choices are remembered by ingredient name and apply to every recipe.

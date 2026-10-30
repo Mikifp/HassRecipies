@@ -22,11 +22,9 @@ const STYLE = `
   header { display: flex; align-items: center; box-sizing: border-box; height: 56px; padding: 8px 12px; background: var(--sidebar-background-color, var(--app-header-background-color, var(--card-background-color))); border-bottom: 1px solid var(--divider-color); font-size: var(--ha-font-size-xl, 20px); font-weight: 400; color: var(--sidebar-text-color, var(--primary-text-color)); }
   .timers:empty { display: none; }
   .timers { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; background: var(--secondary-background-color); border-bottom: 1px solid var(--divider-color); }
-  .timer { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 16px; background: var(--card-background-color); border: 1px solid var(--divider-color); font-size: 14px; }
-  .timer .t-time { font-variant-numeric: tabular-nums; font-weight: 600; }
-  .timer.done { background: var(--error-color, #db4437); color: #fff; border-color: transparent; animation: pulse 1s infinite; }
-  .timer button { background: none; border: 0; color: inherit; cursor: pointer; padding: 0 2px; font: inherit; }
-  .timer button.stop { background: #fff; color: var(--error-color, #db4437); border-radius: 12px; padding: 2px 12px; font-weight: 600; }
+  .timer { display: flex; align-items: center; gap: 4px; }
+  .timer .t-time { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .timer.done { --md-assist-chip-label-text-color: var(--error-color); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .6; } }
   header h1 { font-size: inherit; font-weight: inherit; margin: 0; margin-inline-start: var(--ha-space-6, 24px); flex: 1; min-width: 0; line-height: 1.5; }
   main { max-width: 1200px; margin: 0 auto; padding: 16px; }
@@ -238,19 +236,14 @@ const STYLE = `
   ol.steps { padding-left: 20px; margin: 0; }
   ol.steps li { margin-bottom: 12px; line-height: 1.5; }
   .step-ings { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 10px 0 2px; }
-  .ing-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 3px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; background: color-mix(in srgb, var(--primary-color) 9%, transparent); border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent); }
-  .ing-chip .alt { color: var(--secondary-text-color); font-size: .9em; }
-  .ing-chip.tick { cursor: pointer; user-select: none; }
-  .ing-chip.tick:hover { filter: brightness(.95); }
-  .ing-chip.done { opacity: .55; text-decoration: line-through; }
-  .ing-chip ha-icon { --mdc-icon-size: 14px; align-self: center; margin-inline-end: -2px; text-decoration: none; }
-  .ing-chip .q { color: var(--secondary-text-color); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .ing-chip b { font-weight: 500; }
+  ha-assist-chip.ing-chip { margin: 0 1px; max-width: 100%; vertical-align: middle; --md-assist-chip-container-height: 28px; --md-assist-chip-label-text-size: 13px; }
+  ha-assist-chip.ing-chip.tick { cursor: pointer; }
+  ha-assist-chip.ing-chip.done { opacity: .6; }
   .cook-sections { display: flex; gap: 8px; margin-top: 14px; }
-  .cook-sections .btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
-  .cook-sections .btn small { font-size: 12px; opacity: .8; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cook-secbtn { flex: 1; min-width: 0; }
+  .cook-secbtn small { display: block; font-size: 12px; opacity: .8; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cook-jumps { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-  .step-text .ing-chip, .cook .cook-text .ing-chip, .cstep .cstep-text .ing-chip { display: inline-flex; padding: 0 8px; margin: 0 1px; font-size: .9em; vertical-align: baseline; }
+  .step-text .ing-chip, .cook .cook-text .ing-chip, .cstep .cstep-text .ing-chip { --md-assist-chip-container-height: 26px; --md-assist-chip-label-text-size: .85em; }
   .timer-btn { margin-top: 10px; }
   .ne-page { max-width: 900px; margin: 0 auto; padding: var(--ha-space-4, 16px); padding-bottom: 96px; display: flex; flex-direction: column; gap: var(--ha-space-4, 16px); }
   .ne-meta-in { padding: var(--ha-space-4, 16px); display: flex; flex-direction: column; gap: var(--ha-space-2, 8px); }
@@ -405,6 +398,10 @@ const STYLE = `
   .tk-fhead { font-size: 1.15em; margin-bottom: 0; }
   .tk-sub { font-size: 0.8em; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--secondary-text-color); margin-bottom: -8px; }
   .tk-loading { padding: 24px; }
+  .data-card { display: block; max-width: 760px; margin: 0 auto 16px; }
+  .data-page { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+  .data-card ha-input, .data-card ha-textarea { display: block; margin-top: 12px; }
+  .data-card ha-formfield { display: block; margin-top: 12px; }
   .tk-pin { position: sticky; top: 56px; z-index: 1; margin: 0 calc(-1 * var(--ha-space-4, 16px)); padding: 8px var(--ha-space-4, 16px); background: var(--card-background-color); border-bottom: 1px solid var(--divider-color); font-size: 0.95em; }
   .tk-pin[hidden] { display: none; }
   .tk-pin b { font-size: 1.2em; font-weight: 500; }
@@ -492,8 +489,7 @@ const STYLE = `
   .step-item.done .step-text { text-decoration: line-through; opacity: .55; }
   .cook-text[data-step-toggle] { cursor: pointer; }
   .cook-section { text-transform: uppercase; letter-spacing: .06em; font-size: .85rem; color: var(--primary-color); margin-top: 6px; }
-  .cook-done { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; cursor: pointer; }
-  .cook-done input { width: auto; }
+  .cook-done { display: block; margin: 8px 0 0; }
   .mini { background: none; border: 1px solid var(--divider-color); border-radius: 6px; color: inherit; cursor: pointer; padding: 4px 8px; font: inherit; }
   .yield-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
   .yield-row input { width: auto; }
@@ -534,17 +530,18 @@ const STYLE = `
   .cookp .cook-top h2 { margin: 0; font-size: 22px; font-weight: 500; flex: 1; min-width: 180px; }
   .cookp .cook-top .scale { margin: 0; }
   .cook-cols { display: grid; grid-template-columns: minmax(250px, 4fr) minmax(0, 8fr); gap: 20px; align-items: start; }
+  .cook-ings-panel { display: block; margin-bottom: 12px; }
   .cook-ings { position: sticky; top: 72px; max-height: calc(100vh - 110px); overflow: auto; }
   .cook-steps h3.csection { margin: 22px 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--primary-color); font-weight: 500; }
   .cook-steps h3.csection:first-child { margin-top: 0; }
-  .cstep { background: var(--card-background-color); border: 1px solid var(--divider-color); border-left: 4px solid var(--divider-color); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; cursor: pointer; }
+  .cstep { display: block; margin-bottom: 12px; border-left: 4px solid var(--divider-color); cursor: pointer; }
   .cstep.current { border-left-color: var(--primary-color); box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,.18)); }
   .cstep-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary-text-color); margin-bottom: 6px; }
-  .cstep .tick:not(.ing-chip) { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--divider-color); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .cstep-tick { color: var(--success-color, #43a047); } .cstep-tick.off { color: var(--secondary-text-color); }
   .cstep-text { font-size: 1.25rem; line-height: 1.55; white-space: pre-line; }
   .cstep.done { border-left-color: var(--success-color, #43a047); }
   .cstep.done .cstep-text { text-decoration: line-through; opacity: .5; }
-  .cstep.done .tick:not(.ing-chip) { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
+
   .cstep .ing-chip { font-size: 14px; }
   @container (max-width: 680px) {
     .cook-cols { grid-template-columns: 1fr; gap: 14px; }
@@ -552,14 +549,16 @@ const STYLE = `
     .cstep-text { font-size: 1.15rem; }
   }
   .cook { max-width: 820px; margin: 0 auto; }
-  .cook-progress { height: 6px; border-radius: 3px; background: var(--divider-color); margin: 8px 0 20px; overflow: hidden; }
-  .cook-progress > div { height: 100%; background: var(--primary-color); }
+  .cook-bar { display: block; margin: 8px 0 20px; pointer-events: none; --control-slider-color: var(--primary-color); --control-slider-background: var(--primary-color); --control-slider-background-opacity: 0.2; --control-slider-thickness: 8px; --control-slider-border-radius: 4px; }
   .cook-text { font-size: 1.7rem; line-height: 1.5; margin: 12px 0 20px; }
   .cook .step-ings { gap: 10px; margin: 4px 0 18px; }
   .cook .ing-chip { font-size: 1.05rem; padding: 6px 14px; border-radius: 10px; }
   .cook-nav { display: flex; gap: 12px; margin-top: 24px; }
-  .cook-nav .btn { flex: 1; font-size: 1.2rem; padding: 18px; }
-  .cook details { margin-top: 28px; }
+  .cook-nav ha-button { flex: 1; }
+  .cook-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .cook ha-expansion-panel { margin-top: 20px; }
+  .cook-sec, .shop-sec { padding: 8px 16px 0; font-size: .85em; font-weight: 500; text-transform: uppercase; letter-spacing: .05em; color: var(--secondary-text-color); }
+  .shop { max-width: 720px; margin: 0 auto; }
   .cook summary { cursor: pointer; font-size: 1.1rem; }
   .error { color: var(--error-color, #db4437); margin: 8px 0; }
   main > ha-alert { display: block; margin: var(--ha-space-2, 8px) var(--ha-space-4, 16px); }
@@ -570,13 +569,6 @@ const STYLE = `
   .notice-btn { margin-left: 10px; background: none; border: 1px solid currentColor; border-radius: 6px; color: inherit; cursor: pointer; padding: 1px 10px; font: inherit; }
   .notice { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--success-color, #43a047) 18%, transparent); border: 1px solid var(--success-color, #43a047); }
   /* ---- nutrition ---- */
-  .nu-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  .nu-table th, .nu-table td { padding: 5px 0; text-align: end; font-weight: 400; border-bottom: 1px solid var(--divider-color); }
-  .nu-table thead th { font-size: 13px; color: var(--secondary-text-color); }
-  .nu-table tbody th { text-align: start; }
-  .nu-table tbody tr:first-child th, .nu-table tbody tr:first-child td { font-weight: 600; }
-  .nu-table td + td, .nu-table th + td { padding-inline-start: 12px; }
-  .nu-table tr.nu-sub th { padding-inline-start: 14px; color: var(--secondary-text-color); font-size: 13px; }
   .nu .nu-table { max-width: 560px; }
   .nu-status { margin-top: 10px; }
   .nu-warn { display: block; margin-top: 6px; }
@@ -1108,14 +1100,13 @@ class HassRecipesPanel extends HTMLElement {
       });
     const bulkValue = root.getElementById("bulk-value");
     if (bulkValue) bulkValue.addEventListener("input", () => (this._bulkValue = bulkValue.value));
-    on("input[data-shop]", "change", (e) => {
-      const i = +e.currentTarget.dataset.shop;
-      if (e.currentTarget.checked) this._shopSel.add(i);
-      else this._shopSel.delete(i);
-      this._render();
-    });
-    const shopEntity = root.getElementById("shop-entity");
-    if (shopEntity) shopEntity.addEventListener("change", () => (this._shopEntity = shopEntity.value));
+    if (this._view.name === "shop") this._bindShop(root);
+    if (this._view.name === "import") this._bindImport(root);
+    if (this._view.name === "cook") {
+      this._bindScale(root);
+      this._bindIngChecks(on);
+      this._bindCookBar(root);
+    }
     const imageFile = root.getElementById("image-file");
     if (imageFile) {
       imageFile.addEventListener("change", () => {
@@ -1128,10 +1119,8 @@ class HassRecipesPanel extends HTMLElement {
         if (fileInput.files.length) this._uploadFile(fileInput.files[0]);
       });
     }
-    const mealie = root.getElementById("mealie");
-    if (mealie) mealie.addEventListener("submit", (e) => this._migrateMealie(e, mealie));
     const cookIngs = root.getElementById("cook-ings");
-    if (cookIngs) cookIngs.addEventListener("toggle", () => (this._cookIngredients = cookIngs.open));
+    if (cookIngs) cookIngs.addEventListener("expanded-changed", (e) => (this._cookIngredients = !!e.detail.expanded));
     on("[data-act]", "click", (e) => this._action(e.currentTarget.dataset.act, e.currentTarget.dataset.id));
 
     on("[data-scale]", "click", (e) => {
@@ -1154,12 +1143,6 @@ class HassRecipesPanel extends HTMLElement {
       const step = b.unit === "×" ? 0.5 : b.base >= 20 ? Math.round(b.base / 8) : 1;
       const next = b.base * this._scale + step * parseInt(e.currentTarget.dataset.step, 10);
       setAmount(Math.max(step, Math.round(next * 100) / 100));
-    });
-    on("input[data-i]", "change", (e) => {
-      const n = +e.currentTarget.dataset.i;
-      if (e.currentTarget.checked) this._checked.add(n);
-      else this._checked.delete(n);
-      this._saveProgress();
     });
 
     // an ingredient chip in a step is ticked off by itself; all of a step's chips ticked ticks the step
@@ -1204,7 +1187,7 @@ class HassRecipesPanel extends HTMLElement {
         toggleStep(+e.currentTarget.dataset.stepToggle);
       }
     });
-    on("input[data-step-done]", "change", (e) =>
+    on("ha-checkbox[data-step-done]", "change", (e) =>
       this._setStepDone(+e.currentTarget.dataset.stepDone, e.currentTarget.checked)
     );
 
@@ -1222,10 +1205,7 @@ class HassRecipesPanel extends HTMLElement {
       await this._load();
       this._go({ name: "detail", id: e.currentTarget.dataset.openNew });
     });
-    const imp = root.getElementById("import");
-    if (imp) imp.addEventListener("submit", (e) => this._import(e, imp));
-    const impHtml = root.getElementById("import-html");
-    if (impHtml) impHtml.addEventListener("submit", (e) => this._importHtml2(e, impHtml));
+
   }
 
   async _action(act, id) {
@@ -1302,6 +1282,20 @@ class HassRecipesPanel extends HTMLElement {
       case "tracker":
         this._go({ name: "tracker" });
         break;
+      case "import-urls":
+        this._import();
+        break;
+      case "import-text":
+        this._importHtml2();
+        break;
+      case "mealie-go":
+        this._migrateMealie();
+        break;
+      case "import-file-pick": {
+        const input = this.shadowRoot.getElementById("import-file");
+        if (input) input.click();
+        break;
+      }
       case "tk-add":
         this._tkAct("tk-add");
         break;

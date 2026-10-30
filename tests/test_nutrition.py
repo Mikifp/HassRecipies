@@ -212,6 +212,21 @@ def test_a_custom_ingredient_named_like_the_line_is_used():
     assert result["total"]["carbs"] is None
 
 
+def test_nutrition_is_also_given_per_100_g_and_per_unit_the_recipe_makes():
+    recipes, nutrition = _make()
+    nutrition.save_custom({"name": "Hjemmelavet pesto", "kcal": 450, "fat": 45, "protein": "5"})
+    r = recipes.create({"name": "x", "servings": "2", "yield_amount": 12, "yield_unit": "boller", "ingredients": ["200 g hjemmelavet pesto", "1 salt til smag"]})
+    result = nutrition.for_recipe(r["id"])
+    assert result["total"]["kcal"] == 900 and result["weight"] == 200.0  # only what was counted weighs
+    assert result["per_100g"]["kcal"] == 450 and result["per_100g"]["protein"] == 5 and result["per_100g"]["carbs"] is None
+    assert result["per_unit"]["kcal"] == 75 and result["makes"] == 12 and result["yield_unit"] == "boller"
+    plain = recipes.create({"name": "y", "ingredients": ["100 g hjemmelavet pesto"]})
+    result = nutrition.for_recipe(plain["id"])
+    assert result["per_unit"] is None and result["makes"] is None and result["per_100g"]["fat"] == 45
+    nothing = nutrition.for_recipe(recipes.create({"name": "z", "ingredients": ["noget ukendt"]})["id"])
+    assert nothing["per_100g"] is None and nothing["weight"] == 0
+
+
 def test_custom_ingredients_appear_in_search_first():
     _recipes, nutrition = _make()
     nutrition.save_custom({"name": "Hvedemel, mit eget", "kcal": 350})

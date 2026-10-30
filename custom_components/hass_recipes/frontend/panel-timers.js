@@ -95,8 +95,12 @@ export default function (h) {
         box.innerHTML = this._timers
           .map(
             (t) => `<div class="timer ${t.done ? "done" : ""}">
-              <span>⏱ ${esc(t.label)}</span><span class="t-time" data-end="${t.ends_at_ms}"></span>
-              <button data-dismiss="${esc(t.id)}" class="${t.done ? "stop" : ""}" title="${t.done ? "Stop the alarm" : "Cancel timer"}">${t.done ? "Stop" : "✕"}</button></div>`
+              <ha-assist-chip label="${esc(t.label)}"><ha-icon slot="icon" icon="mdi:timer-outline"></ha-icon></ha-assist-chip><span class="t-time" data-end="${t.ends_at_ms}"></span>
+              ${
+                t.done
+                  ? `<ha-button size="s" appearance="filled" variant="danger" data-dismiss="${esc(t.id)}">Stop</ha-button>`
+                  : `<ha-icon-button data-dismiss="${esc(t.id)}" label="Cancel timer"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>`
+              }</div>`
           )
           .join("");
         box.querySelectorAll("[data-dismiss]").forEach((b) =>

@@ -72,18 +72,61 @@ export default function (h) {
     },
 
     // ---- the table on the recipe page and at the top of the nutrition page ----
+    /** Where the nutrition table goes: Home Assistant's data table, put in by `_nuMountTables` once the page is drawn. */
     _nuTableHtml(d, k, full) {
-      const rows = (full ? ALL : MAIN)
-        .map(([key, label, unit]) => {
-          const whole = d.total[key] == null ? null : d.total[key] * k;
-          const sub = key === "sugars" || key === "sat_fat";
-          return `<tr class="${sub ? "nu-sub" : ""}"><th scope="row">${esc(label)}</th>${
-            d.per_serving ? `<td>${esc(amount(d.per_serving[key], unit))}</td>` : ""
-          }<td>${esc(amount(whole, unit))}</td></tr>`;
-        })
-        .join("");
-      const wholeHead = k === 1 ? "Whole recipe" : `Whole recipe ×${num(k, 2)}`;
-      return `<table class="nu-table"><thead><tr><td></td>${d.per_serving ? `<th scope="col">Per serving</th>` : ""}<th scope="col">${esc(wholeHead)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+      return `<div class="nu-tablehost" data-full="${full ? 1 : 0}"></div>
+        ${d.per_100g ? `<div class="muted nu-basis">${esc(h.T("Per 100 g is based on the"))} ${num(d.weight, 0)} g ${esc(h.T("of ingredients that were counted"))}.</div>` : ""}`;
+    },
+
+    /** The nutrition tables of the page: per 100 g, per serving, per unit the recipe makes, and the whole recipe. */
+    _nuMountTables(root) {
+      const r = this._recipe(this._view.id);
+      const st = r && this._nuData(r);
+      const d = st && st.data;
+      if (!d) return;
+      const k = this._scale || 1;
+      const compact = this._brCompact();
+      // the unit is in the row's name, so that the numbers are short enough for a phone
+      const plain = (v, unit) => (v == null ? "–" : num(v, unit === "kcal" ? 0 : 1));
+      root.querySelectorAll(".nu-tablehost").forEach((host) => {
+        const full = host.dataset.full === "1";
+        const rows = (full ? ALL : MAIN).map(([key, label, unit]) => ({
+          id: key,
+          name: label,
+          unitText: unit,
+          sub: key === "sugars" || key === "sat_fat",
+          p100: plain(d.per_100g && d.per_100g[key], unit),
+          serving: plain(d.per_serving && d.per_serving[key], unit),
+          unit: plain(d.per_unit && d.per_unit[key], unit),
+          whole: plain(d.total[key] == null ? null : d.total[key] * k, unit),
+        }));
+        const col = (title, field, show, extra = {}) =>
+          show ? { [field]: { title, type: "numeric", flex: 1, minWidth: "64px", showNarrow: true, template: (row) => row[field], ...extra } } : {};
+        const t = document.createElement("ha-data-table");
+        t.hass = this._hass;
+        t.autoHeight = true;
+        t.narrow = false; // the columns are the point: three small numbers fit on a phone
+        t.id = "id";
+        t.columns = {
+          name: {
+            title: "",
+            main: true,
+            flex: 2,
+            template: (row) => {
+              const el = document.createElement("div");
+              el.textContent = `${h.T(row.name)} (${row.unitText})`;
+              if (row.sub) el.style.cssText = "padding-inline-start:12px;color:var(--secondary-text-color);font-size:.9em";
+              return el;
+            },
+          },
+          ...col(compact ? h.T("100 g") : h.T("Per 100 g"), "p100", !!d.per_100g),
+          ...col(compact ? h.T("Serving") : h.T("Per serving"), "serving", !!d.per_serving),
+          ...col(compact ? d.yield_unit || h.T("piece") : `${h.T("Per")} ${d.yield_unit || h.T("piece")}`, "unit", !!d.per_unit),
+          ...col(k === 1 ? h.T("Whole recipe") : `${h.T("Whole recipe")} ×${num(k, 2)}`, "whole", true, { hidden: this._brCompact() && (d.per_100g || d.per_serving || d.per_unit) }),
+        };
+        t.data = rows;
+        host.replaceChildren(t);
+      });
     },
 
     _nuStatusText(d) {
@@ -116,7 +159,7 @@ export default function (h) {
           ? `<div class="card-content">${this._nuTableHtml(d, k, false)}
               <div class="muted nu-status">${esc(this._nuStatusText(d))}</div>
               ${d.missing ? `<div class="nu-warn"><ha-icon icon="mdi:alert-circle-outline"></ha-icon><span>${esc(`${d.missing} ingredient(s) not counted`)}</span></div>` : ""}
-              ${!d.per_serving ? `<div class="muted">Add the number of servings to the recipe to see values per serving.</div>` : ""}
+              ${!d.per_serving && !d.per_unit ? `<div class="muted">${esc(h.T("Add the number of servings, or what the recipe makes, to see values per serving or per piece."))}</div>` : ""}
             </div>`
           : `<div class="card-content muted">None of the ingredients could be counted yet.</div>`;
         body += `<div class="card-actions"><ha-button appearance="plain" size="s" data-act="nutrition" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:${
@@ -453,6 +496,7 @@ export default function (h) {
     },
 
     _bindNutrition(root, on) {
+      this._nuMountTables(root);
       this._nu = this._nu || { open: null, query: "", results: [], foods: null };
       if (this._nu.selFor !== this._view.id) this._nu.sel = new Set();
       this._nu.selFor = this._view.id;

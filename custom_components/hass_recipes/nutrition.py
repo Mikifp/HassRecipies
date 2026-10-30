@@ -375,6 +375,7 @@ def calculate(
     known = {k: False for k in NUTRIENTS}
     items = []
     counted = 0
+    counted_grams = 0.0  # what the counted ingredients weigh: the weight the totals are of
     for index, parsed in enumerate(parsed_ingredients):
         if parsed.get("header"):
             continue
@@ -401,6 +402,7 @@ def calculate(
         else:
             item["status"] = "ok"
             counted += 1
+            counted_grams += grams
             values = {}
             for key in NUTRIENTS:
                 per100 = match.get(key)
@@ -417,10 +419,22 @@ def calculate(
     per_serving = (
         {k: None if v is None else round(v / servings, 1) for k, v in total.items()} if servings else None
     )
+    # per 100 g of what was counted, and per unit of what the recipe says it makes (24 boller)
+    per_100g = (
+        {k: None if v is None else round(v * 100 / counted_grams, 1) for k, v in total.items()} if counted_grams > 0 else None
+    )
+    yield_amount = recipe.get("yield_amount")
+    makes = float(yield_amount) if isinstance(yield_amount, (int, float)) and not isinstance(yield_amount, bool) and yield_amount > 0 else None
+    per_unit = {k: None if v is None else round(v / makes, 1) for k, v in total.items()} if makes else None
     missing = [i for i in items if i["status"] in ("no_match", "no_grams")]
     return {
         "total": total,
         "per_serving": per_serving,
+        "per_100g": per_100g,
+        "weight": round(counted_grams, 1),
+        "per_unit": per_unit,
+        "makes": makes,
+        "yield_unit": str(recipe.get("yield_unit") or "").strip(),
         "servings": servings,
         "items": items,
         "counted": counted,
