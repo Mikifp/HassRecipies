@@ -47,6 +47,21 @@ Then go to **Settings → Devices & services → Add integration → Recipes**. 
 - `hass_recipes.import_recipe` service for automations
 - Data lives in HA storage (`.storage/hass_recipes.recipes`) so it is included in HA backups
 
+## How recipes are stored
+
+An ingredient is data, not an encoded line. A recipe has `ingredient_items`, and each item has:
+
+| Field | |
+| --- | --- |
+| `id` | Kept for the life of the ingredient. A step links to it with `ingredient_ids`, so moving, adding or deleting ingredients never changes what a step points to. |
+| `raw` | The main text as typed ("200 g butter"); for a section heading, its title. |
+| `comment` | The cook's note ("room temperature"). |
+| `alternatives` | Alternatives with their own amount (["180 g coconut oil"]). |
+| `header` | True for a section heading. |
+| `quantity`, `unit`, `food`, `grams`, `ml`, `substitutes` … | Worked out from the text every time, so a better parser applies to old recipes. |
+
+The typed form `200 g butter || 180 g coconut oil // room temperature` is only a way to enter an ingredient: the services, imports, Mealie and backups still take lines, and the recipe's `ingredients` (the lines) and the steps' `ingredients` (indexes) are given back for what still reads them, but they are worked out from the items and not what is stored. A client that sends only lines keeps the ids of the ingredients that are still there. Recipes saved by an older version are converted the first time they are read.
+
 ## Nutrition
 
 The recipe page shows an estimate of energy, protein, fat, carbohydrates and dietary fibre per serving (from the first number in *Servings*) and for the whole recipe; the **Check ingredients** page adds sugars, saturated fat and salt.
