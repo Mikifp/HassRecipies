@@ -16,6 +16,7 @@ const {
   splitSubs,
   joinSub,
   joinSubs,
+  ingredientParts,
   timerSpecs,
   clock,
   duration,
@@ -55,7 +56,7 @@ const TODO_KEY = "hass_recipes_todo";
 
 /** HTML for ingredient `i`: amount + bold food, faded original amount, optional substitute. */
 const ingredientHtml = (r, i, k, mode) => {
-  const { main, alts, comment } = splitSubs(r.ingredients[i] ?? "");
+  const { main, alts, comment } = ingredientParts(r, i);
   const p = (r.parsed_ingredients || [])[i];
   const subs = (p && (p.substitutes || (p.substitute ? [p.substitute] : []))) || [];
   const a = ingParts(p, main, k, mode);
@@ -71,7 +72,7 @@ const ingredientHtml = (r, i, k, mode) => {
 
 /** Compact "amount food" pill for the ingredients a step uses. */
 const ingredientChipHtml = (r, i, k, mode, tick = null, alt = false) => {
-  const [main] = splitSub(r.ingredients[i] ?? "");
+  const { main } = ingredientParts(r, i);
   const a = ingParts((r.parsed_ingredients || [])[i], main, k, mode);
   // optionally the other way the recipe gives the amount: as written ("2 dl") or in brackets ("(100 ml)")
   const other = alt ? a.sub || a.paren : "";
@@ -100,6 +101,7 @@ export default {
   splitSubs,
   joinSub,
   joinSubs,
+  ingredientParts,
   timerSpecs,
   clock,
   duration,

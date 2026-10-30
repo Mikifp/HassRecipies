@@ -17,7 +17,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
-from .ingredients import is_header, parse_ingredient
+from .ingredients import compose_line, is_header, split_line, structured
 from .localize import step_label
 
 # Fields a client may set on a recipe.
@@ -26,6 +26,7 @@ EDITABLE_FIELDS = (
     "description",
     "image",
     "ingredients",
+    "ingredient_items",
     "instructions",
     "tags",
     "categories",
@@ -62,37 +63,93 @@ def normalize_timers(step: dict[str, Any]) -> list[dict[str, Any]]:
     return found
 
 
-def normalize_step(step: Any) -> dict[str, Any]:
-    """Return a step as {"text", "ingredients", "timer", "timers"}.
+def normalize_step(step: Any, ids_by_index: list[str] | None = None) -> dict[str, Any]:
+    """Return a step as {"text", "ingredient_ids", "ingredients", "timer", "timers", "section"}.
 
-    ``ingredients`` are indexes into the recipe's ingredient list. ``timers`` is any
-    number of {"seconds", "label"}; ``timer`` is the first one's duration (or None),
-    kept for older clients. Plain strings (older data, imports) are accepted too.
+    ``ingredient_ids`` are the ids of the recipe's ingredient items the step uses: what is stored. The older
+    ``ingredients`` (indexes into the ingredient list) are accepted as input when ``ids_by_index`` says which id
+    each index was, and are filled in again from the ids by ``_set_ingredients`` for what still reads them.
+    ``timers`` is any number of {"seconds", "label"}; ``timer`` is the first one's duration (or None), kept for
+    older clients. Plain strings (older data, imports) are accepted too.
     """
+    empty = {"ingredient_ids": [], "ingredients": [], "timer": None, "timers": []}
     if isinstance(step, str):
-        return {"text": step, "ingredients": [], "timer": None, "timers": [], "section": False}
+        return {"text": step, **empty, "section": False}
     if step.get("section"):
-        return {"text": step.get("text", ""), "ingredients": [], "timer": None, "timers": [], "section": True}
-    links = {i for i in step.get("ingredients", []) if isinstance(i, int) and i >= 0}
+        return {"text": step.get("text", ""), **empty, "section": True}
+    ids = step.get("ingredient_ids")
+    if isinstance(ids, list):
+        found = [i for i in ids if isinstance(i, str) and i]
+    else:
+        links = sorted({i for i in step.get("ingredients", []) if isinstance(i, int) and not isinstance(i, bool) and i >= 0})
+        found = [ids_by_index[i] for i in links if ids_by_index is not None and i < len(ids_by_index)]
     timers = normalize_timers(step)
     return {
         "text": step.get("text", ""),
-        "ingredients": sorted(links),
+        "ingredient_ids": list(dict.fromkeys(found)),
+        "ingredients": sorted({i for i in step.get("ingredients", []) if isinstance(i, int) and not isinstance(i, bool) and i >= 0}),
         "timer": timers[0]["seconds"] if timers else None,
         "timers": timers,
         "section": False,
     }
 
 
-def _normalize_steps(recipe: dict[str, Any]) -> None:
-    """Normalize steps in place and drop links to ingredients that don't exist."""
-    count = len(recipe.get("ingredients", []))
-    steps = [normalize_step(s) for s in recipe.get("instructions", [])]
-    for step in steps:
-        step["ingredients"] = [i for i in step["ingredients"] if i < count]
+def _items_from_lines(lines: list[Any], pool: list[dict[str, Any]], used: set[str]) -> list[dict[str, Any]]:
+    """Items from typed lines. An item that was there before (the same line) keeps its id, so its step links stay."""
+    ids: dict[str, list[str]] = {}
+    for old in pool:
+        ids.setdefault(compose_line(old), []).append(old["id"])
+    items = []
+    for line in lines:
+        parts = split_line(line if isinstance(line, str) else "")
+        typed = compose_line(parts)
+        waiting = ids.get(typed) or []
+        parts["id"] = waiting.pop(0) if waiting else None
+        items.append(structured(parts, used))
+    return items
+
+
+def _set_ingredients(recipe: dict[str, Any], incoming: dict[str, Any] | None = None) -> None:
+    """Make the recipe's ingredients and the steps' links to them consistent.
+
+    The source is ``ingredient_items`` (each with an id) and the steps' ``ingredient_ids``. A client may still
+    give the typed lines (``ingredients``) and indexes in the steps (``ingredients``): they are turned into
+    items, keeping the id of an ingredient that was there before. ``incoming`` is what the client sent (None
+    when the stored recipe is read again), so that indexes can be told from ids.
+    """
+    src = incoming or {}
+    current = recipe.get("ingredient_items")
+    previous = [i for i in current if isinstance(i, dict)] if isinstance(current, list) else []
+    used: set[str] = set()
+    if "ingredient_items" in src and isinstance(src["ingredient_items"], list):
+        items = [structured(i, used) for i in src["ingredient_items"] if isinstance(i, dict)]
+    elif "ingredients" in src and isinstance(src["ingredients"], list):
+        items = _items_from_lines(src["ingredients"], previous, used)
+    elif previous:
+        items = [structured(i, used) for i in previous]
+    else:
+        # recipes saved before ingredients had ids: the typed lines become items
+        items = _items_from_lines(list(recipe.get("ingredients") or []), [], used)
+    # an old-style step links by index, into the list as it is now
+    ids_by_index = [i["id"] for i in items]
+    raw_steps = src["instructions"] if "instructions" in src else recipe.get("instructions", [])
+    known = {i["id"] for i in items}
+    index_of = {i["id"]: n for n, i in enumerate(items)}
+    steps = []
+    for raw in raw_steps:
+        step = normalize_step(raw, ids_by_index)
+        step["ingredient_ids"] = [i for i in step["ingredient_ids"] if i in known]
+        step["ingredients"] = sorted(index_of[i] for i in step["ingredient_ids"])
+        steps.append(step)
+    recipe["ingredient_items"] = items
+    recipe["parsed_ingredients"] = items  # the same objects: an item is also its parsed form
+    recipe["ingredients"] = [compose_line(i) for i in items]  # the typed lines, for what still reads strings
     recipe["instructions"] = steps
-    # Derived, never client-editable: recomputed so parser improvements apply.
-    recipe["parsed_ingredients"] = [parse_ingredient(i) for i in recipe.get("ingredients", [])]
+
+
+def _normalize_steps(recipe: dict[str, Any], incoming: dict[str, Any] | None = None) -> None:
+    """Make ingredients and steps consistent (see ``_set_ingredients``) and fill in the defaults."""
+    _set_ingredients(recipe, incoming)
     recipe.setdefault("categories", [])
     recipe.setdefault("tools", [])
     recipe.setdefault("yield_amount", None)
@@ -185,7 +242,8 @@ class RecipeStore:
     def _save(self) -> None:
         self._store.async_delay_save(
             lambda: {
-                "recipes": self._recipes,
+                # the parsed form is the ingredient items themselves: not stored twice
+                "recipes": {rid: {k: v for k, v in r.items() if k != "parsed_ingredients"} for rid, r in self._recipes.items()},
                 "cookbooks": self._cookbooks,
                 "cooking_recipe_id": self._cooking_id,
                 "cooking_step": self._cooking_step,
@@ -364,7 +422,8 @@ class RecipeStore:
             "created": now,
             "updated": now,
         }
-        _normalize_steps(recipe)
+        recipe["ingredients"] = []  # the typed lines are read from ``data`` by _set_ingredients, not taken as they are
+        _normalize_steps(recipe, _clean(data))
         self._recipes[recipe["id"]] = recipe
         self._save()
         self._fire(EVENT_RECIPE_ADDED, recipe)
@@ -374,8 +433,9 @@ class RecipeStore:
         recipe = self._recipes.get(recipe_id)
         if recipe is None:
             return None
-        recipe.update(_clean(data))
-        _normalize_steps(recipe)
+        fields = _clean(data)
+        recipe.update({k: v for k, v in fields.items() if k not in ("ingredients", "ingredient_items", "instructions")})
+        _normalize_steps(recipe, fields)
         recipe["updated"] = datetime.now(UTC).isoformat()
         self._save()
         self._fire(EVENT_RECIPE_UPDATED, recipe)

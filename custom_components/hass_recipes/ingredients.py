@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+import uuid
 
 _FRACTIONS = {
     "½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4",
@@ -336,6 +337,66 @@ def split_comment(line: str) -> tuple[str, str]:
     """``200 g butter // room temperature`` -> (``200 g butter``, ``room temperature``)."""
     body, _, comment = line.partition(COMMENT_SEP.rstrip())
     return body.strip(), comment.strip()
+
+
+# ---- an ingredient as data: an id, the typed text, a note and alternatives ----
+# A line such as ``200 g butter // room temperature || 180 g coconut oil`` is only a way to type or
+# import an ingredient. The recipe keeps it as an item (see ``structured``), with an id that steps link to.
+
+def new_ingredient_id() -> str:
+    return "i" + uuid.uuid4().hex[:10]
+
+
+def split_line(line: str) -> dict[str, Any]:
+    """The typed form of a line as its parts: ``header``, ``raw`` (the main text), ``comment``, ``alternatives``."""
+    line = str(line).strip()
+    if is_header(line):
+        return {"header": True, "raw": _HEADER.sub("", line).strip(), "comment": "", "alternatives": []}
+    body, comment = split_comment(line)
+    main, *alternatives = (part.strip() for part in body.split(SUBSTITUTE_SEP))
+    return {"header": False, "raw": main, "comment": comment, "alternatives": [a for a in alternatives if a]}
+
+
+def compose_line(item: dict[str, Any]) -> str:
+    """The typed form of an item (for what still reads a list of strings, and for backups)."""
+    if item.get("header"):
+        return f"## {item.get('raw', '')}"
+    line = item.get("raw", "")
+    for alt in item.get("alternatives", []):
+        line += f"{SUBSTITUTE_SEP}{alt}"
+    if item.get("comment"):
+        line += f"{COMMENT_SEP}{item['comment']}"
+    return line
+
+
+def _text(value: Any) -> str:
+    return str(value if isinstance(value, (str, int, float)) else "").replace(SUBSTITUTE_SEP, " | ").replace(COMMENT_SEP, " / ").strip()
+
+
+def structured(data: dict[str, Any], used: set[str] | None = None) -> dict[str, Any]:
+    """An ingredient item from what a client or an import gives (``raw``, ``comment``, ``alternatives``, maybe ``id``).
+
+    The item has what was typed (``id``, ``header``, ``raw``, ``comment``, ``alternatives``) and, worked out from it
+    every time so that a better parser applies to old recipes, the quantity, unit, food, grams and so on.
+    """
+    used = used if used is not None else set()
+    ident = data.get("id") if isinstance(data.get("id"), str) and data.get("id") else None
+    if not ident or ident in used:
+        ident = new_ingredient_id()
+        while ident in used:
+            ident = new_ingredient_id()
+    used.add(ident)
+    alternatives = [
+        _text(a.get("raw") if isinstance(a, dict) else a) for a in (data.get("alternatives") or []) if isinstance(a, (str, dict))
+    ]
+    typed = {
+        "id": ident,
+        "header": bool(data.get("header")),
+        "raw": _text(data.get("raw")),
+        "comment": _text(data.get("comment")),
+        "alternatives": [a for a in alternatives if a],
+    }
+    return {**parse_ingredient(compose_line(typed)), **typed}
 
 
 def parse_ingredient(line: str) -> dict[str, Any]:

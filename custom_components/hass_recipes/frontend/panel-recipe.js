@@ -1,6 +1,6 @@
 /* Recipes panel: recipe methods. Mixed into the panel class by recipes-panel.js. */
 export default function (h) {
-  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml, splitSubs, stepTextHtml } = h;
+  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml, splitSubs, ingredientParts, stepTextHtml } = h;
   return {
     // ---- shopping list (HA to-do entities) ----
     _todoEntities() {
@@ -96,7 +96,7 @@ export default function (h) {
     /** A step's text with the ingredients it names as chips, and chips for the ones it does not name. */
     _stepTextParts(r, s, k, n) {
       const idx = this._stepChipIngredients(r, s);
-      const items = idx.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main, names: this._foodNamesFor(r, i) }));
+      const items = idx.map((i) => ({ key: i, text: ingredientParts(r, i).main, names: this._foodNamesFor(r, i) }));
       const chip = (i) => ingredientChipHtml(r, i, k, this._units, { key: `${n}:${i}`, done: this._doneChips.has(`${n}:${i}`) }, this._chipAlt);
       const { html, placed } = stepTextHtml(s.text, items, chip);
       const links = idx

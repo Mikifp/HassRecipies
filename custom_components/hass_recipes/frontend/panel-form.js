@@ -1,6 +1,6 @@
 /* Recipes panel: form methods. Mixed into the panel class by recipes-panel.js. */
 export default function (h) {
-  const { esc, T, normStep, isHeader, headerText, splitSubs, joinSubs, fmtYield, lines, toInt } = h;
+  const { esc, T, normStep, isHeader, headerText, splitSubs, ingredientParts, fmtYield, lines, toInt } = h;
   return {
     /** Downscale big photos in the browser (max 1600 px, JPEG) before uploading. */
     async _prepareImage(file) {
@@ -41,21 +41,28 @@ export default function (h) {
       this._render();
     },
 
+    /** A new ingredient's id. It is the id the server keeps (steps link to it), so it must not repeat: random, not a counter. */
     _nextUid() {
-      this._uid += 1;
-      return `u${this._uid}`;
+      const bytes = new Uint8Array(5);
+      (window.crypto || globalThis.crypto).getRandomValues(bytes);
+      return `i${[...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
     },
 
-    /** Stored ingredient strings -> editor rows (heading / text + substitute). */
+    /** A typed line (an imported draft that has no items yet) -> editor row (heading / text + alternatives + note). */
     _rowFromString(str) {
       if (isHeader(str)) return { uid: this._nextUid(), header: true, text: headerText(str), subs: [], comment: "" };
       const { main, alts, comment } = splitSubs(str);
       return { uid: this._nextUid(), header: false, text: main, subs: alts, comment };
     },
 
+    /** An ingredient item of a saved recipe -> editor row. Its id is the row's, so step links hold. */
+    _rowFromItem(item) {
+      return { uid: item.id, header: !!item.header, text: item.raw || "", subs: [...(item.alternatives || [])], comment: item.comment || "" };
+    },
+
     _initForm(id) {
       const src = (id && this._recipe(id)) || this._draft || {};
-      const rows = (src.ingredients || []).map((x) => this._rowFromString(x));
+      const rows = Array.isArray(src.ingredient_items) ? src.ingredient_items.map((x) => this._rowFromItem(x)) : (src.ingredients || []).map((x) => this._rowFromString(x));
       this._form = {
         name: src.name || "",
         description: src.description || "",
@@ -77,7 +84,9 @@ export default function (h) {
           text: st.text,
           section: st.section,
           // links are kept as stable row ids so reordering ingredients never breaks them
-          ingredients: st.ingredients.map((i) => rows[i]).filter((row) => row && !row.header).map((row) => row.uid),
+          ingredients: Array.isArray(st.ingredient_ids)
+            ? st.ingredient_ids.filter((id) => rows.some((row) => row.uid === id && !row.header))
+            : (st.ingredients || []).map((i) => rows[i]).filter((row) => row && !row.header).map((row) => row.uid),
           timers: st.timers.map((t) => ({
             h: Math.floor(t.seconds / 3600) || "",
             m: Math.floor((t.seconds % 3600) / 60) || "",
@@ -247,15 +256,17 @@ export default function (h) {
         this._render();
         return;
       }
-      // rows -> stored strings; remember each row's final index for step links
-      const ingredients = [];
-      const indexOf = new Map();
-      for (const row of d.rows) {
-        const text = row.text.trim();
-        if (!text) continue;
-        indexOf.set(row.uid, ingredients.length);
-        ingredients.push(row.header ? `## ${text}` : joinSubs(text, row.subs, row.comment || ""));
-      }
+      // rows -> ingredient items, each with the id its steps link to
+      const ingredient_items = d.rows
+        .filter((row) => row.text.trim())
+        .map((row) => ({
+          id: row.uid,
+          header: !!row.header,
+          raw: row.text.trim(),
+          comment: row.header ? "" : String(row.comment || "").trim().replace(/\s+/g, " "),
+          alternatives: row.header ? [] : row.subs.map((a) => a.trim()).filter(Boolean),
+        }));
+      const kept = new Set(ingredient_items.filter((i) => !i.header).map((i) => i.id));
       const payload = {
         name: String(d.name).trim(),
         description: String(d.description || "").trim(),
@@ -270,11 +281,11 @@ export default function (h) {
         tags: this._multiValues(d.tags),
         categories: this._multiValues(d.categories),
         tools: this._multiValues(d.tools),
-        ingredients,
+        ingredient_items,
         instructions: d.steps
           .filter((st) => st.text.trim())
           .map((st) => {
-            if (st.section) return { text: st.text.trim(), ingredients: [], timer: null, timers: [], section: true };
+            if (st.section) return { text: st.text.trim(), ingredient_ids: [], timer: null, timers: [], section: true };
             const timers = (st.timers || [])
               .map((t) => ({
                 seconds: Math.round((parseFloat(t.h) || 0) * 3600 + (parseFloat(t.m) || 0) * 60 + (parseFloat(t.s) || 0)),
@@ -283,7 +294,7 @@ export default function (h) {
               .filter((t) => t.seconds > 0);
             return {
               text: st.text.trim(),
-              ingredients: [...new Set(st.ingredients.map((u) => indexOf.get(u)).filter((i) => i !== undefined))].sort((x, y) => x - y),
+              ingredient_ids: [...new Set(st.ingredients.filter((u) => kept.has(u)))],
               timer: timers.length ? timers[0].seconds : null,
               timers,
               section: false,
