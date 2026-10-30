@@ -114,7 +114,7 @@ export default function (h) {
     _foodNamesFor(r, i) {
       const p = (r.parsed_ingredients || [])[i];
       const own = p && p.food ? [p.food] : [];
-      return fl.namesForLine(this._foodNamesMap(), [...own, ...h.foodWords(h.splitSubs(r.ingredients[i]).main)]);
+      return fl.namesForLine(this._foodNamesMap(), [...own, ...h.foodWords(h.ingredientParts(r, i).main)]);
     },
 
     // ---- the list ----

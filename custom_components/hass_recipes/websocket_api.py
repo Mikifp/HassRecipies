@@ -33,7 +33,9 @@ from .store import RecipeStore
 _STEP = vol.Schema(
     {
         vol.Required("text"): str,
-        vol.Optional("ingredients", default=[]): [vol.All(int, vol.Range(min=0))],
+        # what the step uses: the ids of the recipe's ingredient items (older clients send indexes in ``ingredients``)
+        vol.Optional("ingredient_ids"): [vol.All(str, vol.Length(max=64))],
+        vol.Optional("ingredients"): [vol.All(int, vol.Range(min=0))],
         vol.Optional("timer"): vol.Any(None, vol.All(int, vol.Range(min=1, max=7 * 86400))),
         # any number of timers per step, each with an optional label ("simmer", "rest")
         vol.Optional("timers", default=[]): [
@@ -46,11 +48,24 @@ _STEP = vol.Schema(
     }
 )
 
+_ITEM = vol.Schema(
+    {
+        vol.Optional("id"): vol.All(str, vol.Length(max=64)),
+        vol.Optional("header", default=False): bool,
+        vol.Required("raw"): vol.All(str, vol.Length(max=500)),
+        vol.Optional("comment", default=""): vol.All(str, vol.Length(max=500)),
+        vol.Optional("alternatives", default=[]): [vol.All(str, vol.Length(max=500))],
+    },
+    extra=vol.ALLOW_EXTRA,  # a client may send an item back as it got it, with the worked-out amounts
+)
+
 _RECIPE_FIELDS = {
     vol.Optional("name"): vol.All(str, vol.Length(min=1, max=200)),
     vol.Optional("description"): str,
     vol.Optional("image"): str,
     vol.Optional("ingredients"): [str],
+    # ingredients as data: an id (kept across saves), what was typed, a note and alternatives
+    vol.Optional("ingredient_items"): [_ITEM],
     vol.Optional("instructions"): [vol.Any(str, _STEP)],
     vol.Optional("tags"): [str],
     vol.Optional("categories"): [str],

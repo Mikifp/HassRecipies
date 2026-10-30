@@ -1,6 +1,6 @@
 /* Recipes panel: recipe methods. Mixed into the panel class by recipes-panel.js. */
 export default function (h) {
-  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml, splitSubs, stepTextHtml } = h;
+  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml, splitSubs, ingredientParts, stepTextHtml } = h;
   return {
     // ---- shopping list (HA to-do entities) ----
     _todoEntities() {
@@ -24,37 +24,61 @@ export default function (h) {
       }
       const k = this._scale;
       const result = this._shopResult;
+      const back = (label, appearance = "filled") => `<ha-button appearance="${appearance}" data-act="shop-done" data-id="${esc(r.id)}">${esc(T(label))}</ha-button>`;
       if (result) {
-        return `<div class="panel"><h2>Shopping list updated</h2>
-          <p>Added <strong>${result.added.length}</strong> item(s) to <em>${esc(result.entity_id)}</em>${result.skipped.length ? `, skipped ${result.skipped.length} already on the list` : ""}.</p>
-          ${result.added.length ? `<ul>${result.added.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : ""}
-          <div class="actions"><button class="btn" data-act="shop-done" data-id="${esc(r.id)}">Back to recipe</button></div></div>`;
+        return `<ha-card class="shop" header="${esc(T("Shopping list updated"))}"><div class="card-content">
+          <p>${esc(T("Added"))} <strong>${result.added.length}</strong> ${esc(T("item(s) to"))} <em>${esc(result.entity_id)}</em>${result.skipped.length ? `, ${esc(T("skipped"))} ${result.skipped.length} ${esc(T("already on the list"))}` : ""}.</p>
+          ${result.added.length ? `<ha-list-base>${result.added.map((i) => `<ha-list-item-base headline="${esc(i)}"></ha-list-item-base>`).join("")}</ha-list-base>` : ""}</div>
+          <div class="card-actions">${back("Back to recipe")}</div></ha-card>`;
       }
       if (!lists.length) {
-        return `<div class="panel"><h2>Add to shopping list</h2>
-          <p>No to-do lists were found in Home Assistant. Add the <strong>Shopping list</strong> integration (or any to-do integration) first.</p>
-          <div class="actions"><button class="btn secondary" data-act="shop-done" data-id="${esc(r.id)}">Back</button></div></div>`;
+        return `<ha-card class="shop" header="${esc(T("Add to shopping list"))}"><div class="card-content">
+          <ha-alert alert-type="warning">${esc(T("No to-do lists were found in Home Assistant. Add the Shopping list integration (or any to-do integration) first."))}</ha-alert></div>
+          <div class="card-actions">${back("Back", "plain")}</div></ha-card>`;
       }
-      return `
-        <div class="panel">
-          <h2>Add to shopping list</h2>
-          <p class="muted">${esc(r.name)}${k !== 1 ? ` · ×${esc(formatNumber(k))}` : ""} · ${this._units === "grams" ? "grams" : "as written"}. Untick things you already have.</p>
-          <div class="field"><label class="lbl">List</label>
-            <select id="shop-entity">${lists
-              .map((l) => `<option value="${esc(l.id)}" ${l.id === chosen ? "selected" : ""}>${esc(l.name)}</option>`)
-              .join("")}</select></div>
-          <ul class="ingredients">${r.ingredients
-            .map((raw, i) =>
-              isHeader(raw)
-                ? `<li class="section">${esc(headerText(raw))}</li>`
-                : `<li><label><input type="checkbox" data-shop="${i}" ${this._shopSel.has(i) ? "checked" : ""}><span>${esc(ingredientText(r, i, k, this._units))}</span></label></li>`
-            )
-            .join("")}</ul>
-          <div class="actions">
-            <button class="btn" data-act="shop-add" data-id="${esc(r.id)}" ${this._shopSel.size ? "" : "disabled"}>Add ${this._shopSel.size} item(s)</button>
-            <button class="btn secondary" data-act="shop-done" data-id="${esc(r.id)}">Cancel</button>
+      const items = r.ingredients
+        .map((raw, i) =>
+          isHeader(raw)
+            ? `<div class="rd-sh shop-sec">${esc(headerText(raw))}</div>`
+            : `<ha-check-list-item left data-shop="${i}" ${this._shopSel.has(i) ? "selected" : ""}>${esc(ingredientText(r, i, k, this._units))}</ha-check-list-item>`
+        )
+        .join("");
+      return `<ha-card class="shop" header="${esc(T("Add to shopping list"))}">
+          <div class="card-content">
+            <p class="muted">${esc(r.name)}${k !== 1 ? ` · ×${esc(formatNumber(k))}` : ""} · ${esc(T(this._units === "grams" ? "grams" : "as written"))}. ${esc(T("Untick things you already have."))}</p>
+            <ha-form id="shop-form"></ha-form>
           </div>
-        </div>`;
+          <ha-list multi>${items}</ha-list>
+          <div class="card-actions">
+            <ha-button appearance="filled" data-act="shop-add" data-id="${esc(r.id)}" ${this._shopSel.size ? "" : "disabled"}><ha-icon slot="start" icon="mdi:cart-plus"></ha-icon>${esc(`${T("Add")} ${this._shopSel.size} ${T("item(s)")}`)}</ha-button>
+            ${back("Cancel", "plain")}
+          </div>
+        </ha-card>`;
+    },
+
+    /** The list to send to: Home Assistant's own form field. */
+    _bindShop(root) {
+      const form = root.getElementById("shop-form");
+      if (form) {
+        const lists = this._todoEntities();
+        form.hass = this._hass;
+        form.schema = [{ name: "list", selector: { select: { mode: "dropdown", options: lists.map((l) => ({ value: l.id, label: l.name })) } } }];
+        form.data = { list: this._shopEntity };
+        form.computeLabel = () => T("List");
+        form.addEventListener("value-changed", (e) => {
+          e.stopPropagation();
+          if (e.detail.value && e.detail.value.list) this._shopEntity = e.detail.value.list;
+        });
+      }
+      root.querySelectorAll("ha-check-list-item[data-shop]").forEach((el) =>
+        el.addEventListener("request-selected", (e) => {
+          if (!e.detail || e.detail.source !== "interaction") return;
+          const i = +el.dataset.shop;
+          if (e.detail.selected) this._shopSel.add(i);
+          else this._shopSel.delete(i);
+          this._render();
+        })
+      );
     },
 
     async _shopAdd(id) {
@@ -83,20 +107,21 @@ export default function (h) {
     },
 
     // ---- shared list renderers ----
-    _ingredientsListHtml(r, k, attr = "data-i") {
-      return `<ul class="ingredients">${r.ingredients
-        .map((raw, n) =>
-          isHeader(raw)
-            ? `<li class="section">${esc(headerText(raw))}</li>`
-            : `<li><label><input type="checkbox" ${attr}="${n}" ${this._checked.has(n) ? "checked" : ""}><span class="ing-text">${ingredientHtml(r, n, k, this._units)}</span></label></li>`
-        )
-        .join("")}</ul>`;
+    _ingredientsListHtml(r, k) {
+      return this._rdIngredientGroups(r)
+        .map((g) => {
+          const items = g.items
+            .map((n) => `<ha-check-list-item left data-ing="${n}" ${this._checked.has(n) ? "selected" : ""}><span class="ing-text">${ingredientHtml(r, n, k, this._units)}</span></ha-check-list-item>`)
+            .join("");
+          return `${g.title ? `<div class="rd-sh cook-sec">${esc(g.title)}</div>` : ""}<ha-list multi>${items}</ha-list>`;
+        })
+        .join("");
     },
 
     /** A step's text with the ingredients it names as chips, and chips for the ones it does not name. */
     _stepTextParts(r, s, k, n) {
       const idx = this._stepChipIngredients(r, s);
-      const items = idx.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main, names: this._foodNamesFor(r, i) }));
+      const items = idx.map((i) => ({ key: i, text: ingredientParts(r, i).main, names: this._foodNamesFor(r, i) }));
       const chip = (i) => ingredientChipHtml(r, i, k, this._units, { key: `${n}:${i}`, done: this._doneChips.has(`${n}:${i}`) }, this._chipAlt);
       const { html, placed } = stepTextHtml(s.text, items, chip);
       const links = idx
@@ -128,24 +153,6 @@ export default function (h) {
       this._render();
     },
 
-    _stepsHtml(r, k) {
-      let num = 0;
-      return r.instructions
-        .map(normStep)
-        .map((s, n) => {
-          if (s.section) return `<div class="step-section">${esc(s.text)}</div>`;
-          num += 1;
-          const done = this._doneSteps.has(n);
-          const { html: textHtml, links } = this._stepTextParts(r, s, k, n);
-          return `<div class="step-item ${done ? "done" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}" tabindex="0" title="${done ? "Mark as not done" : "Tap to mark as done"}">
-            <span class="step-num">${done ? "✓" : num}</span>
-            <div class="step-body"><div class="step-text">${textHtml}</div>
-              ${links ? `<div class="step-ings">${links}</div>` : ""}
-              ${this._timerButtonsHtml(r, s, n, num, "secondary")}
-            </div></div>`;
-        })
-        .join("");
-    },
 
     /** One start button per timer of a step. `n` is the step's index, `num` its number among the steps. */
     _timerButtonsHtml(r, st, n, num, extra = "") {
@@ -153,9 +160,9 @@ export default function (h) {
         .map((sp) => {
           const running = this._timerRunning(sp.key);
           const what = sp.name ? ` (${esc(sp.name)})` : "";
-          return `<button class="btn ${extra} timer-btn" data-timer-key="${esc(sp.key)}" data-timer-label="${esc(sp.label)}" data-timer-step="${n}" data-sec="${sp.seconds}" ${running ? "disabled" : ""}>⏱ ${
+          return `<ha-button class="timer-btn" appearance="${extra === "secondary" ? "outlined" : "filled"}" data-timer-key="${esc(sp.key)}" data-timer-label="${esc(sp.label)}" data-timer-step="${n}" data-sec="${sp.seconds}" ${running ? "disabled" : ""}><ha-icon slot="start" icon="mdi:timer-outline"></ha-icon>${
             running ? "Timer running" : `Start ${duration(sp.seconds)} timer${what}`
-          }</button>`;
+          }</ha-button>`;
         })
         .join("");
     },
@@ -219,10 +226,10 @@ export default function (h) {
       });
       const prev = starts[at].n < cur ? starts[at] : starts[at - 1];
       const next = starts[at + 1];
-      const btn = (act, target, label, arrowFirst) =>
-        `<button class="btn secondary" data-act="${act}" ${target ? "" : "disabled"}>${arrowFirst ? "⇤ " : ""}${label}${arrowFirst ? "" : " ⇥"}${
+      const btn = (act, target, label, first) =>
+        `<ha-button appearance="outlined" class="cook-secbtn" data-act="${act}" ${target ? "" : "disabled"}><ha-icon slot="${first ? "start" : "end"}" icon="mdi:${first ? "skip-previous" : "skip-next"}"></ha-icon>${esc(T(label))}${
           target && target.title ? `<small>${esc(target.title)}</small>` : ""
-        }</button>`;
+        }</ha-button>`;
       return `<div class="cook-sections">${btn("cook-sec-prev", prev, "Previous section", true)}${btn("cook-sec-next", next, "Next section", false)}</div>`;
     },
 
@@ -232,61 +239,38 @@ export default function (h) {
       const st = steps[n];
       const k = this._scale;
       if (!st) {
-        return `<div class="cook"><p>This recipe has no steps yet.</p>
-          <div class="cook-nav"><button class="btn secondary" data-act="cook-exit">Exit</button></div></div>`;
+        return `<div class="cook"><p>${esc(T("This recipe has no steps yet."))}</p>
+          <div class="cook-nav"><ha-button appearance="outlined" data-act="cook-exit">${esc(T("Exit"))}</ha-button></div></div>`;
       }
       // The heading this step sits under, if any.
       let section = "";
       for (const x of r.instructions.map(normStep).slice(0, st.i)) if (x.section) section = x.text;
       const { html: textHtml, links } = this._stepTextParts(r, st, k, st.i);
-      const running = this._timerRunning(`${r.id}:${st.i}`);
       const last = n === steps.length - 1;
       const done = this._doneSteps.has(st.i);
       return `
         <div class="cook">
-          <div class="muted">${esc(r.name)}${k !== 1 ? ` · ×${esc(formatNumber(k))}` : ""} · Step ${n + 1} of ${steps.length}</div>
-          <div class="cook-progress"><div style="width:${((n + 1) / steps.length) * 100}%"></div></div>
+          <div class="muted">${esc(r.name)}${k !== 1 ? ` · ×${esc(formatNumber(k))}` : ""} · ${esc(T("Step"))} ${n + 1} ${esc(T("of"))} ${steps.length}</div>
+          <ha-control-slider id="cook-bar" class="cook-bar" data-n="${n + 1}" data-of="${steps.length}"></ha-control-slider>
           ${section ? `<div class="cook-section">${esc(section)}</div>` : ""}
-          <div class="cook-text" data-step-toggle="${st.i}" style="${done ? "opacity:.55;text-decoration:line-through" : ""}" title="Tap to mark as done">${textHtml}</div>
+          <div class="cook-text" data-step-toggle="${st.i}" style="${done ? "opacity:.55;text-decoration:line-through" : ""}" title="${esc(T("Tap to mark as done"))}">${textHtml}</div>
           ${links ? `<div class="step-ings">${links}</div>` : ""}
           ${this._chipAltHtml()}
           ${this._timerButtonsHtml(r, st, st.i, n + 1)}
-          <label class="cook-done"><input type="checkbox" data-step-done="${st.i}" ${done ? "checked" : ""}> Mark this step as done</label>
+          <ha-formfield class="cook-done" label="${esc(T("Mark this step as done"))}"><ha-checkbox data-step-done="${st.i}" ${done ? "checked" : ""}></ha-checkbox></ha-formfield>
           ${this._cookSectionNavHtml(r, n)}
           <div class="cook-nav">
-            <button class="btn secondary" data-act="cook-prev" ${n === 0 ? "disabled" : ""}>← Previous</button>
-            <button class="btn" data-act="${last ? "cook-finish" : "cook-next"}">${last ? "Finish ✓" : "Next →"}</button>
+            <ha-button appearance="outlined" size="l" data-act="cook-prev" ${n === 0 ? "disabled" : ""}><ha-icon slot="start" icon="mdi:arrow-left"></ha-icon>${esc(T("Previous"))}</ha-button>
+            <ha-button appearance="filled" size="l" data-act="${last ? "cook-finish" : "cook-next"}">${esc(T(last ? "Finish" : "Next"))}<ha-icon slot="end" icon="mdi:${last ? "check" : "arrow-right"}"></ha-icon></ha-button>
           </div>
-          <details ${this._cookIngredients ? "open" : ""} id="cook-ings">
-            <summary>All ingredients</summary>
+          <ha-expansion-panel id="cook-ings" left-chevron ${this._cookIngredients ? "expanded" : ""}>
+            <div slot="header">${esc(T("All ingredients"))}</div>
             ${this._ingredientsListHtml(r, k)}
-          </details>
-          <div class="actions">
-            <button class="btn secondary" data-act="cook-focus">Show all steps</button>
-            <button class="btn secondary" data-act="cook-exit">Exit cook mode</button>
+          </ha-expansion-panel>
+          <div class="cook-actions">
+            <ha-button appearance="plain" data-act="cook-focus">${esc(T("Show all steps"))}</ha-button>
+            <ha-button appearance="plain" data-act="cook-exit">${esc(T("Exit cook mode"))}</ha-button>
           </div>
-        </div>`;
-    },
-
-    /** One control for scaling: type an amount, nudge it, or pick a multiplier. */
-    _scaleControlHtml(r, k) {
-      const b = scaleBasis(r);
-      const presets = SCALES.map(
-        ([v, label]) => `<button class="chip ${v === k ? "active" : ""}" data-scale="${v}">${label}</button>`
-      ).join("");
-      const amount = fmtYield(b.base * k);
-      const hint =
-        k === 1
-          ? "As written"
-          : `${formatNumber(k)}× the recipe${b.unit === "×" ? "" : ` (written for ${fmtYield(b.base)}${b.unit ? ` ${esc(b.unit)}` : ""})`}`;
-      return `<div class="scale">
-          <span class="muted">${b.label}</span>
-          <button class="step" data-step="-1" aria-label="Less">−</button>
-          <input id="amount" type="number" min="0" step="any" value="${amount}" title="Type how much you want">
-          <button class="step" data-step="1" aria-label="More">+</button>
-          ${b.unit && b.unit !== "×" ? `<span>${esc(b.unit)}</span>` : b.unit === "×" ? "<span>×</span>" : ""}
-          <span style="width:6px"></span>${presets}
-          <span class="hint">${hint}</span>
         </div>`;
     },
 
@@ -303,12 +287,14 @@ export default function (h) {
           const done = this._doneSteps.has(n);
           const { html: textHtml, links } = this._stepTextParts(r, st, k, n);
           const running = this._timerRunning(`${r.id}:${n}`);
-          return `<div class="cstep ${done ? "done" : ""} ${n === firstOpen ? "current" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}" tabindex="0">
-            <div class="cstep-head"><span>Step ${num}</span><span class="tick">${done ? "✓" : ""}</span></div>
-            <div class="cstep-text">${textHtml}</div>
-            ${links ? `<div class="step-ings">${links}</div>` : ""}
-            ${this._timerButtonsHtml(r, st, n, num)}
-          </div>`;
+          return `<ha-card class="cstep ${done ? "done" : ""} ${n === firstOpen ? "current" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}" tabindex="0">
+            <div class="card-content">
+              <div class="cstep-head"><span>${esc(T("Step"))} ${num}</span>${done ? `<ha-icon icon="mdi:check-circle" class="cstep-tick"></ha-icon>` : `<ha-icon icon="mdi:circle-outline" class="cstep-tick off"></ha-icon>`}</div>
+              <div class="cstep-text">${textHtml}</div>
+              ${links ? `<div class="step-ings">${links}</div>` : ""}
+              ${this._timerButtonsHtml(r, st, n, num)}
+            </div>
+          </ha-card>`;
         })
         .join("");
       const makes = r.yield_amount ? ` · Makes ${fmtYield(r.yield_amount * k)} ${esc(r.yield_unit || "")}` : "";
@@ -316,22 +302,25 @@ export default function (h) {
         <div class="cookp">
           <div class="cook-top">
             <h2>${esc(r.name)}<span class="muted" style="font-weight:400">${makes}</span></h2>
-            ${this._scaleControlHtml(r, k)}
-            ${this._chipAltHtml()}
+            ${this._rdScaleHtml(r, k)}
             ${(() => {
               const jumps = all.map((x, n) => ({ x, n })).filter((o) => o.x.section);
               return this._cookSections(r).length
                 ? `<span class="cook-jumps">${jumps
-                    .map((o) => `<button class="btn secondary" data-act="cook-jump" data-id="${o.n}">${esc(o.x.text)}</button>`)
+                    .map((o) => `<ha-assist-chip data-act="cook-jump" data-id="${o.n}" label="${esc(o.x.text)}"></ha-assist-chip>`)
                     .join("")}</span>`
                 : "";
             })()}
-            <button class="btn secondary" data-act="cook-focus" title="Show one step at a time">One step at a time</button>
-            <button class="btn secondary" data-act="cook-exit">Exit</button>
+            <ha-button appearance="outlined" data-act="cook-focus">${esc(T("One step at a time"))}</ha-button>
+            <ha-button appearance="plain" data-act="cook-exit">${esc(T("Exit"))}</ha-button>
           </div>
           <div class="cook-cols">
-            <aside class="pane cook-ings"><h3>Ingredients</h3>${this._ingredientsListHtml(r, k)}</aside>
-            <section class="cook-steps">${steps || `<p class="muted">This recipe has no steps yet.</p>`}</section>
+            ${
+              this._brCompact()
+                ? `<ha-expansion-panel class="cook-ings-panel" left-chevron outlined><div slot="header">${esc(T("Ingredients"))}</div>${this._ingredientsListHtml(r, k)}</ha-expansion-panel>`
+                : `<ha-card class="cook-ings" header="${esc(T("Ingredients"))}">${this._ingredientsListHtml(r, k)}</ha-card>`
+            }
+            <section class="cook-steps">${steps || `<p class="muted">${esc(T("This recipe has no steps yet."))}</p>`}</section>
           </div>
         </div>`;
     },
@@ -371,6 +360,51 @@ export default function (h) {
         else groups[groups.length - 1].steps.push({ s, n, num: ++num });
       });
       return groups.filter((g) => g.steps.length || g.title);
+    },
+
+    /** The amount box and the multiplier buttons (the recipe page and cook mode share them). */
+    _bindScale(root) {
+      const r = this._recipe(this._view.id);
+      if (!r) return;
+      const amount = root.getElementById("amount");
+      if (amount) amount.value = fmtYield(scaleBasis(r).base * this._scale);
+      const tg = root.getElementById("rd-scale");
+      if (tg) {
+        tg.buttons = SCALES.map(([v, label]) => ({ label, value: String(v) }));
+        const hit = SCALES.find(([v]) => v === this._scale);
+        tg.active = hit ? String(hit[0]) : "";
+        tg.addEventListener("value-changed", (e) => {
+          const v = e.detail && parseFloat(e.detail.value);
+          if (!(v > 0) || v === this._scale) return;
+          this._scale = v;
+          this._render();
+        });
+      }
+    },
+
+    /** Ticking an ingredient off: remembered for the recipe. */
+    _bindIngChecks(on) {
+      on("ha-check-list-item[data-ing]", "request-selected", (e) => {
+        if (!e.detail || e.detail.source !== "interaction") return;
+        const n = +e.currentTarget.dataset.ing;
+        if (e.detail.selected) this._checked.add(n);
+        else this._checked.delete(n);
+        this._saveProgress();
+      });
+    },
+
+    /** The bar that shows how far through the steps cook mode is (a read-only Home Assistant slider). */
+    async _bindCookBar(root) {
+      const bar = root.getElementById("cook-bar");
+      if (!bar) return;
+      await this._tkElement("ha-control-slider", { type: "tile", entity: "light.x", features: [{ type: "light-brightness" }] });
+      bar.min = 0;
+      bar.max = Number(bar.dataset.of);
+      bar.value = Number(bar.dataset.n);
+      bar.step = 1;
+      bar.mode = "start";
+      bar.showHandle = false;
+      bar.setAttribute("aria-readonly", "true");
     },
 
     /** The switch that adds the other unit to the ingredient chips in the steps. */
@@ -500,28 +534,10 @@ export default function (h) {
     _bindDetail(root, on) {
       const r = this._recipe(this._view.id);
       if (!r) return;
-      const amount = root.getElementById("amount");
-      if (amount) amount.value = fmtYield(scaleBasis(r).base * this._scale);
-      const tg = root.getElementById("rd-scale");
-      if (tg) {
-        tg.buttons = SCALES.map(([v, label]) => ({ label, value: String(v) }));
-        const hit = SCALES.find(([v]) => v === this._scale);
-        tg.active = hit ? String(hit[0]) : "";
-        tg.addEventListener("value-changed", (e) => {
-          const v = e.detail && parseFloat(e.detail.value);
-          if (!(v > 0) || v === this._scale) return;
-          this._scale = v;
-          this._render();
-        });
-      }
-      on("ha-check-list-item[data-ing]", "request-selected", (e) => {
-        if (!e.detail || e.detail.source !== "interaction") return;
-        const n = +e.currentTarget.dataset.ing;
-        if (e.detail.selected) this._checked.add(n);
-        else this._checked.delete(n);
-        this._saveProgress();
-      });
-      on("[data-chip]", "click", (e) => {
+      this._nuMountTables(root);
+      this._bindScale(root);
+      this._bindIngChecks(on);
+      on("[data-chip][data-value]", "click", (e) => {
         const { chip, value } = e.currentTarget.dataset;
         this._sel = { categories: new Set(), tools: new Set(), tags: new Set() };
         this._sel[chip].add(value);

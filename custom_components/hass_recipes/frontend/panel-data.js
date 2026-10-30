@@ -30,46 +30,41 @@ export default function (h) {
       const items = this._trash || [];
       if (!items.length) return "";
       const when = (iso) => new Date(iso).toLocaleDateString(this._hass && this._hass.language, { day: "numeric", month: "short" });
-      return `<div class="panel" style="margin-bottom:16px">
-          <h2>Recently deleted</h2>
-          <p class="muted">Deleted recipes stay here for 30 days.</p>
-          ${items
+      return `<ha-card class="data-card" header="${esc(T("Recently deleted"))}"><div class="card-content muted">${esc(T("Deleted recipes stay here for 30 days."))}</div>
+          <ha-list-base>${items
             .map(
-              (t) => `<div class="trash-row" style="display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--divider-color)">
-                <span style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(t.name || "")} <span class="muted">· ${esc(when(t.deleted_at))}</span></span>
-                <button class="btn secondary" data-act="trash-restore" data-id="${esc(t.id)}">Restore</button></div>`
+              (t) => `<ha-list-item-base headline="${esc(t.name || "")}" supporting-text="${esc(when(t.deleted_at))}">
+                <ha-button slot="end" size="s" appearance="outlined" data-act="trash-restore" data-id="${esc(t.id)}">${esc(T("Restore"))}</ha-button></ha-list-item-base>`
             )
-            .join("")}
-          <div class="actions"><button class="btn secondary danger" data-act="trash-empty">Empty trash</button></div>
-        </div>`;
+            .join("")}</ha-list-base>
+          <div class="card-actions"><ha-button appearance="plain" variant="danger" data-act="trash-empty"><ha-icon slot="start" icon="mdi:delete-forever-outline"></ha-icon>${esc(T("Empty trash"))}</ha-button></div>
+        </ha-card>`;
     },
     _dataHtml() {
       const m = this._dataMsg;
       const msg = m
-        ? `<div class="${m.kind === "error" ? "error" : "muted"}" style="margin:12px 0;font-size:15px">${m.kind === "ok" ? "✅ " : m.kind === "busy" ? "⏳ " : "❌ "}${esc(m.text)}</div>`
+        ? `<ha-alert alert-type="${m.kind === "error" ? "error" : m.kind === "ok" ? "success" : "info"}">${esc(m.text)}</ha-alert>`
         : "";
       return `
-        <div class="toolbar"><button class="btn secondary" data-act="back">← Back</button></div>
+        <div class="data-page">
+        <div><ha-button appearance="plain" data-act="back"><ha-icon slot="start" icon="mdi:arrow-left"></ha-icon>${esc(T("Back"))}</ha-button></div>
         ${msg}
         ${this._trashHtml()}
-        <div class="panel" style="margin-bottom:16px">
-          <h2>Export</h2>
-          <p class="muted">Download every recipe and cookbook, with uploaded photos embedded, as one JSON file. Keep it as a backup, or import it into another Home Assistant.</p>
-          <button class="btn" data-act="export">Download all recipes (JSON)</button>
-        </div>
-        <div class="panel" style="margin-bottom:16px">
-          <h2>Import a file</h2>
-          <p class="muted">Accepts a Recipes export, <strong>Mealie</strong> recipe JSON or export zip, a <strong>Paprika</strong> <code>.paprikarecipes</code> file, or schema.org recipe JSON. Recipes you already have (same name and source) are skipped.</p>
-          <input id="import-file" type="file" accept=".json,.zip,.paprikarecipes,.gz,application/json,application/zip">
-        </div>
-        <div class="panel">
-          <h2>Migrate from a running Mealie</h2>
-          <p class="muted">Pulls every recipe through Mealie's API. Create a token in Mealie under <em>your profile → API tokens</em>. The token is used once and not stored. Requires a Home Assistant administrator.</p>
-          <form id="mealie">
-            <div class="field"><label class="lbl">Mealie URL</label><input name="url" type="url" required placeholder="http://mealie.local:9925"></div>
-            <div class="field"><label class="lbl">API token</label><input name="token" type="password" required autocomplete="off"></div>
-            <button class="btn" type="submit" id="mealie-btn">Migrate recipes</button>
-          </form>
+        <ha-card class="data-card" header="${esc(T("Export"))}">
+          <div class="card-content muted">${esc(T("Download every recipe and cookbook, with uploaded photos embedded, as one JSON file. Keep it as a backup, or import it into another Home Assistant."))}</div>
+          <div class="card-actions"><ha-button appearance="filled" data-act="export"><ha-icon slot="start" icon="mdi:download"></ha-icon>${esc(T("Download all recipes (JSON)"))}</ha-button></div>
+        </ha-card>
+        <ha-card class="data-card" header="${esc(T("Import a file"))}">
+          <div class="card-content muted">${esc(T("Accepts a Recipes export, Mealie recipe JSON or export zip, a Paprika .paprikarecipes file, or schema.org recipe JSON. Recipes you already have (same name and source) are skipped."))}</div>
+          <input id="import-file" type="file" accept=".json,.zip,.paprikarecipes,.gz,application/json,application/zip" hidden>
+          <div class="card-actions"><ha-button appearance="filled" data-act="import-file-pick"><ha-icon slot="start" icon="mdi:upload"></ha-icon>${esc(T("Choose a file"))}</ha-button></div>
+        </ha-card>
+        <ha-card class="data-card" header="${esc(T("Migrate from a running Mealie"))}">
+          <div class="card-content"><p class="muted">${esc(T("Pulls every recipe through Mealie's API. Create a token in Mealie under your profile → API tokens. The token is used once and not stored. Requires a Home Assistant administrator."))}</p>
+            <ha-input id="mealie-url" appearance="outlined" type="url" label="${esc(T("Mealie URL"))}" placeholder="http://mealie.local:9925"></ha-input>
+            <ha-input id="mealie-token" appearance="outlined" type="password" label="${esc(T("API token"))}" autocomplete="off"></ha-input></div>
+          <div class="card-actions"><ha-button appearance="filled" id="mealie-btn" data-act="mealie-go">${esc(T("Migrate recipes"))}</ha-button></div>
+        </ha-card>
         </div>`;
     },
 
@@ -117,16 +112,21 @@ export default function (h) {
       this._render();
     },
 
-    async _migrateMealie(e, form) {
-      e.preventDefault();
-      const fd = new FormData(form);
+    async _migrateMealie() {
+      const root = this.shadowRoot;
+      const url = String((root.getElementById("mealie-url") || {}).value || "").trim();
+      const token = String((root.getElementById("mealie-token") || {}).value || "").trim();
+      if (!url || !token) {
+        this._dataMsg = { kind: "error", text: T("Enter the Mealie URL and an API token.") };
+        return this._render();
+      }
       this._dataMsg = { kind: "busy", text: "Reading recipes from Mealie — this can take a minute for large libraries…" };
       this._render();
       try {
         const res = await this._ws({
           type: "hass_recipes/migrate_mealie",
-          url: fd.get("url").trim(),
-          token: fd.get("token").trim(),
+          url,
+          token,
         });
         const failed = res.failed.length ? `, ${res.failed.length} failed (${res.failed.slice(0, 3).map((f) => f.slug).join(", ")}${res.failed.length > 3 ? ", …" : ""})` : "";
         this._dataMsg = {
@@ -160,37 +160,56 @@ export default function (h) {
       }
       return `
         ${this._sitesHtml()}
-        <div class="panel" style="margin-top:16px">
-          <h2>Import from URL</h2>
-          <p class="muted">Paste one URL to review it before saving, or several (one per line, up to 25) to import them all at once.</p>
-          <form id="import">
-            <div class="field"><textarea name="urls" data-autosize rows="3" required placeholder="https://…" autofocus></textarea></div>
-            <div class="actions">
-              <button class="btn" type="submit" id="import-btn">Import</button>
-              <button class="btn secondary" type="button" data-act="cancel">Cancel</button>
-            </div>
-          </form>
-        </div>
-        <div class="panel" style="margin-top:16px">
-          <h2>Import from text</h2>
-          <p class="muted">Paste a typed-up recipe, a video transcript (for example copied from YouTube), schema.org Recipe JSON, or a page's source (Ctrl+U in your browser, for sites that refuse automated requests with error 403). Recipes with Ingredients and Instructions headings are split at them; other text becomes steps, with amounts like "200 g butter" picked out as ingredients. Review the draft before saving.</p>
-          <form id="import-html">
-            <div class="field"><textarea name="html" rows="8" required placeholder="${esc(T("Paste text, a transcript, Recipe JSON or page source"))}"></textarea></div>
-            <div class="field"><input name="url" type="url" placeholder="Recipe URL (optional, kept as the source)"></div>
+        <ha-card class="data-card" header="${esc(T("Import from URL"))}">
+          <div class="card-content"><p class="muted">${esc(T("Paste one URL to review it before saving, or several (one per line, up to 25) to import them all at once."))}</p>
+            <ha-form id="import-urls-form"></ha-form></div>
+          <div class="card-actions"><ha-button appearance="filled" id="import-btn" data-act="import-urls"><ha-icon slot="start" icon="mdi:download"></ha-icon>${esc(T("Import"))}</ha-button>
+            <ha-button appearance="plain" data-act="cancel">${esc(T("Cancel"))}</ha-button></div>
+        </ha-card>
+        <ha-card class="data-card" header="${esc(T("Import from text"))}">
+          <div class="card-content"><p class="muted">${esc(T("Paste a typed-up recipe, a video transcript (for example copied from YouTube), schema.org Recipe JSON, or a page's source (Ctrl+U in your browser, for sites that refuse automated requests with error 403). Recipes with Ingredients and Instructions headings are split at them; other text becomes steps, with amounts like \"200 g butter\" picked out as ingredients. Review the draft before saving."))}</p>
+            <ha-form id="import-text-form"></ha-form>
             ${
               this._aiAvail
-                ? `<div class="field"><ha-formfield label="${esc(T("Tidy with AI"))}"><ha-switch id="import-ai" ${this._importAi === false ? "" : "checked"}></ha-switch></ha-formfield>
-                    <p class="muted">${esc(T("Uses the AI set up in Home Assistant (AI Task) to read the text. If it fails, the basic reading is used."))}</p></div>`
+                ? `<ha-formfield label="${esc(T("Tidy with AI"))}"><ha-switch id="import-ai" ${this._importAi === false ? "" : "checked"}></ha-switch></ha-formfield>
+                    <p class="muted">${esc(T("Uses the AI set up in Home Assistant (AI Task) to read the text. If it fails, the basic reading is used."))}</p>`
                 : `<p class="muted">${esc(T("Set up an AI such as Google Gemini in Home Assistant to tidy imported text with AI."))}</p>`
-            }
-            <div class="actions"><button class="btn" type="submit" id="import-html-btn">Import</button></div>
-          </form>
-        </div>`;
+            }</div>
+          <div class="card-actions"><ha-button appearance="filled" id="import-html-btn" data-act="import-text"><ha-icon slot="start" icon="mdi:text-box-plus-outline"></ha-icon>${esc(T("Import"))}</ha-button></div>
+        </ha-card>`;
     },
 
-    async _importHtml2(e, form) {
-      e.preventDefault();
-      const fd = new FormData(form);
+    /** The two import forms are Home Assistant's own form fields (the text boxes are the multi-line text selector). */
+    _bindImport(root) {
+      this._imp = this._imp || { urls: "", text: "", url: "" };
+      const make = (id, schema, labels) => {
+        const form = root.getElementById(id);
+        if (!form) return;
+        form.hass = this._hass;
+        form.schema = schema;
+        form.data = this._imp;
+        form.computeLabel = (sc) => T(labels[sc.name] || sc.name);
+        form.addEventListener("value-changed", (e) => {
+          e.stopPropagation();
+          this._imp = { ...this._imp, ...(e.detail.value || {}) };
+        });
+      };
+      make("import-urls-form", [{ name: "urls", selector: { text: { multiline: true } } }], { urls: "Recipe URLs" });
+      make(
+        "import-text-form",
+        [
+          { name: "text", selector: { text: { multiline: true } } },
+          { name: "url", selector: { text: { type: "url" } } },
+        ],
+        { text: "Recipe text", url: "Recipe URL (optional, kept as the source)" }
+      );
+    },
+
+    async _importHtml2() {
+      const root = this.shadowRoot;
+      const text = String((this._imp || {}).text || "");
+      const textUrl = String((this._imp || {}).url || "").trim();
+      if (!text.trim()) return;
       const btn = this.shadowRoot.getElementById("import-html-btn");
       btn.disabled = true;
       btn.textContent = "Importing…";
@@ -199,7 +218,7 @@ export default function (h) {
         const ai = !!(sw && sw.checked);
         if (sw) this._importAi = ai;
         if (ai) btn.textContent = T("Reading with AI…");
-        this._draft = await this._ws({ type: "hass_recipes/import_text", text: fd.get("html"), url: String(fd.get("url") || "").trim(), ai });
+        this._draft = await this._ws({ type: "hass_recipes/import_text", text, url: textUrl, ai });
         const aiError = this._draft.ai_error;
         this._go({ name: "edit" });
         if (aiError) {
@@ -212,9 +231,9 @@ export default function (h) {
       }
     },
 
-    async _import(e, form) {
-      e.preventDefault();
-      const urls = new FormData(form).get("urls").split(/\s+/).map((u) => u.trim()).filter(Boolean);
+    async _import() {
+      const urls = String((this._imp || {}).urls || "").split(/\s+/).map((u) => u.trim()).filter(Boolean);
+      if (!urls.length) return;
       const btn = this.shadowRoot.getElementById("import-btn");
       btn.disabled = true;
       btn.textContent = "Importing…";

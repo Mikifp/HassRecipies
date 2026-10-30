@@ -16,6 +16,7 @@ const {
   isHeader,
   headerText,
   splitSubs,
+  ingredientParts,
   stepTextHtml,
   timerSpecs,
   clock,
@@ -929,13 +930,13 @@ class HassRecipesCookCard extends RecipesBase {
     const k = this._scale();
     const mode = this._config.units === "original" ? "original" : "grams";
     const progress = loadProgress(r.id);
-    const partsOf = (i) => ingParts((r.parsed_ingredients || [])[i], splitSubs(r.ingredients[i] ?? "").main, k, mode);
-    const commentOf = (i) => splitSubs(r.ingredients[i] ?? "").comment;
+    const partsOf = (i) => ingParts((r.parsed_ingredients || [])[i], ingredientParts(r, i).main, k, mode);
+    const commentOf = (i) => ingredientParts(r, i).comment;
     // "or 180 g coconut oil" lines for every alternative of an ingredient
     const altsOf = (i) => {
       const p = (r.parsed_ingredients || [])[i] || {};
       const subs = p.substitutes || (p.substitute ? [p.substitute] : []);
-      return splitSubs(r.ingredients[i] ?? "").alts.map((text, n) => {
+      return ingredientParts(r, i).alts.map((text, n) => {
         const b = ingParts(subs[n], text, k, mode);
         return `${b.qty ? `${b.qty} ` : ""}${b.food}`;
       });
@@ -948,7 +949,7 @@ class HassRecipesCookCard extends RecipesBase {
     };
     // ingredients the step names become chips in its text; the others stay in the row under it
     const linked = st.ingredients.filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]));
-    const named = stepTextHtml(st.text || "", linked.map((i) => ({ key: i, text: splitSubs(r.ingredients[i]).main })), chipOf);
+    const named = stepTextHtml(st.text || "", linked.map((i) => ({ key: i, text: ingredientParts(r, i).main })), chipOf);
     const ings = linked
       .filter((i) => !named.placed.has(i))
       .map(chipOf)

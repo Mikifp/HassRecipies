@@ -93,11 +93,13 @@ export const stepTimers = (s) => {
 };
 
 export const normStep = (s) => {
-  if (typeof s === "string") return { text: s, ingredients: [], timer: null, timers: [], section: false };
+  if (typeof s === "string") return { text: s, ingredients: [], ingredient_ids: [], timer: null, timers: [], section: false };
   const timers = stepTimers(s);
   return {
     text: s.text || "",
+    // the ingredients a step uses: ids (what is stored) and, worked out from them, indexes into the list
     ingredients: s.ingredients || [],
+    ingredient_ids: s.ingredient_ids,
     timer: timers.length ? timers[0].seconds : null,
     timers,
     section: !!s.section,
@@ -166,6 +168,17 @@ export const splitSubs = (t) => {
 export const joinSubs = (text, alts, comment = "") => {
   const line = [text.trim(), ...alts.map((a) => a.trim()).filter(Boolean)].join(" || ");
   return comment.trim() ? `${line} // ${comment.trim().replace(/\s+/g, " ")}` : line;
+};
+
+/**
+ * What an ingredient is made of: { main, alts, comment }. A recipe from the server has its ingredients as items
+ * (`ingredient_items`: what was typed, a note and alternatives), so nothing has to be split; the typed lines
+ * are only read for a recipe that has no items (a draft that has not been saved).
+ */
+export const ingredientParts = (recipe, i) => {
+  const item = (recipe.ingredient_items || [])[i];
+  if (item) return { main: item.raw || "", alts: [...(item.alternatives || [])], comment: item.comment || "" };
+  return splitSubs((recipe.ingredients || [])[i] ?? "");
 };
 
 export const clock = (sec) => {
@@ -276,6 +289,29 @@ const NUMERIC = /^[\d¼-¾⅐-⅞¹²³⁰-⁹₀-₉⁄/.,\-–\s]+/u;
 // words that end the food part of a line: "280 gram sukker jeg brugte halv brun farin"
 const STOP = new Set("jeg til svarer eller or men som der kan også at for med uden evt ca".split(" "));
 const JOIN = new Set(["og", "and", "&"]);
+
+/** The words that are units in an ingredient line (kept in step with ingredients.py). */
+export const UNIT_WORDS = UNITS;
+
+const AMOUNT = /^(\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?(?:\s+\d+\/\d+|\/\d+)?(?:\s*[¼-¾⅐-⅞])?|[¼-¾⅐-⅞])(?:\s+|$)/u;
+
+/** "200 g butter" -> { amount: "200", unit: "g", food: "butter" } (a unit is only a word the recipe parser knows). */
+export const splitAmount = (text) => {
+  const t = String(text ?? "").trim();
+  const m = t.match(AMOUNT);
+  if (!m) return { amount: "", unit: "", food: t };
+  let rest = t.slice(m[0].length);
+  let unit = "";
+  const w = rest.match(/^([\p{L}.]+)(?:\s+|$)/u);
+  if (w && UNITS.has(w[1].replace(/\.$/, "").toLowerCase())) {
+    unit = w[1];
+    rest = rest.slice(w[0].length);
+  }
+  return { amount: m[1].trim(), unit, food: rest.trim() };
+};
+
+export const joinAmount = ({ amount = "", unit = "", food = "" }) => [amount, unit, food].map((x) => String(x).trim()).filter(Boolean).join(" ");
+
 
 /**
  * The food words of an ingredient line, best first: units, amounts and trailing remarks are left

@@ -1,469 +1,381 @@
-/* Recipes panel: the section-card editor, built from Home Assistant's own ha-card, ha-input, ha-dropdown,
- * ha-button, ha-icon-button and ha-assist-chip. Mixed into the panel class by recipes-panel.js.
+/* Recipes panel: the recipe editor's ingredients and steps, built from Home Assistant's own ha-card, ha-input,
+ * ha-textarea, ha-sortable, ha-dropdown, ha-button, ha-icon-button, ha-checkbox and ha-input-chip.
+ * Mixed into the panel class by recipes-panel.js.
  *
- * It edits this._form (flat ingredient rows and steps). Here the flat lists are shown as
- * sections: a section holds its ingredients and its steps together. Ingredients a step uses are
- * chips inside the step text; the saved text keeps the plain word, the link is stored as before.
+ * It edits this._form: the ingredient rows and the steps, two lists that are saved as they are.
+ *  - Ingredients are fields (amount, unit, food, note) or one line of text each; an alternative sits under its
+ *    ingredient. Every ingredient has an id (the row's uid), which is what steps link to.
+ *  - Steps are text with timers. Pick a step, then tick the ingredients it uses in the list beside it.
+ *  - Both lists can have sections, and both are reordered by dragging.
  */
 export default function (h) {
-  const { esc, T } = h;
-  const icon = (n) => `<ha-icon icon="mdi:${n}"></ha-icon>`;
-  const norm = (t) => String(t ?? "").trim().toLowerCase();
-
-  const { foodWords, detectChips } = h;
-  /** What gets typed into the step text when an ingredient is picked. */
-  const pickWord = (row) => foodWords(row.text)[0] || String(row.text).trim();
-
-  /** A chip shows the ingredient exactly as it is written in the ingredient list. */
-  const chipLabel = (row) => String(row.text).trim();
+  const { esc, T, foodWords, detectChips, splitSubs, splitAmount, joinAmount, fl } = h;
+  const icon = (n, slot = "") => `<ha-icon ${slot ? `slot="${slot}" ` : ""}icon="mdi:${n}"></ha-icon>`;
+  const move = (list, from, to) => {
+    if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return;
+    const [item] = list.splice(from, 1);
+    list.splice(to, 0, item);
+  };
+  const secs = (t) => (parseFloat(t.h) || 0) * 3600 + (parseFloat(t.m) || 0) * 60 + (parseFloat(t.s) || 0);
+  const label = (row) => String(row.text).trim();
 
   return {
-    // ---- flat lists <-> sections ----
-    /** The flat rows and steps as sections: [{ title, rowHeader, stepHeader, rows, steps }]. */
-    _neGroups() {
-      const { rows, steps } = this._form;
-      steps.forEach((s) => {
+    // ---- the lists as text ----
+    /** The ingredient rows as lines: ## for a section, || before an alternative, // before the note. */
+    _neToText() {
+      return this._form.rows
+        .map((r) => (r.header ? `## ${r.text}` : [r.text, ...r.subs.filter(Boolean).map((a) => ` || ${a}`)].join("") + (r.comment ? ` // ${r.comment}` : "")))
+        .join("\n");
+    },
+
+    /** Lines -> rows. A line that is the same as one that was there keeps its id (and the steps' links). */
+    _neFromText(text) {
+      const old = new Map(this._form.rows.map((r) => [this._neLine(r), r.uid]));
+      return String(text)
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const row = this._rowFromString(line);
+          const same = old.get(this._neLine(row));
+          if (same) {
+            old.delete(this._neLine(row));
+            row.uid = same;
+          }
+          return row;
+        });
+    },
+
+    _neLine(r) {
+      return r.header ? `## ${r.text}` : [r.text, ...r.subs.filter(Boolean)].join(" || ") + (r.comment ? ` // ${r.comment}` : "");
+    },
+
+    // ---- drawing ----
+    _neMode() {
+      return this._neModeValue || "fields";
+    },
+
+    _neSteps() {
+      this._form.steps.forEach((s) => {
         if (!s.uid) s.uid = this._nextUid();
       });
-      const R = [{ rowHeader: null, rows: [] }];
-      for (const r of rows) {
-        if (r.header) R.push({ rowHeader: r, rows: [] });
-        else R[R.length - 1].rows.push(r);
+      return this._form.steps;
+    },
+
+    /** The step that is being edited: the one picked, else the first that is not a section. */
+    _neCurrent() {
+      const steps = this._neSteps();
+      return steps.find((s) => s.uid === this._neCur && !s.section) || steps.find((s) => !s.section) || null;
+    },
+
+    _neStatus(row) {
+      if (!String(row.text).trim()) return ["", ""];
+      const parts = splitAmount(row.text);
+      if (!parts.amount) return ["warn", T("no amount")];
+      const known = this._foodNamesMap()[fl.nameKey(parts.food)];
+      return known ? ["ok", T("a food of yours")] : ["", ""];
+    },
+
+    _neAmountFields(text, attrs) {
+      const p = splitAmount(text);
+      const f = (name, value, ph, cls) =>
+        `<ha-input class="ne-f ${cls}" data-f="${name}" ${attrs} value="${esc(value)}" placeholder="${esc(ph)}" aria-label="${esc(ph)}"></ha-input>`;
+      const alt = /data-alt=/.test(attrs);
+      return f("amount", p.amount, T("Amount"), "ne-amount") + f("unit", p.unit, T("Unit"), "ne-unit") + f("food", p.food, alt ? T("Or this food") : T("Food"), "ne-food");
+    },
+
+    _neIngredientHtml(row) {
+      const uid = esc(row.uid);
+      if (row.header) {
+        return `<div class="ne-ing" data-uid="${uid}">
+            <div class="ne-line">${icon("drag", "")}
+              <ha-input class="ne-f ne-title" data-f="title" data-uid="${uid}" value="${esc(row.text)}" placeholder="${esc(T("Section title"))}" aria-label="${esc(T("Section title"))}"></ha-input>
+              <ha-icon-button class="ne-del" data-ne-act="del-ing" data-uid="${uid}" label="${esc(T("Delete"))}">${icon("close")}</ha-icon-button>
+            </div></div>`;
       }
-      const S = [{ stepHeader: null, steps: [] }];
-      for (const s of steps) {
-        if (s.section) S.push({ stepHeader: s, steps: [] });
-        else S[S.length - 1].steps.push(s);
-      }
-      const Rh = R.slice(1);
-      const Sh = S.slice(1);
-      const pair = new Map();
-      const used = new Set();
-      // the same title is the same section; what is left is paired in order when it lines up
-      for (const r of Rh) {
-        const s = Sh.find((x) => !used.has(x) && norm(x.stepHeader.text) === norm(r.rowHeader.text));
-        if (s) {
-          used.add(s);
-          pair.set(r, s);
-        }
-      }
-      const loneR = Rh.filter((r) => !pair.has(r));
-      const loneS = Sh.filter((s) => !used.has(s));
-      if (loneR.length && loneR.length === loneS.length) loneR.forEach((r, i) => pair.set(r, loneS[i]));
-      const paired = new Set(pair.values());
-      const groups = [{ title: "", rowHeader: null, stepHeader: null, rows: R[0].rows, steps: S[0].steps }];
-      for (const r of Rh) {
-        const s = pair.get(r);
-        groups.push({ title: r.rowHeader.text, rowHeader: r.rowHeader, stepHeader: s ? s.stepHeader : null, rows: r.rows, steps: s ? s.steps : [] });
-      }
-      for (const s of Sh) {
-        if (!paired.has(s)) groups.push({ title: s.stepHeader.text, rowHeader: null, stepHeader: s.stepHeader, rows: [], steps: s.steps });
-      }
-      // both lists carry the same title, which is what keeps them one section
-      for (const g of groups) if (g.rowHeader && g.stepHeader) g.stepHeader.text = g.rowHeader.text;
-      groups.forEach((g, i) => {
-        g.key = g.rowHeader ? g.rowHeader.uid : i === 0 ? "loose" : `s${i}`;
-      });
-      return groups;
+      const [tone, status] = this._neStatus(row);
+      const alts = row.subs
+        .map(
+          (a, n) => `<div class="ne-alt"><span class="ne-or">${esc(T("or"))}</span>${this._neAmountFields(a, `data-uid="${uid}" data-alt="${n}"`)}
+            <ha-icon-button class="ne-del" data-ne-act="del-alt" data-uid="${uid}" data-alt="${n}" label="${esc(T("Delete"))}">${icon("close")}</ha-icon-button></div>`
+        )
+        .join("");
+      const noted = !!(row.comment || row._note);
+      return `<div class="ne-ing ${noted ? "has-note" : ""}" data-uid="${uid}">
+          <div class="ne-line"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>
+            ${this._neAmountFields(row.text, `data-uid="${uid}"`)}
+            <ha-input class="ne-f ne-note" data-f="note" data-uid="${uid}" value="${esc(row.comment)}" placeholder="${esc(T("Note"))}" aria-label="${esc(T("Note"))}"></ha-input>
+            <span class="ne-status ${tone}" id="ne-st-${uid}">${esc(status)}</span>
+            <ha-dropdown data-ne-menu="ing" data-uid="${uid}"><ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
+              <ha-dropdown-item value="add-alt">${icon("plus", "icon")}${esc(T("Add an alternative"))}</ha-dropdown-item>
+              ${noted ? "" : `<ha-dropdown-item value="add-note">${icon("note-plus-outline", "icon")}${esc(T("Add a note"))}</ha-dropdown-item>`}
+              <ha-dropdown-item value="up-ing">${icon("arrow-up", "icon")}${esc(T("Move up"))}</ha-dropdown-item>
+              <ha-dropdown-item value="down-ing">${icon("arrow-down", "icon")}${esc(T("Move down"))}</ha-dropdown-item>
+              <ha-dropdown-item value="del-ing" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
+            </ha-dropdown>
+          </div>${alts}</div>`;
     },
 
-    /** Write the sections back as flat lists. */
-    _neApply(groups) {
-      const rows = [];
-      const steps = [];
-      groups.forEach((g, i) => {
-        let title = String(g.title || "").trim();
-        if (i > 0 || title) {
-          if (!title) title = T("New section");
-          g.title = title;
-          g.rowHeader = g.rowHeader || { uid: this._nextUid(), header: true, text: "", subs: [], comment: "" };
-          g.rowHeader.text = title;
-          g.stepHeader = g.stepHeader || { uid: this._nextUid(), section: true, text: "", ingredients: [], timers: [] };
-          g.stepHeader.text = title;
-          rows.push(g.rowHeader);
-          steps.push(g.stepHeader);
-        } else {
-          g.rowHeader = null;
-          g.stepHeader = null;
-        }
-        rows.push(...g.rows);
-        steps.push(...g.steps);
-      });
-      this._form.rows = rows;
-      this._form.steps = steps;
-    },
-
-    // ---- text with ingredient chips ----
-    /** Where each linked ingredient is named in the step text. */
-    _neDetectChips(step, rowsByUid) {
-      const items = (step.ingredients || []).filter((u) => rowsByUid.has(u)).map((u) => ({ key: u, text: rowsByUid.get(u).text, names: this._foodNamesForText(rowsByUid.get(u).text) }));
-      return detectChips(step.text, items).map((c) => ({ uid: c.key, start: c.start, len: c.len }));
-    },
-
-    _neChipHtml(row, word) {
-      return `<span class="ne-chip" contenteditable="false" data-uid="${esc(row.uid)}" data-word="${esc(word)}">${esc(chipLabel(row))}</span>`;
-    },
-
-    _neTextHtml(step, rowsByUid) {
-      let chips = step._chips && step._chipsText === step.text ? step._chips : null;
-      if (!chips) {
-        chips = this._neDetectChips(step, rowsByUid);
-        step._chips = chips;
-        step._chipsText = step.text;
-      }
-      chips = chips.filter((c) => rowsByUid.has(c.uid) && step.ingredients.includes(c.uid));
-      step._chips = chips;
-      let html = "";
-      let at = 0;
-      for (const c of chips) {
-        if (c.start < at) continue;
-        html += esc(step.text.slice(at, c.start));
-        html += this._neChipHtml(rowsByUid.get(c.uid), step.text.slice(c.start, c.start + c.len));
-        at = c.start + c.len;
-      }
-      return html + esc(step.text.slice(at));
-    },
-
-    /** Text, chip positions and extra links out of an editable step text. */
-    _neSerialize(el) {
-      let text = "";
-      const chips = [];
-      const walk = (node) => {
-        for (const n of node.childNodes) {
-          if (n.nodeType === 3) text += n.nodeValue;
-          else if (n.nodeType === 1) {
-            if (n.classList.contains("ne-chip")) {
-              const word = n.dataset.word || "";
-              chips.push({ uid: n.dataset.uid, start: text.length, len: word.length });
-              text += word;
-            } else if (n.tagName === "BR") text += "\n";
-            else walk(n);
-          }
-        }
-      };
-      walk(el);
-      return { text: text.replace(/ /g, " ").replace(/​/g, ""), chips };
-    },
-
-    // ---- rendering ----
-    /** A "more" menu: Home Assistant's ha-dropdown with ha-dropdown-items. */
-    _neMenuHtml(kind, d, items) {
-      const attrs = Object.entries(d).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ");
-      return `<ha-dropdown data-ne-menu="${kind}" ${attrs}>
-          <ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
-          ${items
-            .map((it) => `<ha-dropdown-item value="${esc(it.value)}" ${it.danger ? 'variant="danger"' : ""}>${icon(it.icon)}${esc(T(it.label))}</ha-dropdown-item>`.replace("<ha-icon ", '<ha-icon slot="icon" '))
-            .join("")}
-        </ha-dropdown>`;
-    },
-
-    _neRowHtml(row) {
-      return `<div class="ne-row" data-uid="${esc(row.uid)}">
-          <ha-icon-button class="ne-handle" draggable="true" data-ne-drag="row" label="${esc(T("Drag to reorder"))}">${icon("drag-vertical")}</ha-icon-button>
-          <ha-input class="ne-qty" appearance="outlined" data-ne-f="text" placeholder="${esc(T("Ingredient, e.g. 200 g butter"))}" value="${esc(row.text)}"></ha-input>
-          <ha-input class="ne-note" appearance="outlined" data-ne-f="comment" placeholder="${esc(T("Note"))}" value="${esc(row.comment || "")}"></ha-input>
-          <ha-icon-button class="ne-ins" data-ne-act="row-insert" data-uid="${esc(row.uid)}" label="${esc(T("Add to the step you are writing"))}">${icon("text-box-plus-outline")}</ha-icon-button>
-          ${this._neMenuHtml("row", { uid: row.uid }, [
-            { value: "sub-add", icon: "swap-horizontal", label: "Add substitute" },
-            { value: "row-up", icon: "arrow-up", label: "Move up" },
-            { value: "row-down", icon: "arrow-down", label: "Move down" },
-            { value: "row-remove", icon: "delete-outline", label: "Delete ingredient", danger: true },
-          ])}
-          ${(row.subs || [])
-            .map(
-              (sub, n) => `<div class="ne-sub-row"><ha-input appearance="outlined" data-ne-f="sub" placeholder="${esc(T("Substitute with its own amount, e.g. 180 g coconut oil"))}" value="${esc(sub)}"></ha-input>
-                <ha-icon-button data-ne-act="sub-remove" data-uid="${esc(row.uid)}" data-i="${n}" label="${esc(T("Remove"))}">${icon("close")}</ha-icon-button></div>`
-            )
-            .join("")}
-        </div>`;
-    },
-
-    _neStepHtml(step, num, rowsByUid, sectionRows = []) {
-      const textHtml = this._neTextHtml(step, rowsByUid);
-      const extras = (step.ingredients || []).filter((uid) => {
-        if (!rowsByUid.has(uid)) return false;
-        const chips = step._chips && step._chipsText === step.text ? step._chips : [];
-        return !chips.some((c) => c.uid === uid);
-      });
-      const linkRows = sectionRows.filter((r) => r.text.trim());
-      return `<div class="ne-step" data-uid="${esc(step.uid)}">
-          <ha-icon-button class="ne-handle" draggable="true" data-ne-drag="step" label="${esc(T("Drag to reorder"))}">${icon("drag-vertical")}</ha-icon-button>
-          <span class="ne-n">${num}</span>
-          <div class="ne-main">
-            <div class="ne-text" contenteditable="true" role="textbox" aria-multiline="true" data-ph="${esc(T("Describe what to do. Type @ to add an ingredient. Shift+Enter for a new line."))}">${textHtml}</div>
-            ${
-              extras.length || (step.timers || []).length
-                ? `<div class="ne-extras">${extras
-                    .map(
-                      (uid) =>
-                        `<span class="ne-chip ne-extra" data-uid="${esc(uid)}">${esc(chipLabel(rowsByUid.get(uid)))}<button type="button" data-ne-act="unlink" data-uid="${esc(uid)}" title="${esc(T("Remove"))}" aria-label="${esc(T("Remove"))}">${icon("close")}</button></span>`
-                    )
-                    .join("")}
-                  ${(step.timers || [])
-                    .map(
-                      (t, ti) => `<span class="ne-timer">${icon("clock-outline")}
-                      <ha-input class="nt" appearance="outlined" type="number" data-ne-f="th" placeholder="0" value="${esc(t.h)}" aria-label="${esc(T("Hours"))}"></ha-input><span>h</span>
-                      <ha-input class="nt" appearance="outlined" type="number" data-ne-f="tm" placeholder="0" value="${esc(t.m)}" aria-label="${esc(T("Minutes"))}"></ha-input><span>min</span>
-                      <ha-input class="nt" appearance="outlined" type="number" data-ne-f="ts" placeholder="0" value="${esc(t.s)}" aria-label="${esc(T("Seconds"))}"></ha-input><span>sec</span>
-                      <ha-input class="ne-tl" appearance="outlined" data-ne-f="tl" placeholder="${esc(T("Label, e.g. simmer"))}" value="${esc(t.label)}" maxlength="60"></ha-input>
-                      <ha-icon-button data-ne-act="timer-remove" data-uid="${esc(step.uid)}" data-i="${ti}" label="${esc(T("Remove this timer"))}">${icon("close")}</ha-icon-button></span>`
-                    )
-                    .join("")}</div>`
-                : ""
-            }
-            <div class="ne-pick" hidden></div>
-            ${
-              linkRows.length
-                ? `<div class="ne-quick"><span class="ne-quick-label">${esc(T("Add"))}</span>${linkRows
-                    .map(
-                      (r) =>
-                        `<ha-assist-chip class="ne-quick-chip${(step.ingredients || []).includes(r.uid) ? " used" : ""}" data-ne-act="quick-insert" data-uid="${esc(r.uid)}" label="${esc(chipLabel(r))}"></ha-assist-chip>`
-                    )
-                    .join("")}</div>`
-                : ""
-            }
-          </div>
-          ${this._neMenuHtml("step", { uid: step.uid }, [
-            ...linkRows.map((r) => ({ value: `link:${r.uid}`, icon: "link-variant", label: `${T("Link")}: ${r.text.trim().slice(0, 40)}` })),
-            { value: "timer-add", icon: "timer-outline", label: "Add timer" },
-            { value: "step-autolink", icon: "auto-fix", label: "Link the ingredients this step names" },
-            { value: "step-above", icon: "table-row-plus-before", label: "Insert step above" },
-            { value: "step-below", icon: "table-row-plus-after", label: "Insert step below" },
-            { value: "step-up", icon: "arrow-up", label: "Move up" },
-            { value: "step-down", icon: "arrow-down", label: "Move down" },
-            { value: "step-remove", icon: "delete-outline", label: "Delete step", danger: true },
-          ])}
-        </div>`;
-    },
-
-    _neCardHtml(g, gi, ctx) {
-      const key = g.rowHeader ? g.rowHeader.uid : gi === 0 ? "loose" : `s${gi}`;
-      g.key = key;
-      const collapsed = this._neCollapsed && this._neCollapsed.has(key);
-      const count = `${g.rows.filter((r) => r.text.trim()).length} ingredients · ${g.steps.length} steps`;
-      let body = "";
-      if (!collapsed) {
-        body = `<div class="ne-body">
-            <div class="ne-sub">Ingredients</div>
-            <div class="ne-list" data-ne-list="row" data-gi="${gi}">${g.rows.map((r) => this._neRowHtml(r)).join("")}</div>
-            <ha-button appearance="plain" size="s" data-ne-act="row-add" data-gi="${gi}">${icon("plus").replace("<ha-icon ", '<ha-icon slot="start" ')}Add ingredient</ha-button>
-            <div class="ne-sub">Steps</div>
-            <div class="ne-list" data-ne-list="step" data-gi="${gi}">${g.steps.map((s) => this._neStepHtml(s, ++ctx.num, ctx.rowsByUid, g.rows)).join("")}</div>
-            <ha-button appearance="plain" size="s" data-ne-act="step-add" data-gi="${gi}">${icon("plus").replace("<ha-icon ", '<ha-icon slot="start" ')}Add step</ha-button>
+    _neIngredientsHtml() {
+      const mode = this._neMode();
+      const rows = this._form.rows;
+      const real = rows.filter((r) => !r.header && r.text.trim());
+      const tab = (id, text) => `<ha-assist-chip class="ne-tab" data-ne-act="mode" data-mode="${id}" label="${esc(T(text))}" ${mode === id ? "active" : ""}></ha-assist-chip>`;
+      let body;
+      if (mode === "text") {
+        body = `<div class="ne-hint">${esc(T("One ingredient per line. Use || for an alternative, // for a note and ## for a section."))}</div>
+          <ha-textarea id="ne-text" class="ne-textarea" value="${esc(this._neToText())}" autogrow></ha-textarea>`;
+      } else {
+        body = `<ha-sortable id="ne-ings" handle-selector=".ne-handle">
+            <div class="ne-list">${rows.map((r) => this._neIngredientHtml(r)).join("")}</div>
+          </ha-sortable>
+          <div class="ne-adds">
+            <ha-button appearance="plain" size="s" data-ne-act="add-ing">${icon("plus", "start")}${esc(T("Add ingredient"))}</ha-button>
+            <ha-button appearance="plain" size="s" data-ne-act="add-ing-section">${icon("format-title", "start")}${esc(T("Add section"))}</ha-button>
+            <span class="ne-count">${real.length} ${esc(T("ingredients"))}</span>
           </div>`;
-      } else g.steps.forEach(() => ctx.num++);
-      const movable = gi > 0 || g.title.trim();
-      return `<ha-card class="ne-card" data-gi="${gi}" data-key="${esc(key)}">
-          <div class="ne-head">
-            ${movable ? `<ha-icon-button class="ne-handle" draggable="true" data-ne-drag="group" label="${esc(T("Drag to reorder"))}">${icon("drag-vertical")}</ha-icon-button>` : ""}
-            <ha-icon-button data-ne-act="group-toggle" data-gi="${gi}" label="${esc(T("Expand or collapse"))}">${icon(collapsed ? "chevron-right" : "chevron-down")}</ha-icon-button>
-            <ha-input class="ne-title" appearance="outlined" data-ne-f="title" placeholder="${esc(T("Section title (optional)"))}" value="${esc(g.title)}"></ha-input>
-            <span class="ne-count">${count}</span>
-            ${this._neMenuHtml("group", { gi }, [
-              { value: "group-autolink", icon: "auto-fix", label: "Link the ingredients the steps name" },
-              { value: "group-up", icon: "arrow-up", label: "Move up" },
-              { value: "group-down", icon: "arrow-down", label: "Move down" },
-              { value: "group-remove", icon: "delete-outline", label: "Delete section", danger: true },
-            ])}
-          </div>${body}</ha-card>`;
+      }
+      return `<ha-card class="ne-card"><div class="ne-cardhead"><h3>${esc(T("Ingredients"))}</h3><div class="ne-tabs">${tab("fields", "Fields")}${tab("text", "Text")}</div></div>
+          <div class="ne-body">${body}</div></ha-card>`;
+    },
+
+    // ---- steps ----
+    _neSuggestions(step) {
+      const out = [];
+      const rows = this._form.rows.filter((r) => !r.header && r.text.trim() && !step.ingredients.includes(r.uid));
+      const items = rows.map((r) => ({ key: r.uid, text: r.text, names: this._foodNamesForText(r.text) }));
+      const seen = new Set();
+      for (const c of detectChips(step.text || "", items)) {
+        if (seen.has(c.key)) continue;
+        seen.add(c.key);
+        out.push({ kind: "link", uid: c.key, text: label(rows.find((r) => r.uid === c.key)) });
+      }
+      const m = String(step.text || "").match(/(\d+)\s*(?:minutter|minutes|minut|min)\b/i);
+      if (m && !(step.timers || []).some((t) => secs(t) === Number(m[1]) * 60)) out.push({ kind: "timer", minutes: Number(m[1]) });
+      return out;
+    },
+
+    _neChipsHtml(step) {
+      const byUid = new Map(this._form.rows.map((r) => [r.uid, r]));
+      const linked = step.ingredients
+        .filter((u) => byUid.has(u) && !byUid.get(u).header)
+        .map((u) => `<ha-input-chip class="ne-chip" data-unlink="1" data-uid="${esc(step.uid)}" data-ing="${esc(u)}" label="${esc(label(byUid.get(u)))}"></ha-input-chip>`)
+        .join("");
+      const suggested = this._neSuggestions(step)
+        .map((g) =>
+          g.kind === "link"
+            ? `<ha-assist-chip class="ne-sug" data-ne-act="link" data-uid="${esc(step.uid)}" data-ing="${esc(g.uid)}" label="${esc(`${T("Link")} ${g.text}?`)}">${icon("link-plus", "icon")}</ha-assist-chip>`
+            : `<ha-assist-chip class="ne-sug" data-ne-act="sug-timer" data-uid="${esc(step.uid)}" data-minutes="${g.minutes}" label="${esc(`${T("Add a timer for")} ${g.minutes} ${T("min")}?`)}">${icon("timer-plus-outline", "icon")}</ha-assist-chip>`
+        )
+        .join("");
+      return linked + suggested;
+    },
+
+    _neTimersHtml(step) {
+      return (step.timers || [])
+        .map((t, n) => {
+          const f = (name, v, ph, w) =>
+            `<ha-input class="ne-f ne-tnum ${w}" type="${name === "label" ? "text" : "number"}" data-t="${name}" data-uid="${esc(step.uid)}" data-n="${n}" value="${esc(v)}" placeholder="${esc(ph)}" aria-label="${esc(ph)}"></ha-input>`;
+          return `<div class="ne-timer">${icon("timer-outline")}${f("h", t.h, "0", "")}<span>${esc(T("h"))}</span>${f("m", t.m, "0", "")}<span>${esc(T("min"))}</span>${f("s", t.s, "0", "")}<span>${esc(T("sec"))}</span>${f("label", t.label, T("Label"), "ne-tlabel")}
+            <ha-icon-button class="ne-del" data-ne-act="del-timer" data-uid="${esc(step.uid)}" data-n="${n}" label="${esc(T("Remove timer"))}">${icon("close")}</ha-icon-button></div>`;
+        })
+        .join("");
+    },
+
+    _neStepHtml(step, num, cur) {
+      const uid = esc(step.uid);
+      const menu = `<ha-dropdown data-ne-menu="step" data-uid="${uid}"><ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
+          ${step.section ? "" : `<ha-dropdown-item value="add-timer">${icon("timer-plus-outline", "icon")}${esc(T("Add a timer"))}</ha-dropdown-item>`}
+          <ha-dropdown-item value="up-step">${icon("arrow-up", "icon")}${esc(T("Move up"))}</ha-dropdown-item>
+          <ha-dropdown-item value="down-step">${icon("arrow-down", "icon")}${esc(T("Move down"))}</ha-dropdown-item>
+          <ha-dropdown-item value="del-step" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
+        </ha-dropdown>`;
+      if (step.section) {
+        return `<div class="ne-step ne-sect" data-uid="${uid}"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>
+            <ha-input class="ne-f ne-title" data-f="stext" data-uid="${uid}" value="${esc(step.text)}" placeholder="${esc(T("Section title"))}" aria-label="${esc(T("Section title"))}"></ha-input>${menu}</div>`;
+      }
+      return `<div class="ne-step ${cur && cur.uid === step.uid ? "cur" : ""}" data-uid="${uid}" data-ne-act="pick">
+          <div class="ne-stephead"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon><b>${esc(T("Step"))} ${num}</b><span class="ne-grow"></span>
+            <ha-button appearance="plain" size="s" data-ne-act="add-timer" data-uid="${uid}">${icon("timer-plus-outline", "start")}${esc(T("Timer"))}</ha-button>${menu}</div>
+          <ha-textarea class="ne-stext" data-f="stext" data-uid="${uid}" value="${esc(step.text)}" placeholder="${esc(T("What to do"))}" aria-label="${esc(T("Step text"))}" autogrow></ha-textarea>
+          <div class="ne-chips" id="ne-ch-${uid}">${this._neChipsHtml(step)}</div>
+          <div class="ne-timers" id="ne-tm-${uid}">${this._neTimersHtml(step)}</div>
+        </div>`;
+    },
+
+    _neStepsHtml() {
+      const steps = this._neSteps();
+      const cur = this._neCurrent();
+      const real = this._form.rows.filter((r) => !r.header && r.text.trim());
+      const used = (r) => steps.filter((s) => !s.section && s.ingredients.includes(r.uid));
+      const number = (s) => steps.filter((x) => !x.section).indexOf(s) + 1;
+      const list = real
+        .map((r) => {
+          const u = used(r);
+          const on = cur && cur.ingredients.includes(r.uid);
+          return `<div class="ne-li ${u.length ? "used" : ""}" data-ne-act="tick" data-ing="${esc(r.uid)}"><ha-checkbox ${on ? "checked" : ""} aria-label="${esc(label(r))}"></ha-checkbox>
+            <span class="ne-grow">${esc(label(r))}</span><span class="ne-where">${u.length ? `${esc(T("step"))} ${u.map(number).join(", ")}` : esc(T("not used"))}</span></div>`;
+        })
+        .join("");
+      const unused = real.filter((r) => !used(r).length).length;
+      let num = 0;
+      const cards = steps.map((s) => this._neStepHtml(s, s.section ? 0 : ++num, cur)).join("");
+      return `<ha-card class="ne-card"><div class="ne-cardhead"><h3>${esc(T("Steps"))}</h3><span class="ne-hint">${esc(T("Pick a step, then tick the ingredients it uses."))}</span></div>
+          <div class="ne-body ne-cols">
+            <div class="ne-ingcol">${
+              this._brCompact() && real.length
+                ? `<ha-expansion-panel id="ne-ingpanel" left-chevron outlined ${this._neListOpen ? "expanded" : ""}><div slot="header">${esc(T("Ingredients"))} · ${cur ? cur.ingredients.length : 0} ${esc(T("of"))} ${real.length} ${esc(T("in this step"))}</div>${list}</ha-expansion-panel>`
+                : `<div class="ne-sub">${esc(T("Ingredients"))}</div>${list || `<div class="ne-hint">${esc(T("Add ingredients above first."))}</div>`}`
+            }
+              ${unused && real.length ? `<div class="ne-hint">${unused} ${esc(T("not used in any step"))}</div>` : ""}</div>
+            <div class="ne-stepcol">
+              <ha-sortable id="ne-stepsort" handle-selector=".ne-handle"><div class="ne-steplist">${cards}</div></ha-sortable>
+              <div class="ne-adds"><ha-button appearance="plain" size="s" data-ne-act="add-step">${icon("plus", "start")}${esc(T("Add step"))}</ha-button>
+                <ha-button appearance="plain" size="s" data-ne-act="add-step-section">${icon("format-title", "start")}${esc(T("Add section"))}</ha-button></div>
+            </div>
+          </div></ha-card>`;
     },
 
     _newEditorHtml() {
-      const groups = this._neGroups();
-      this._neApply(groups); // headers that were only implied become real
-      const fresh = this._neGroups();
-      this._neCache = fresh;
-      const ctx = { num: 0, rowsByUid: new Map(this._form.rows.map((r) => [r.uid, r])) };
-      const hideLoose = fresh.length > 1 && !fresh[0].rows.length && !fresh[0].steps.length;
-      return `<div class="ne" id="ne">
-          ${fresh.map((g, gi) => (hideLoose && gi === 0 ? "" : this._neCardHtml(g, gi, ctx))).join("")}
-          <ha-button appearance="outlined" class="ne-add-section" data-ne-act="section-add">${icon("plus").replace("<ha-icon ", '<ha-icon slot="start" ')}Add section</ha-button>
-        </div>`;
+      return `<div class="ne" id="ne">${this._neIngredientsHtml()}${this._neStepsHtml()}</div>`;
     },
 
     // ---- reading the page back into this._form ----
+    /** The text view is read when the form is saved or the view is switched: lines become rows. */
     _syncEditor() {
-      const form = this.shadowRoot.getElementById("form");
-      if (!form || !this._neCache) return;
-      form.querySelectorAll(".ne-card").forEach((card) => {
-        const g = this._neCache[Number(card.dataset.gi)];
-        const input = card.querySelector("[data-ne-f=title]");
-        if (g && input) g.title = input.value;
-      });
-      const rowByUid = new Map(this._form.rows.map((r) => [r.uid, r]));
-      form.querySelectorAll(".ne-row").forEach((el) => {
-        const r = rowByUid.get(el.dataset.uid);
-        if (!r) return;
-        r.text = el.querySelector("[data-ne-f=text]").value;
-        r.comment = el.querySelector("[data-ne-f=comment]").value;
-        r.subs = [...el.querySelectorAll("[data-ne-f=sub]")].map((i) => i.value);
-      });
-      const stepByUid = new Map(this._form.steps.map((s) => [s.uid, s]));
-      form.querySelectorAll(".ne-step").forEach((el) => {
-        const s = stepByUid.get(el.dataset.uid);
-        if (!s) return;
-        const { text, chips } = this._neSerialize(el.querySelector(".ne-text"));
-        const extras = [...el.querySelectorAll(".ne-extra")].map((x) => x.dataset.uid);
-        s.text = text;
-        s._chips = chips;
-        s._chipsText = text;
-        s.ingredients = [...new Set([...chips.map((c) => c.uid), ...extras])];
-        s.timers = [...el.querySelectorAll(".ne-timer")].map((t) => ({
-          h: t.querySelector("[data-ne-f=th]").value,
-          m: t.querySelector("[data-ne-f=tm]").value,
-          s: t.querySelector("[data-ne-f=ts]").value,
-          label: t.querySelector("[data-ne-f=tl]").value,
-        }));
-      });
-      this._neApply(this._neCache);
+      const box = this.shadowRoot && this.shadowRoot.getElementById("ne-text");
+      if (!box) return;
+      const rows = this._neFromText(box.value);
+      this._form.rows = rows;
+      const known = new Set(rows.map((r) => r.uid));
+      this._neSteps().forEach((s) => (s.ingredients = s.ingredients.filter((u) => known.has(u))));
     },
 
-    // ---- actions ----
     _neChange(mutate, focus = null) {
-      this._syncForm();
-      const groups = this._neGroups();
-      mutate(groups);
-      this._neApply(groups);
-      this._formDirty = true;
+      this._syncEditor();
+      mutate();
       this._neFocus = focus;
-      this._render(); // keeps the scroll itself (see _render)
+      this._formDirty = true;
+      this._render();
     },
 
-    _neFind(groups, uid, kind) {
-      for (const g of groups) {
-        const list = kind === "row" ? g.rows : g.steps;
-        const i = list.findIndex((x) => x.uid === uid);
-        if (i >= 0) return { g, list, i };
-      }
-      return null;
+    _neRowByUid(uid) {
+      return this._form.rows.find((r) => r.uid === uid);
     },
 
-    _neRemoveRow(groups, uid) {
-      const hit = this._neFind(groups, uid, "row");
-      if (hit) hit.list.splice(hit.i, 1);
-      for (const g of groups) for (const s of g.steps) s.ingredients = (s.ingredients || []).filter((u) => u !== uid);
+    _neStepByUid(uid) {
+      return this._neSteps().find((s) => s.uid === uid);
     },
 
-    _neAction(act, d, anchor) {
-      const newRow = () => ({ uid: this._nextUid(), header: false, text: "", subs: [], comment: "" });
-      const newStep = () => ({ uid: this._nextUid(), section: false, text: "", ingredients: [], timers: [] });
-      const gi = Number(d.gi);
+    /** One ingredient field changed: the row's text is rebuilt from its three fields. */
+    _neSetAmount(el, row) {
+      const scope = el.closest(".ne-line, .ne-alt");
+      const get = (n) => (scope.querySelector(`[data-f=${n}]`) || {}).value || "";
+      const text = joinAmount({ amount: get("amount"), unit: get("unit"), food: get("food") });
+      if (el.dataset.alt !== undefined) row.subs[Number(el.dataset.alt)] = text;
+      else row.text = text;
+    },
+
+    _neRefreshStatus() {
+      this._form.rows.forEach((r) => {
+        const el = this.shadowRoot.getElementById(`ne-st-${r.uid}`);
+        if (!el || r.header) return;
+        const [tone, text] = this._neStatus(r);
+        el.className = `ne-status ${tone}`;
+        el.textContent = text;
+      });
+    },
+
+    _neRefreshStep(step) {
+      const ch = this.shadowRoot.getElementById(`ne-ch-${step.uid}`);
+      if (ch) ch.innerHTML = this._neChipsHtml(step);
+    },
+
+    _neAction(act, d) {
+      const rows = this._form.rows;
+      const steps = this._neSteps();
+      const idx = (list, uid) => list.findIndex((x) => x.uid === uid);
       switch (act) {
-        case "row-insert":
-        case "quick-insert":
-          return this._neInsertAtCaret(d.uid);
-        case "step-autolink":
-          return this._neChange((groups) => this._neAutoLink(groups, d.uid, null));
-        case "group-autolink":
-          return this._neChange((groups) => this._neAutoLink(groups, null, gi));
-        case "group-toggle": {
-          this._syncForm();
-          const g = this._neCache[gi];
-          if (!g) return;
-          this._neCollapsed = this._neCollapsed || new Set();
-          if (this._neCollapsed.has(g.key)) this._neCollapsed.delete(g.key);
-          else this._neCollapsed.add(g.key);
+        case "mode":
+          return this._neChange(() => (this._neModeValue = d.mode));
+        case "add-ing": {
+          const row = this._rowFromString("");
+          return this._neChange(() => rows.push(row), { uid: row.uid, f: "amount" });
+        }
+        case "add-ing-section": {
+          const row = { uid: this._nextUid(), header: true, text: "", subs: [], comment: "" };
+          return this._neChange(() => rows.push(row), { uid: row.uid, f: "title" });
+        }
+        case "add-alt": {
+          const row = this._neRowByUid(d.uid);
+          return row && this._neChange(() => row.subs.push(""), { uid: d.uid, f: "amount", alt: row.subs.length });
+        }
+        case "add-note": {
+          const row = this._neRowByUid(d.uid);
+          return row && this._neChange(() => (row._note = true), { uid: d.uid, f: "note" });
+        }
+        case "del-alt":
+          return this._neChange(() => this._neRowByUid(d.uid).subs.splice(Number(d.alt), 1));
+        case "del-ing":
+          return this._neChange(() => {
+            this._form.rows = rows.filter((r) => r.uid !== d.uid);
+            steps.forEach((s) => (s.ingredients = s.ingredients.filter((u) => u !== d.uid)));
+          });
+        case "up-ing":
+          return this._neChange(() => move(rows, idx(rows, d.uid), idx(rows, d.uid) - 1));
+        case "down-ing":
+          return this._neChange(() => move(rows, idx(rows, d.uid), idx(rows, d.uid) + 1));
+        case "pick":
+          if (this._neCur === d.uid) return;
+          this._neCur = d.uid;
           return this._render();
-        }
-        case "section-add":
-          return this._neChange(
-            (groups) => groups.push({ title: T("New section"), rowHeader: null, stepHeader: null, rows: [newRow()], steps: [newStep()] }),
-            { key: null, last: true }
-          );
-        case "row-add": {
-          const r = newRow();
-          return this._neChange((groups) => groups[gi].rows.push(r), { uid: r.uid, field: "text" });
-        }
-        case "row-after": {
-          const r = newRow();
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "row");
-            if (hit) hit.list.splice(hit.i + 1, 0, r);
-          }, { uid: r.uid, field: "text" });
-        }
-        case "row-remove":
-          return this._neChange((groups) => this._neRemoveRow(groups, d.uid));
-        case "row-up":
-        case "row-down":
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "row");
-            if (!hit) return;
-            const j = hit.i + (act === "row-up" ? -1 : 1);
-            if (j >= 0 && j < hit.list.length) [hit.list[hit.i], hit.list[j]] = [hit.list[j], hit.list[hit.i]];
-          });
-        case "sub-add":
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "row");
-            if (hit) hit.list[hit.i].subs = [...(hit.list[hit.i].subs || []), ""];
-          });
-        case "sub-remove":
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "row");
-            if (hit) hit.list[hit.i].subs.splice(Number(d.i), 1);
-          });
-        case "step-add": {
-          const s = newStep();
-          return this._neChange((groups) => groups[gi].steps.push(s), { uid: s.uid, field: "text" });
-        }
-        case "step-above":
-        case "step-below": {
-          const s = newStep();
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "step");
-            if (hit) hit.list.splice(hit.i + (act === "step-below" ? 1 : 0), 0, s);
-          }, { uid: s.uid, field: "text" });
-        }
-        case "step-remove":
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "step");
-            if (hit) hit.list.splice(hit.i, 1);
-          });
-        case "step-up":
-        case "step-down":
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "step");
-            if (!hit) return;
-            const j = hit.i + (act === "step-up" ? -1 : 1);
-            if (j >= 0 && j < hit.list.length) [hit.list[hit.i], hit.list[j]] = [hit.list[j], hit.list[hit.i]];
-          });
-        case "timer-add":
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "step");
-            if (hit) hit.list[hit.i].timers = [...(hit.list[hit.i].timers || []), { h: "", m: "", s: "", label: "" }];
-          });
-        case "timer-remove":
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "step");
-            if (hit) hit.list[hit.i].timers.splice(Number(d.i), 1);
-          });
-        case "link":
-          return this._neChange((groups) => {
-            const hit = this._neFind(groups, d.uid, "step");
-            if (hit && !hit.list[hit.i].ingredients.includes(d.row)) hit.list[hit.i].ingredients.push(d.row);
-          });
-        case "unlink":
-          return this._neChange((groups) => {
-            for (const g of groups) for (const s of g.steps) if (s.uid === d.stepUid) s.ingredients = s.ingredients.filter((u) => u !== d.uid);
-          });
-        case "group-remove": {
-          const g = (this._neCache || [])[gi];
-          if (g && (g.rows.length || g.steps.length) && !confirm(T("Delete this section and everything in it?"))) return;
-          return this._neChange((groups) => {
-            const t = groups[gi];
-            if (!t) return;
-            for (const r of [...t.rows]) this._neRemoveRow(groups, r.uid);
-            groups.splice(gi, 1);
-            if (!groups.length) groups.push({ title: "", rowHeader: null, stepHeader: null, rows: [], steps: [] });
+        case "tick": {
+          const step = this._neCurrent();
+          if (!step) return;
+          return this._neChange(() => {
+            step.ingredients = step.ingredients.includes(d.ing) ? step.ingredients.filter((u) => u !== d.ing) : [...step.ingredients, d.ing];
           });
         }
-        case "group-up":
-        case "group-down":
-          return this._neChange((groups) => {
-            const j = gi + (act === "group-up" ? -1 : 1);
-            if (j < 1 || j >= groups.length || gi < 1) return;
-            [groups[gi], groups[j]] = [groups[j], groups[gi]];
-          });
-        default:
+        case "link": {
+          const step = this._neStepByUid(d.uid);
+          return step && this._neChange(() => step.ingredients.push(d.ing));
+        }
+        case "unlink": {
+          const step = this._neStepByUid(d.uid);
+          return step && this._neChange(() => (step.ingredients = step.ingredients.filter((u) => u !== d.ing)));
+        }
+        case "add-step": {
+          const step = { uid: this._nextUid(), text: "", section: false, ingredients: [], timers: [] };
+          return this._neChange(() => {
+            steps.push(step);
+            this._neCur = step.uid;
+          }, { uid: step.uid, f: "stext" });
+        }
+        case "add-step-section": {
+          const step = { uid: this._nextUid(), text: "", section: true, ingredients: [], timers: [] };
+          return this._neChange(() => steps.push(step), { uid: step.uid, f: "stext" });
+        }
+        case "del-step":
+          return this._neChange(() => (this._form.steps = steps.filter((s) => s.uid !== d.uid)));
+        case "up-step":
+          return this._neChange(() => move(steps, idx(steps, d.uid), idx(steps, d.uid) - 1));
+        case "down-step":
+          return this._neChange(() => move(steps, idx(steps, d.uid), idx(steps, d.uid) + 1));
+        case "add-timer": {
+          const step = this._neStepByUid(d.uid);
+          return step && this._neChange(() => {
+            (step.timers = step.timers || []).push({ h: "", m: "", s: "", label: "" });
+            this._neCur = step.uid;
+          }, { uid: d.uid, f: "tm", n: (step.timers || []).length });
+        }
+        case "sug-timer": {
+          const step = this._neStepByUid(d.uid);
+          return step && this._neChange(() => (step.timers = step.timers || []).push({ h: "", m: String(d.minutes), s: "", label: "" }));
+        }
+        case "del-timer": {
+          const step = this._neStepByUid(d.uid);
+          return step && this._neChange(() => step.timers.splice(Number(d.n), 1));
+        }
       }
     },
 
@@ -472,427 +384,116 @@ export default function (h) {
       this._neFocus = null;
       if (!f) return;
       const root = this.shadowRoot;
-      let el = null;
-      if (f.last) {
-        const cards = root.querySelectorAll(".ne-card");
-        el = cards.length ? cards[cards.length - 1].querySelector("[data-ne-f=title]") : null;
-      } else if (f.uid) {
-        el = root.querySelector(`.ne-row[data-uid="${f.uid}"] [data-ne-f=text]`) || root.querySelector(`.ne-step[data-uid="${f.uid}"] .ne-text`);
-        if (el && el.classList.contains("ne-text")) {
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          range.collapse(false);
-          const sel = root.getSelection ? root.getSelection() : document.getSelection();
-          if (sel) {
-            sel.removeAllRanges();
-            sel.addRange(range);
-          }
-        }
-      }
-      if (el) {
-        // Home Assistant's inputs finish rendering a moment after they are added
-        Promise.resolve(el.updateComplete).then(() => {
-          if (!el.isConnected) return;
-          if (el.select && f.last) el.select();
-          el.focus();
-          if (el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
-        });
-      }
+      const q = {
+        amount: f.alt !== undefined ? `.ne-alt [data-uid="${f.uid}"][data-alt="${f.alt}"][data-f=amount]` : `[data-uid="${f.uid}"][data-f=amount]:not([data-alt])`,
+        title: `[data-uid="${f.uid}"][data-f=title]`,
+        note: `[data-uid="${f.uid}"][data-f=note]`,
+        stext: `[data-uid="${f.uid}"][data-f=stext]`,
+        tm: `[data-t=m][data-uid="${f.uid}"][data-n="${f.n}"]`,
+      }[f.f];
+      const el = q && root.querySelector(q);
+      if (!el) return;
+      // Home Assistant's inputs finish rendering a moment after they are added
+      Promise.resolve(el.updateComplete).then(() => {
+        if (!el.isConnected) return;
+        el.focus();
+        if (el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+      });
     },
 
-    /** Link ingredients to the steps that name them (one step, or every step of a section). */
-    _neAutoLink(groups, stepUid, gi) {
-      const rows = groups.flatMap((g) => g.rows).filter((r) => r.text.trim());
-      const scope = stepUid ? groups.filter((g) => g.steps.some((s) => s.uid === stepUid)) : [groups[gi]].filter(Boolean);
-      for (const g of scope) {
-        const mine = g.rows.length ? g.rows : rows;
-        for (const s of g.steps) {
-          if (stepUid && s.uid !== stepUid) continue;
-          const have = new Set((s.ingredients || []).map(String));
-          const items = mine.filter((r) => r.text.trim() && !have.has(String(r.uid))).map((r) => ({ key: r.uid, text: r.text, names: this._foodNamesForText(r.text) }));
-          const found = detectChips(s.text, items).map((c) => c.key);
-          if (found.length) {
-            s.ingredients = [...new Set([...(s.ingredients || []), ...found])];
-            s._chips = null;
-          }
-        }
-      }
-    },
-
-    /** Put an ingredient chip into the step being written: at the caret, or over the selected word. */
-    _neInsertAtCaret(uid) {
-      const textEl = this._neActive;
-      if (!textEl || !textEl.isConnected) return;
-      this._syncForm();
-      const row = this._form.rows.find((r) => r.uid === uid);
-      if (!row) return;
-      const sel = this._neSelection();
-      let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
-      if (!range || !textEl.contains(range.commonAncestorContainer)) {
-        range = document.createRange();
-        range.selectNodeContents(textEl);
-        range.collapse(false);
-      }
-      // a selected word becomes the chip, so the text keeps exactly what was written
-      let word = pickWord(row);
-      let replacing = false;
-      if (!range.collapsed) {
-        const holder = document.createElement("div");
-        holder.appendChild(range.cloneContents());
-        const picked = holder.textContent.trim();
-        if (picked && !holder.querySelector(".ne-chip") && !/\n/.test(picked)) {
-          word = picked;
-          replacing = true;
-        }
-      }
-      range.deleteContents();
-      const holder = document.createElement("span");
-      holder.innerHTML = this._neChipHtml(row, word);
-      const chip = holder.firstChild;
-      range.insertNode(chip);
-      const before = chip.previousSibling && chip.previousSibling.nodeType === 3 ? chip.previousSibling.nodeValue : "";
-      if (!replacing && before && !/\s$/.test(before)) chip.before(document.createTextNode(" "));
-      const next = chip.nextSibling && chip.nextSibling.nodeType === 3 ? chip.nextSibling : null;
-      let after = next;
-      if (!replacing && (!next || !/^\s/.test(next.nodeValue))) {
-        after = document.createTextNode(" ");
-        chip.after(after);
-      }
-      const caret = document.createRange();
-      if (after) caret.setStart(after, Math.min(after.nodeValue.length, replacing ? 0 : 1));
-      else caret.setStartAfter(chip);
-      caret.collapse(true);
-      if (sel) {
-        sel.removeAllRanges();
-        sel.addRange(caret);
-      }
-      textEl.focus();
-      const quick = textEl.closest(".ne-step").querySelector(`.ne-quick-chip[data-uid="${uid}"]`);
-      if (quick) quick.classList.add("used");
-      this._formDirty = true;
-      this._syncEditor();
-    },
-
-    // ---- the @ picker ----
-    _neSelection() {
-      return this.shadowRoot.getSelection ? this.shadowRoot.getSelection() : document.getSelection();
-    },
-
-    _neUpdatePicker(textEl) {
-      const box = textEl.parentElement.querySelector(".ne-pick");
-      const close = () => {
-        box.hidden = true;
-        this._nePick = null;
-      };
-      const sel = this._neSelection();
-      if (!sel || !sel.rangeCount || !sel.isCollapsed) return close();
-      const range = sel.getRangeAt(0);
-      const node = range.startContainer;
-      if (node.nodeType !== 3 || !textEl.contains(node)) return close();
-      const before = node.nodeValue.slice(0, range.startOffset);
-      const m = /(^|\s)@([^\s@]{0,30})$/.exec(before);
-      if (!m) return close();
-      const query = m[2];
-      const card = textEl.closest(".ne-card");
-      const g = this._neCache[Number(card.dataset.gi)];
-      const step = textEl.closest(".ne-step");
-      const linked = new Set([...step.querySelectorAll(".ne-chip")].map((c) => c.dataset.uid));
-      // read what is typed so the list matches the rows as they are now
-      const rowEls = new Map([...card.querySelectorAll(".ne-row")].map((el) => [el.dataset.uid, el.querySelector("[data-ne-f=text]").value]));
-      const options = g.rows
-        .map((r) => ({ row: r, text: rowEls.has(r.uid) ? rowEls.get(r.uid) : r.text }))
-        .filter((o) => o.text.trim() && (!query || norm(o.text).includes(norm(query))))
-        .sort((a, b) => Number(linked.has(a.row.uid)) - Number(linked.has(b.row.uid)));
-      this._nePick = { textEl, node, start: range.startOffset - query.length - 1, end: range.startOffset, query, options, index: 0, gi: Number(card.dataset.gi) };
-      this._neRenderPicker(box);
-    },
-
-    _neRenderPicker(box) {
-      const p = this._nePick;
-      const item = (attrs, on, text, ic) =>
-        `<ha-list-item-button class="${on ? "on" : ""}" ${attrs}><span slot="headline">${esc(text)}</span>${ic ? `<ha-icon slot="start" icon="mdi:${ic}"></ha-icon>` : ""}</ha-list-item-button>`;
-      const items = p.options.map((o, i) => item(`data-i="${i}"`, i === p.index, o.text.trim()));
-      if (p.query) items.push(item('data-new="1"', p.index === p.options.length, `${T("New ingredient")} “${p.query}”`, "plus"));
-      if (!items.length) {
-        box.hidden = true;
-        return;
-      }
-      box.innerHTML = items.join("");
-      box.hidden = false;
-    },
-
-    _nePickCurrent() {
-      const p = this._nePick;
-      if (!p) return false;
-      if (p.index < p.options.length) this._neInsertChip(p.options[p.index].row, null);
-      else if (p.query) this._neInsertChip(null, p.query);
-      else return false;
-      return true;
-    },
-
-    /** Replace the typed "@query" with a chip for an existing row, or for a new ingredient. */
-    _neInsertChip(row, newText) {
-      const p = this._nePick;
-      if (!p) return;
-      let target = row;
-      if (!target) {
-        target = { uid: this._nextUid(), header: false, text: newText, subs: [], comment: "" };
-        this._neCache[p.gi].rows.push(target);
-      }
-      const word = row ? pickWord(row) : newText;
-      const range = document.createRange();
-      range.setStart(p.node, p.start);
-      range.setEnd(p.node, p.end);
-      range.deleteContents();
-      const holder = document.createElement("span");
-      holder.innerHTML = this._neChipHtml(target, word);
-      const chip = holder.firstChild;
-      const prev = p.node.nodeValue.slice(0, p.start);
-      range.insertNode(chip);
-      if (prev && !/\s$/.test(prev)) chip.before(document.createTextNode(" "));
-      const space = document.createTextNode(" ");
-      chip.after(space);
-      const sel = this._neSelection();
-      const caret = document.createRange();
-      caret.setStart(space, 1);
-      caret.collapse(true);
-      if (sel) {
-        sel.removeAllRanges();
-        sel.addRange(caret);
-      }
-      const stepUid = p.textEl.closest(".ne-step").dataset.uid;
-      this._nePick = null;
-      this._formDirty = true;
-      if (!row) {
-        this._syncForm();
-        this._neFocus = { uid: target.uid, field: "text" };
-        this._render();
-      } else {
-        p.textEl.parentElement.querySelector(".ne-pick").hidden = true;
-        // the chip is part of the step now: keep the model in step with the page
-        const s = this._form.steps.find((x) => x.uid === stepUid);
-        if (s) {
-          this._syncEditor();
-        }
-      }
-    },
-
-    // ---- events ----
     _bindEditor(form) {
       // Home Assistant opens the command palette on "c", Assist on "a" and so on, unless the key is typed into
-      // a text box it recognises. The step text is an editable area it does not, so keep typing inside the form.
+      // a text box it recognises: keep what is typed in the form to the form.
       form.addEventListener("keydown", (e) => {
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) e.stopPropagation();
       });
-      // the "more" menus
+      form.addEventListener("click", (e) => {
+        // a click on an input, a menu or a button inside a step card is not "pick this step"
+        const act = e.target.closest("[data-ne-act]");
+        if (!act) return;
+        if (act.dataset.neAct === "pick" && e.target.closest("ha-input, ha-textarea, ha-button, ha-dropdown, ha-icon-button, ha-assist-chip, ha-input-chip, .ne-timer, .ne-handle")) return;
+        e.preventDefault();
+        this._neAction(act.dataset.neAct, { ...act.dataset });
+      });
+      // the remove button of a chip
+      form.addEventListener("remove", (e) => {
+        const chip = e.target.closest && e.target.closest("ha-input-chip[data-unlink]");
+        if (chip) this._neAction("unlink", { ...chip.dataset });
+      });
       form.addEventListener("wa-select", (e) => {
         const dd = e.target.closest && e.target.closest("ha-dropdown[data-ne-menu]");
         const value = e.detail && e.detail.item && e.detail.item.value;
         if (!dd || !value) return;
         e.stopPropagation();
-        const d = { ...dd.dataset };
-        delete d.neMenu;
-        let act = value;
-        if (value.startsWith("link:")) {
-          act = "link";
-          d.row = value.slice(5);
-        }
-        this._neAction(act, d, dd);
+        this._neAction(value, { uid: dd.dataset.uid });
       });
-      form.addEventListener("click", (e) => {
-        const act = e.target.closest("[data-ne-act]");
-        if (act) {
-          e.preventDefault();
-          const d = { ...act.dataset };
-          if (act.dataset.neAct === "unlink") d.stepUid = act.closest(".ne-step").dataset.uid;
-          this._neAction(act.dataset.neAct, d, act);
-          return;
-        }
-        const pick = e.target.closest(".ne-pick [data-i], .ne-pick [data-new]");
-        if (pick && this._nePick) {
-          if (pick.dataset.new) this._neInsertChip(null, this._nePick.query);
-          else this._neInsertChip(this._nePick.options[Number(pick.dataset.i)].row, null);
-          return;
-        }
-      });
-      // keep the caret in the text when a picker option is pressed
-      form.addEventListener("mousedown", (e) => {
-        if (e.target.closest(".ne-pick, .ne-ins, .ne-quick-chip")) e.preventDefault();
-      });
-      // the ingredient buttons are live while a step is being written
+      // a step is picked by typing in it too
       form.addEventListener("focusin", (e) => {
-        if (e.target.classList && e.target.classList.contains("ne-text")) {
-          this._neActive = e.target;
-          form.classList.add("ne-typing");
-        } else if (!(e.target.closest && e.target.closest(".ne-ins, .ne-quick-chip"))) {
-          this._neActive = null;
-          form.classList.remove("ne-typing");
+        const step = e.target.closest && e.target.closest(".ne-step:not(.ne-sect)");
+        if (step && this._neCur !== step.dataset.uid) {
+          this._neCur = step.dataset.uid;
+          form.querySelectorAll(".ne-step").forEach((s) => s.classList.toggle("cur", s === step));
+          this._neRefreshTicks();
+        }
+      });
+      form.addEventListener("input", (e) => {
+        const el = e.target;
+        const f = el.dataset && el.dataset.f;
+        if (el.dataset && el.dataset.t !== undefined) {
+          const step = this._neStepByUid(el.dataset.uid);
+          if (step) {
+            step.timers[Number(el.dataset.n)][el.dataset.t] = el.value;
+            this._neRefreshStep(step);
+          }
+          return;
+        }
+        if (!f) return;
+        if (f === "stext") {
+          const step = this._neStepByUid(el.dataset.uid);
+          if (step) {
+            step.text = el.value;
+            this._neRefreshStep(step);
+          }
+          return;
+        }
+        const row = this._neRowByUid(el.dataset.uid);
+        if (!row) return;
+        if (f === "title") row.text = el.value;
+        else if (f === "note") row.comment = el.value;
+        else {
+          this._neSetAmount(el, row);
+          this._neRefreshStatus();
         }
       });
       // pasting a list into an ingredient makes one ingredient per line
       form.addEventListener("paste", (e) => {
         const t = e.target;
-        if (!(t.matches && t.matches(".ne-row [data-ne-f=text]"))) return;
-        const text = (e.clipboardData || window.clipboardData).getData("text");
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (!(t.matches && t.matches(".ne-ing .ne-line [data-f=amount], .ne-ing .ne-line [data-f=unit], .ne-ing .ne-line [data-f=food]"))) return;
+        const lines = (e.clipboardData || window.clipboardData).getData("text").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         if (lines.length < 2) return;
         e.preventDefault();
-        const uid = t.closest(".ne-row").dataset.uid;
-        const replace = !t.value.trim();
-        this._neChange((groups) => {
-          const hit = this._neFind(groups, uid, "row");
-          if (!hit) return;
-          const fresh = lines.map((l) => this._rowFromString(l));
-          hit.list.splice(replace ? hit.i : hit.i + 1, replace ? 1 : 0, ...fresh);
+        const uid = t.dataset.uid;
+        this._neChange(() => {
+          const i = this._form.rows.findIndex((r) => r.uid === uid);
+          const blank = !String(this._form.rows[i].text).trim();
+          this._form.rows.splice(blank ? i : i + 1, blank ? 1 : 0, ...lines.map((l) => this._rowFromString(l)));
         });
       });
-      form.addEventListener("input", (e) => {
-        if (e.target.classList && e.target.classList.contains("ne-text")) this._neUpdatePicker(e.target);
-        // chips show the ingredient as it is written, so they follow edits to the ingredient
-        if (e.target.matches && e.target.matches(".ne-row [data-ne-f=text]")) {
-          const uid = e.target.closest(".ne-row").dataset.uid;
-          form.querySelectorAll(`.ne-chip[data-uid="${uid}"], .ne-quick-chip[data-uid="${uid}"]`).forEach((chip) => {
-            const label = e.target.value.trim();
-            if (chip.classList.contains("ne-quick-chip")) chip.setAttribute("label", label);
-            else if (chip.classList.contains("ne-extra")) chip.firstChild.nodeValue = label;
-            else chip.textContent = label;
-          });
-        }
-      });
-      form.addEventListener("paste", (e) => {
-        if (!(e.target.classList && e.target.classList.contains("ne-text"))) return;
-        e.preventDefault();
-        const text = (e.clipboardData || window.clipboardData).getData("text").replace(/\s*\r?\n\s*/g, " ");
-        document.execCommand("insertText", false, text);
-      });
-      form.addEventListener("keydown", (e) => {
-        const t = e.target;
-        if (t.classList && t.classList.contains("ne-text")) {
-          if (this._nePick && !t.parentElement.querySelector(".ne-pick").hidden) {
-            const p = this._nePick;
-            const total = p.options.length + (p.query ? 1 : 0);
-            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-              e.preventDefault();
-              p.index = (p.index + (e.key === "ArrowDown" ? 1 : -1) + total) % total;
-              this._neRenderPicker(t.parentElement.querySelector(".ne-pick"));
-              return;
-            }
-            if (e.key === "Enter" || e.key === "Tab") {
-              if (this._nePickCurrent()) {
-                e.preventDefault();
-                return;
-              }
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              t.parentElement.querySelector(".ne-pick").hidden = true;
-              this._nePick = null;
-              return;
-            }
-          }
-          if (e.key === "Enter" && e.shiftKey) {
-            // Shift+Enter: a line break inside the step
-            e.preventDefault();
-            document.execCommand("insertLineBreak");
-            this._formDirty = true;
-            return;
-          }
-          if (e.key === "Enter") {
-            e.preventDefault();
-            this._neAction("step-below", { uid: t.closest(".ne-step").dataset.uid });
-          }
-          return;
-        }
-        if (e.key === "Enter" && t.matches && t.matches(".ne-row [data-ne-f=text]")) {
-          e.preventDefault();
-          this._neAction("row-after", { uid: t.closest(".ne-row").dataset.uid });
-        } else if (e.key === "Enter" && t.matches && t.matches("[data-ne-f=title]")) {
-          e.preventDefault();
-        }
-      });
-      form.addEventListener("focusout", (e) => {
-        if (e.target.classList && e.target.classList.contains("ne-text")) {
-          const box = e.target.parentElement.querySelector(".ne-pick");
-          // a click on an option arrives after the blur, so let it through first
-          setTimeout(() => {
-            if (box && !box.matches(":hover")) box.hidden = true;
-          }, 150);
-        }
-      });
-      this._neBindDrag(form);
+      const panel = form.querySelector("#ne-ingpanel");
+      if (panel) panel.addEventListener("expanded-changed", (e) => (this._neListOpen = !!e.detail.expanded));
+      // dragging: Home Assistant's sortable tells where an item went
+      const ings = form.querySelector("#ne-ings");
+      if (ings) ings.addEventListener("item-moved", (e) => this._neChange(() => move(this._form.rows, e.detail.oldIndex, e.detail.newIndex)));
+      const steps = form.querySelector("#ne-stepsort");
+      if (steps) steps.addEventListener("item-moved", (e) => this._neChange(() => move(this._neSteps(), e.detail.oldIndex, e.detail.newIndex)));
     },
 
-    _neBindDrag(form) {
-      let drag = null;
-      const clear = () => form.querySelectorAll(".drop-before, .drop-after, .ne-dragging, .ne-drop").forEach((el) => el.classList.remove("drop-before", "drop-after", "ne-dragging", "ne-drop"));
-      const unit = { row: ".ne-row", step: ".ne-step", group: ".ne-card" };
-      const place = (e) => {
-        if (!drag) return null;
-        const el = e.target.closest && e.target.closest(unit[drag.kind]);
-        if (el && el !== drag.el) {
-          const box = el.getBoundingClientRect();
-          return { el, uid: el.dataset.uid, gi: Number((el.closest(".ne-card") || el).dataset.gi), after: e.clientY > box.top + box.height / 2 };
-        }
-        if (drag.kind !== "group") {
-          // an empty list (or the gap below the last item) of any section takes the item at its end
-          const card = e.target.closest && e.target.closest(".ne-card");
-          const list = card && card.querySelector(`[data-ne-list=${drag.kind}]`);
-          if (list && !el) return { el: list, uid: null, gi: Number(card.dataset.gi), after: true, list: true };
-        }
-        return null;
-      };
-      form.addEventListener("dragstart", (e) => {
-        const h2 = e.target.closest && e.target.closest("[data-ne-drag]");
-        if (!h2) return;
-        const kind = h2.dataset.neDrag;
-        const el = h2.closest(unit[kind]);
-        drag = { kind, el, uid: el.dataset.uid, gi: Number((el.closest(".ne-card") || el).dataset.gi) };
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", kind);
-        if (e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(el, 12, 12);
-        el.classList.add("ne-dragging");
-      });
-      form.addEventListener("dragover", (e) => {
-        const t = place(e);
-        if (!t) return;
-        e.preventDefault();
-        form.querySelectorAll(".drop-before, .drop-after, .ne-drop").forEach((el) => el.classList.remove("drop-before", "drop-after", "ne-drop"));
-        if (t.list) t.el.classList.add("ne-drop");
-        else t.el.classList.add(t.after ? "drop-after" : "drop-before");
-      });
-      form.addEventListener("drop", (e) => {
-        const t = place(e);
-        if (!t) return;
-        e.preventDefault();
-        const d = drag;
-        drag = null;
-        clear();
-        this._neChange((groups) => {
-          if (d.kind === "group") {
-            const from = groups.findIndex((g) => g.key === d.el.dataset.key);
-            let to = t.gi + (t.after ? 1 : 0);
-            if (from < 0) return;
-            to = Math.max(to, 1);
-            if (from < to) to -= 1;
-            groups.splice(to, 0, groups.splice(from, 1)[0]);
-            return;
-          }
-          const src = this._neFind(groups, d.uid, d.kind);
-          if (!src) return;
-          const [item] = src.list.splice(src.i, 1);
-          const dest = groups[t.gi];
-          if (!dest) return;
-          const list = d.kind === "row" ? dest.rows : dest.steps;
-          if (t.list || !t.uid) list.push(item);
-          else {
-            const at = list.findIndex((x) => x.uid === t.uid);
-            list.splice(at < 0 ? list.length : at + (t.after ? 1 : 0), 0, item);
-          }
-        });
-      });
-      form.addEventListener("dragend", () => {
-        drag = null;
-        clear();
+    /** Another step was picked: show which ingredients it has ticked. */
+    _neRefreshTicks() {
+      const cur = this._neCurrent();
+      this.shadowRoot.querySelectorAll(".ne-li").forEach((li) => {
+        const box = li.querySelector("ha-checkbox");
+        if (box) box.checked = !!cur && cur.ingredients.includes(li.dataset.ing);
       });
     },
   };
