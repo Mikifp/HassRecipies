@@ -295,22 +295,27 @@ const STYLE = `
   @container (max-width: 720px) {
     .ne-cols { grid-template-columns: minmax(0, 1fr); }
     .ne-page { padding: var(--ha-space-2, 8px); padding-bottom: 96px; gap: var(--ha-space-2, 8px); }
-    .ne-line { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 44px; gap: var(--ha-space-1, 4px); align-items: center; }
-    .ne-line > .ne-handle { grid-column: 1; grid-row: 1; }
-    .ne-line > .ne-amount { grid-column: 2; grid-row: 1; }
-    .ne-line > .ne-unit { grid-column: 3; grid-row: 1; }
+    .ne-f { --ha-input-height: 44px; }
+    .ne-line { display: grid; grid-template-columns: 58px 68px minmax(0, 1fr) 32px; gap: 2px; align-items: center; }
+    .ne-ing .ne-handle { display: none; } /* on a phone an ingredient is moved with its menu */
+    .ne-line > .ne-amount { grid-column: 1; grid-row: 1; }
+    .ne-line > .ne-unit { grid-column: 2; grid-row: 1; }
+    .ne-line > .ne-food { grid-column: 3; grid-row: 1; }
     .ne-line > ha-dropdown { grid-column: 4; grid-row: 1; justify-self: end; }
-    .ne-line > .ne-food { grid-column: 2 / 5; grid-row: 2; }
-    .ne-line > .ne-note { grid-column: 2 / 5; grid-row: 3; }
-    .ne-line > .ne-title { grid-column: 2 / 4; grid-row: 1; }
-    .ne-line > .ne-del { grid-column: 4; grid-row: 1; }
+    .ne-line > .ne-note { grid-column: 1 / 5; grid-row: 2; display: none; }
+    .ne-ing.has-note .ne-line > .ne-note { display: block; }
+    .ne-line > .ne-title { grid-column: 1 / 4; grid-row: 1; }
+    .ne-line > .ne-del { grid-column: 4; grid-row: 1; justify-self: end; }
     .ne-status { display: none; }
-    .ne-alt { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 44px; padding-inline-start: 0; }
-    .ne-alt > .ne-or { grid-column: 1; grid-row: 1; }
-    .ne-alt > .ne-amount { grid-column: 2; grid-row: 1; }
-    .ne-alt > .ne-unit { grid-column: 3; grid-row: 1; }
-    .ne-alt > .ne-del { grid-column: 4; grid-row: 1; justify-self: end; }
-    .ne-alt > .ne-food { grid-column: 2 / 5; grid-row: 2; }
+    .ne-alt { display: grid; grid-template-columns: 58px 68px minmax(0, 1fr) 32px; gap: 2px; padding-inline-start: var(--ha-space-4, 16px); align-items: center; }
+    .ne-alt > .ne-or { display: none; }
+    .ne-alt > .ne-amount { grid-column: 1; }
+    .ne-alt > .ne-unit { grid-column: 2; }
+    .ne-alt > .ne-food { grid-column: 3; }
+    .ne-alt > .ne-del { grid-column: 4; justify-self: end; }
+    .ne-ing { padding: 2px 0; }
+    .ne-body { padding-inline: var(--ha-space-2, 8px); }
+    .ne-cardhead { padding-inline: var(--ha-space-3, 12px); }
     .ne-timer { gap: 2px; }
     .ne-tlabel { flex: 1 0 100%; width: auto; }
   }
