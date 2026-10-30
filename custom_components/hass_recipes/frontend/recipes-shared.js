@@ -290,6 +290,29 @@ const NUMERIC = /^[\d¼-¾⅐-⅞¹²³⁰-⁹₀-₉⁄/.,\-–\s]+/u;
 const STOP = new Set("jeg til svarer eller or men som der kan også at for med uden evt ca".split(" "));
 const JOIN = new Set(["og", "and", "&"]);
 
+/** The words that are units in an ingredient line (kept in step with ingredients.py). */
+export const UNIT_WORDS = UNITS;
+
+const AMOUNT = /^(\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?(?:\s+\d+\/\d+|\/\d+)?(?:\s*[¼-¾⅐-⅞])?|[¼-¾⅐-⅞])(?:\s+|$)/u;
+
+/** "200 g butter" -> { amount: "200", unit: "g", food: "butter" } (a unit is only a word the recipe parser knows). */
+export const splitAmount = (text) => {
+  const t = String(text ?? "").trim();
+  const m = t.match(AMOUNT);
+  if (!m) return { amount: "", unit: "", food: t };
+  let rest = t.slice(m[0].length);
+  let unit = "";
+  const w = rest.match(/^([\p{L}.]+)(?:\s+|$)/u);
+  if (w && UNITS.has(w[1].replace(/\.$/, "").toLowerCase())) {
+    unit = w[1];
+    rest = rest.slice(w[0].length);
+  }
+  return { amount: m[1].trim(), unit, food: rest.trim() };
+};
+
+export const joinAmount = ({ amount = "", unit = "", food = "" }) => [amount, unit, food].map((x) => String(x).trim()).filter(Boolean).join(" ");
+
+
 /**
  * The food words of an ingredient line, best first: units, amounts and trailing remarks are left
  * out, and the last word of "røde løg" comes first because that is the noun. A line that names

@@ -119,3 +119,16 @@ test("a step keeps the ids of the ingredients it uses", () => {
   assert.deepEqual(s.normStep({ text: "Mix", ingredients: [1], ingredient_ids: ["i2"] }).ingredient_ids, ["i2"]);
   assert.deepEqual(s.normStep("Plain").ingredient_ids, []);
 });
+
+test("an ingredient's text is split into amount, unit and food, and joined again", () => {
+  assert.deepEqual(s.splitAmount("200 g butter"), { amount: "200", unit: "g", food: "butter" });
+  assert.deepEqual(s.splitAmount("2 dl mælk"), { amount: "2", unit: "dl", food: "mælk" });
+  assert.deepEqual(s.splitAmount("2 løg"), { amount: "2", unit: "", food: "løg" }); // løg is not a unit
+  assert.deepEqual(s.splitAmount("1 1/2 tsk salt"), { amount: "1 1/2", unit: "tsk", food: "salt" });
+  assert.deepEqual(s.splitAmount("2-3 fed hvidløg"), { amount: "2-3", unit: "fed", food: "hvidløg" });
+  assert.deepEqual(s.splitAmount("½ dåse tomater"), { amount: "½", unit: "dåse", food: "tomater" });
+  assert.deepEqual(s.splitAmount("salt efter smag"), { amount: "", unit: "", food: "salt efter smag" });
+  assert.deepEqual(s.splitAmount("200 g"), { amount: "200", unit: "g", food: "" });
+  assert.deepEqual(s.splitAmount(""), { amount: "", unit: "", food: "" });
+  for (const line of ["200 g butter", "2 løg", "1 1/2 tsk salt", "salt efter smag", "½ dåse tomater"]) assert.equal(s.joinAmount(s.splitAmount(line)), line);
+});
