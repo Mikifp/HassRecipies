@@ -120,9 +120,10 @@ export default function (h) {
             },
           },
           ...col(compact ? h.T("100 g") : h.T("Per 100 g"), "p100", !!d.per_100g),
-          ...col(compact ? h.T("Serving") : h.T("Per serving"), "serving", !!d.per_serving),
+          // one column besides 100 g: per unit the recipe makes, else per serving, else the whole recipe
           ...col(compact ? d.yield_unit || h.T("piece") : `${h.T("Per")} ${d.yield_unit || h.T("piece")}`, "unit", !!d.per_unit),
-          ...col(k === 1 ? h.T("Whole recipe") : `${h.T("Whole recipe")} ×${num(k, 2)}`, "whole", true, { hidden: this._brCompact() && (d.per_100g || d.per_serving || d.per_unit) }),
+          ...col(compact ? h.T("Serving") : h.T("Per serving"), "serving", !d.per_unit && !!d.per_serving),
+          ...col(k === 1 ? h.T("Whole recipe") : `${h.T("Whole recipe")} ×${num(k, 2)}`, "whole", !d.per_unit && !d.per_serving),
         };
         t.data = rows;
         host.replaceChildren(t);
