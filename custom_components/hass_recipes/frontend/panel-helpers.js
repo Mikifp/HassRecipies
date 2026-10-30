@@ -78,10 +78,10 @@ const ingredientChipHtml = (r, i, k, mode, tick = null, alt = false) => {
   const a = ingParts((r.parsed_ingredients || [])[i], main, k, mode);
   // optionally the other way the recipe gives the amount: as written ("2 dl") or in brackets ("(100 ml)")
   const other = alt ? a.sub || a.paren : "";
-  const body = `${a.qty ? `<span class="q">${esc(a.qty)}</span>` : ""}<b>${esc(a.food)}</b>${other ? `<span class="alt">${esc(other)}</span>` : ""}`;
+  const text = `${[a.qty, a.food].filter(Boolean).join(" ")}${other ? ` (${other})` : ""}`;
   // with `tick` ({ key, done }) the chip can be ticked off while cooking
-  if (!tick) return `<span class="ing-chip">${body}</span>`;
-  return `<span class="ing-chip tick ${tick.done ? "done" : ""}" data-chip="${esc(tick.key)}" role="checkbox" aria-checked="${tick.done}" tabindex="0">${tick.done ? `<ha-icon icon="mdi:check"></ha-icon>` : ""}${body}</span>`;
+  if (!tick) return `<ha-assist-chip class="ing-chip" label="${esc(text)}"></ha-assist-chip>`;
+  return `<ha-assist-chip class="ing-chip tick ${tick.done ? "done" : ""}" data-chip="${esc(tick.key)}" label="${esc(text)}" role="checkbox" aria-checked="${tick.done}" tabindex="0" ${tick.done ? "active" : ""}>${tick.done ? `<ha-icon slot="icon" icon="mdi:check"></ha-icon>` : ""}</ha-assist-chip>`;
 };
 
 const PROGRESS_KEY = "hass_recipes_progress";
