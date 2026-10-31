@@ -384,6 +384,24 @@ const STYLE = `
   .tk-mchip.over { --md-assist-chip-label-text-color: var(--error-color); --md-assist-chip-outline-color: var(--error-color); }
   .tk-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .tk-c { text-align: center; }
+  .tk-ringrow { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+  .tk-ringrow:has(.tk-side-bars) { flex-wrap: nowrap; }
+  .tk-ringside.tk-side-bars { min-width: 0; }
+  .tk-ringside.tk-side-gauges, .tk-ringside.tk-side-chips { flex-basis: 100%; }
+  .tk-ring { position: relative; flex: none; width: 112px; }
+  .tk-ring ha-control-circular-slider { width: 112px; pointer-events: none; --control-circular-slider-color: var(--primary-color); --control-circular-slider-background: var(--primary-color); --control-circular-slider-background-opacity: 0.2; }
+  .tk-ring ha-control-circular-slider.over { --control-circular-slider-color: var(--error-color); --control-circular-slider-background: var(--error-color); }
+  .tk-ringtext { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+  .tk-ringtext .tk-huge { font-size: 1.6rem; }
+  .tk-ringside { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 4px; }
+  .tk-ringside .tk-macros { margin-top: 8px; }
+  .tk-ringside .tk-mrow { grid-template-columns: 44px minmax(48px, 1fr) auto; gap: 6px; font-size: 0.75em; }
+  .tk-ringrow { gap: 12px; }
+  .tk-ringside .tk-mrow span { white-space: nowrap; }
+  .tk-week { display: flex; gap: 2px; margin-bottom: 8px; }
+  .tk-wd { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 0.8em; }
+  .tk-wd ha-button { --ha-button-height: 36px; }
+  .tk-mhead ha-icon-button { margin: -8px -8px -8px 0; }
   .tk-huge { font-size: 3.4rem; font-weight: 500; line-height: 1; }
   .tk-c .muted { margin: 4px 0 12px; }
   .tk-kbar { display: block; pointer-events: none; --control-slider-color: var(--primary-color); --control-slider-background: var(--primary-color); --control-slider-background-opacity: 0.2; --control-slider-thickness: 10px; --control-slider-border-radius: 5px; }

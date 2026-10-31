@@ -33,6 +33,14 @@ export default function (h) {
     if (e.kind === "food") return `${num(e.amount, 1)} ${e.unit}`;
     return T("Quick entry");
   };
+  /** What one usual portion of a food is: a slice, a piece, else 100 g ({ unit, amount, grams, kcal }). */
+  const usualOf = (f) => {
+    const ug = f.unit_grams || {};
+    const unit = Object.keys(ug).find((u) => !u.includes("(")) || Object.keys(ug)[0];
+    const grams = unit ? ug[unit] : 100;
+    const kcal = f.values && f.values.kcal != null ? (f.values.kcal * grams) / 100 : null;
+    return { unit: unit || "g", amount: unit ? 1 : 100, grams, kcal };
+  };
   const MACRO_KEY = "hass_recipes_tracker_macros";
   // how the macros are shown, if at all: kcal only is the start
   const MACRO_STYLES = [
@@ -181,9 +189,9 @@ export default function (h) {
     _tkMacroStyle() {
       try {
         const v = localStorage.getItem(MACRO_KEY);
-        return MACRO_STYLES.some((x) => x[0] === v) ? v : "off";
+        return MACRO_STYLES.some((x) => x[0] === v) ? v : "bars";
       } catch (_) {
-        return "off";
+        return "bars";
       }
     },
 
@@ -225,12 +233,20 @@ export default function (h) {
           </div></ha-card>`;
       }
       const left = goal - totals.kcal;
-      // a large number you can read from across the kitchen, with a thin bar under it
-      return `<ha-card class="tk-summary"><div class="card-content tk-c">
-          <div class="tk-huge ${left < 0 ? "tk-over" : ""}">${num(Math.abs(left))}</div>
-          <div class="muted">${esc(T(left >= 0 ? "kcal left today" : "kcal over today"))} · ${esc(T("goal"))} ${num(goal)}</div>${deficit}
-          <ha-control-slider id="tk-s-kcal" class="tk-kbar ${left < 0 ? "over" : ""}"></ha-control-slider>
-          ${style === "off" ? "" : this._tkMacrosHtml(totals, goals, style)}
+      // the ring is what is left of the goal, the macros are bars beside it
+      return `<ha-card class="tk-summary"><div class="card-content">
+          <div class="tk-ringrow">
+            <div class="tk-ring">
+              <ha-control-circular-slider id="tk-ring" class="${left < 0 ? "over" : ""}"></ha-control-circular-slider>
+              <div class="tk-ringtext"><div class="tk-huge ${left < 0 ? "tk-over" : ""}">${num(Math.abs(left))}</div><div class="muted">${esc(T(left >= 0 ? "kcal left" : "kcal over"))}</div></div>
+            </div>
+            <div class="tk-ringside tk-side-${style}">
+              <div><b>${num(totals.kcal)}</b> <span class="muted">${esc(T("eaten"))}</span></div>
+              <div class="muted">${esc(T("goal"))} ${num(goal)}</div>
+              ${style === "off" ? "" : this._tkMacrosHtml(totals, goals, style)}
+            </div>
+          </div>
+          ${deficit}
           ${copy}
         </div></ha-card>`;
     },
@@ -258,19 +274,34 @@ export default function (h) {
               return `<ha-list-item-button data-tkentry="${esc(e.id)}" headline="${esc(e.name)}" supporting-text="${esc([how, macro].filter(Boolean).join(" · "))}"><span slot="end" class="tk-ekcal">${num(e.kcal)} kcal</span></ha-list-item-button>`;
             })
             .join("");
-          return `<ha-card class="tk-meal"><div class="card-content tk-mhead"><b>${esc(this._planLabel(m.id))}</b><span class="muted">${rows.length ? `${num(kcal)} kcal` : ""}</span></div>
+          // a meal with nothing in it says what it could be: a share of the goal
+          const share = { breakfast: 0.25, lunch: 0.3, dinner: 0.3, snack: 0.15 }[m.id];
+          const goal = p.goals.kcal;
+          const hint = rows.length ? `${num(kcal)} kcal` : goal && share ? `${T("Suggested")} ${num(Math.round((goal * share) / 10) * 10)}` : "";
+          return `<ha-card class="tk-meal"><div class="card-content tk-mhead"><b>${esc(this._planLabel(m.id))}</b><span class="muted">${esc(hint)}</span>${edit ? `<ha-icon-button data-tkadd="${esc(m.id)}" label="${esc(T("Add food"))}"><ha-icon icon="mdi:plus-circle-outline"></ha-icon></ha-icon-button>` : ""}</div>
               ${list ? `<ha-list-base>${list}</ha-list-base>` : ""}
               ${
-                edit
+                edit && ((d.usual || {})[m.id] || []).length
                   ? `<div class="card-actions tk-quick">${((d.usual || {})[m.id] || [])
                       .map((t, i) => `<ha-assist-chip data-tkusual="${esc(m.id)}:${i}" label="+ ${esc(t.name)}"><ha-icon slot="icon" icon="mdi:${t.kind === "recipe" ? "chef-hat" : t.kind === "food" ? "food-apple-outline" : "pencil-outline"}"></ha-icon></ha-assist-chip>`)
-                      .join("")}<ha-assist-chip data-tkadd="${esc(m.id)}" label="${esc(T("More"))}"><ha-icon slot="icon" icon="mdi:plus"></ha-icon></ha-assist-chip></div>`
+                      .join("")}</div>`
                   : ""
               }
             </ha-card>`;
         })
         .join("");
-      return `${this._tkPinHtml(d)}${this._tkSummaryHtml(d.totals, p.goals, edit, d)}${planned}${cards}`;
+      return `${this._tkPinHtml(d)}${this._tkWeekHtml(d)}${this._tkSummaryHtml(d.totals, p.goals, edit, d)}${planned}${cards}`;
+    },
+
+    /** The seven days of the week on screen, to jump between them. */
+    _tkWeekHtml(d) {
+      const monday = mondayOf(parseDay(d.date));
+      const fmt = new Intl.DateTimeFormat(state.language || undefined, { weekday: "narrow" });
+      return `<div class="tk-week">${Array.from({ length: 7 }, (_, i) => {
+        const day = addDays(monday, i);
+        const iso = isoDate(day);
+        return `<div class="tk-wd"><span class="muted">${esc(fmt.format(day))}</span><ha-button size="s" data-tkday="${iso}" appearance="${iso === d.date ? "filled" : "plain"}" variant="${iso === d.today || iso === d.date ? "brand" : "neutral"}">${day.getDate()}</ha-button></div>`;
+      }).join("")}</div>`;
     },
 
     _tkWeightCardHtml(r, person) {
@@ -381,6 +412,17 @@ export default function (h) {
           sl.setAttribute("aria-label", `${label} ${num(value)}`);
         };
         bar("tk-s-kcal", totals.kcal, goals.kcal, "kcal");
+        const ring = root.getElementById("tk-ring");
+        if (ring) {
+          await this._tkElement("ha-control-circular-slider", { type: "thermostat", entity: "climate.x" });
+          ring.min = 0;
+          ring.max = Math.max(goals.kcal, totals.kcal, 1);
+          ring.value = Math.min(totals.kcal, ring.max);
+          ring.step = 1;
+          ring.mode = "start";
+          ring.readonly = true;
+          ring.setAttribute("aria-label", `kcal ${num(totals.kcal)}`);
+        }
         if (style === "bars") MACROS.forEach(([k, l]) => bar(`tk-s-${k}`, totals[k], goals[k], T(l)));
       } else this._tkMountChart(root);
     },
@@ -981,6 +1023,10 @@ export default function (h) {
       const input = body.querySelector("#tk-amt");
       const preview = () => {
         const c = this._tkCalc(draft, ctx);
+        // the main button says what it adds
+        const save = dlg.querySelector("#tk-save");
+        const label = save && [...save.childNodes].filter((n) => n.nodeType === 3).pop();
+        if (label) label.textContent = c && c.kcal != null ? `${saveLabel} · ${num(c.kcal)} kcal` : saveLabel;
         body.querySelector("#tk-pv").textContent = c && c.kcal != null ? `${num(c.kcal)} kcal${MACROS.map(([k, l]) => (c[k] != null ? ` · ${num(c[k])} g ${T(l).toLowerCase()}` : "")).join("")}` : isRecipe ? T("This recipe has no nutrition yet: link its ingredients to foods first.") : "";
       };
       // the size chips of the chosen unit, and what one of it is assumed to weigh
@@ -1087,40 +1133,55 @@ export default function (h) {
         const how = (t) => (t.kind === "quick" ? `${num(t.kcal)} kcal` : howText(t));
         const pick = () => {
           this._planFooter(dlg);
-          body.innerHTML = `<ha-input-search id="tk-q" appearance="outlined" placeholder="${esc(T("Search recipes and foods"))}"></ha-input-search><div id="tk-res" class="tk-res"></div>`;
+          body.innerHTML = `<ha-input-search id="tk-q" appearance="outlined" placeholder="${esc(T("Search recipes and foods"))}"></ha-input-search>
+            <div class="tk-chips tk-filters" id="tk-filters">${[["all", "All"], ["mine", "Mine"], ["recipes", "Recipes"], ["db", "Database"]].map(([v, l]) => `<ha-assist-chip data-filter="${v}" label="${esc(T(l))}" ${v === "all" ? "active" : ""}></ha-assist-chip>`).join("")}</div>
+            <div id="tk-res" class="tk-res"></div>`;
           const res = body.querySelector("#tk-res");
           let shown = [];
           let dbHits = []; // foods of the Frida and USDA databases that match what is typed and are not yours yet
           let dbTimer = null;
           const row = (item, sub) => {
             shown.push(item);
-            return `<ha-list-item-button data-n="${shown.length - 1}" headline="${esc(item.name)}" supporting-text="${esc(sub)}"><ha-icon slot="start" icon="${label(item)}"></ha-icon></ha-list-item-button>`;
+            const add = item.kind === "quick" ? "" : `<ha-icon-button slot="end" data-qa="${shown.length - 1}" label="${esc(T("Add"))}"><ha-icon icon="mdi:plus-circle-outline"></ha-icon></ha-icon-button>`;
+            return `<ha-list-item-button data-n="${shown.length - 1}" headline="${esc(item.name)}" supporting-text="${esc(sub)}"><ha-icon slot="start" icon="${label(item)}"></ha-icon>${add}</ha-list-item-button>`;
           };
+          let filter = "all"; // all, mine (foods and favourites), recipes, database
           const head = (text) => `<div class="fm-head">${esc(T(text))}</div>`;
           const draw = (q) => {
             shown = [];
             const needle = q.trim().toLowerCase();
             let out = "";
-            if (!needle) {
+            const show = (kind) => filter === "all" || filter === kind || (filter === "mine" && kind === "foods") || (filter === "db" && kind === "db");
+            if (!needle && (filter === "all" || filter === "mine")) {
               const fav = d.favourites || [];
               const rec = (d.recent || []).filter((t) => !fav.some((f) => JSON.stringify(f) === JSON.stringify(t)));
               if (fav.length) out += head("Favourites") + fav.map((t) => row(t, how(t))).join("");
               if (rec.length) out += head("Recent") + rec.map((t) => row(t, how(t))).join("");
             }
-            const recipes = this._recipes.filter((r) => !needle || r.name.toLowerCase().includes(needle)).slice(0, needle ? 15 : 5);
-            const found = fl.rankFoods(foods, [], needle, []).slice(0, needle ? 20 : 8);
+            const recipes = !show("recipes") ? [] : this._recipes.filter((r) => !needle || r.name.toLowerCase().includes(needle)).slice(0, needle ? 15 : 5);
+            const found = !show("foods") ? [] : fl.rankFoods(foods, [], needle, []).slice(0, needle ? 20 : 8);
             if (recipes.length) out += head("Recipes") + recipes.map((r) => row({ kind: "recipe", recipe_id: r.id, name: r.name }, r.servings ? `${r.servings} ${T("servings")}` : r.yield_amount ? `${r.yield_amount} ${r.yield_unit || ""}`.trim() : "")).join("");
-            if (found.length) out += head("Foods") + found.map((f) => row({ kind: "food", food_id: f.id, name: f.name }, f.values.kcal != null ? `${num(f.values.kcal)} kcal / 100 g` : T("No nutrition yet"))).join("");
+            if (found.length) out += head("Foods") + found.map((f) => {
+              const u = usualOf(f);
+              return row({ kind: "food", food_id: f.id, name: f.name }, u.kcal != null ? `${num(u.amount, 1)} ${u.unit}${u.unit === "g" ? "" : ` · ${num(u.grams)} g`} · ${num(u.kcal)} kcal` : T("No nutrition yet"));
+            }).join("");
             const mine = (h) => foods.some((f) => (h.source === "frida" ? f.frida_id === h.id : f.usda_id === h.id) || f.name.toLowerCase() === h.name.toLowerCase());
             const wanted = needle.split(/\s+/).filter(Boolean);
             // the typed words must be in the name: the database search also finds look-alikes, which are noise here
             const named = (h) => wanted.every((w) => `${h.name} ${h.name_en || ""}`.toLowerCase().includes(w));
-            const more = dbHits.filter((h) => (h.source === "frida" || h.source === "usda") && named(h) && !mine(h)).slice(0, 12);
+            const more = !show("db") ? [] : dbHits.filter((h) => (h.source === "frida" || h.source === "usda") && named(h) && !mine(h)).slice(0, 12);
             if (needle && more.length) out += head("Food database") + more.map((h) => row({ kind: "dbfood", source: h.source, db_id: h.id, name: h.name }, h.kcal != null ? `${num(h.kcal)} kcal / 100 g · ${h.source === "frida" ? "Frida" : "USDA"}` : h.source === "frida" ? "Frida" : "USDA")).join("");
             out += `<ha-list-item-button data-quick headline="${esc(T("Quick entry"))}" supporting-text="${esc(needle ? q.trim() : T("A name and kcal"))}"><ha-icon slot="start" icon="mdi:pencil-outline"></ha-icon></ha-list-item-button>`;
             res.innerHTML = `<ha-list-base>${out}</ha-list-base>`;
           };
           draw("");
+          body.querySelectorAll("[data-filter]").forEach((chip) =>
+            chip.addEventListener("click", () => {
+              filter = chip.dataset.filter;
+              body.querySelectorAll("[data-filter]").forEach((c) => c.toggleAttribute("active", c === chip));
+              draw(body.querySelector("#tk-q").value);
+            })
+          );
           body.querySelector("#tk-q").addEventListener("input", (e) => {
             draw(e.target.value);
             clearTimeout(dbTimer);
@@ -1138,7 +1199,30 @@ export default function (h) {
               if (body.querySelector("#tk-q") && body.querySelector("#tk-q").value.trim() === q) draw(q);
             }, 250);
           });
+          // the plus on a row adds one usual portion (a serving, a slice, 100 g) at once
+          const quickAdd = async (picked) => {
+            let item = picked;
+            if (picked.kind === "dbfood") {
+              const { ok, res: made } = await this._tkCall({ type: "hass_recipes/foods_save", name: picked.name, source: picked.source, ...(picked.source === "frida" ? { frida_id: picked.db_id } : { usda_id: picked.db_id }) });
+              if (!ok || !made) return;
+              foods.push(made);
+              item = { kind: "food", food_id: made.id, name: made.name };
+            }
+            if (item.kind === "food") {
+              const f = foods.find((x) => x.id === item.food_id);
+              const u = f ? usualOf(f) : { unit: item.unit || "g", amount: item.amount ?? 100 };
+              item = { ...item, amount: item.amount ?? u.amount, unit: item.unit || u.unit };
+            } else if (item.kind === "recipe") item = { ...item, by: item.by || "servings", amount: item.amount ?? 1 };
+            close();
+            const { ok } = await this._tkCall({ type: "hass_recipes/tracker_add", person_id: d.person.id, date: d.date, ...this._tkPayload({ ...item, meal }) });
+            if (ok) await this._tkLoad();
+          };
           res.addEventListener("click", async (e) => {
+            const qa = e.target.closest("[data-qa]");
+            if (qa) {
+              e.stopPropagation();
+              return quickAdd({ ...shown[+qa.dataset.qa] });
+            }
             if (e.target.closest("[data-quick]")) {
               const typed = body.querySelector("#tk-q").value.trim();
               return startWith({ kind: "quick", name: typed, kcal: "" });
@@ -1220,6 +1304,7 @@ export default function (h) {
         }
         this._tkGo(isoDate(addDays(base, n)));
       });
+      on("[data-tkday]", "click", (e) => this._tkGo(e.currentTarget.dataset.tkday));
       on("[data-tkact]", "click", (e) => this._tkAct(e.currentTarget.dataset.tkact, e.currentTarget));
       on("[data-tkadd]", "click", (e) => this._tkAct("add", e.currentTarget));
       on("[data-tkplan]", "click", (e) => this._tkAct("plan", e.currentTarget));
