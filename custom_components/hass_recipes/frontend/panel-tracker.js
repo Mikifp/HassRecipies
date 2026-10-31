@@ -1196,34 +1196,50 @@ export default function (h) {
         const label = (item) => (item.kind === "recipe" ? "mdi:chef-hat" : item.kind === "food" ? "mdi:food-apple-outline" : item.kind === "dbfood" ? "mdi:database-search-outline" : "mdi:pencil-outline");
         const how = (t) => (t.kind === "quick" ? `${num(t.kcal)} kcal` : howText(t));
         // scan a barcode with the camera (where the browser can), or type the number: the product comes from Open Food Facts
-        const scan = () => {
+        const canCamera = !!(window.BarcodeDetector && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+        const scan = (manual = false) => (canCamera && !manual ? scanner() : manualScan());
+
+        // a food of your own for a barcode Open Food Facts does not know (or that you would rather enter yourself)
+        const createFood = (barcode = "", name = "") => {
+          const back = { id: "tk-cback", label: T("Back"), icon: "arrow-left" };
+          this._planFooter(dlg, { primary: { id: "tk-cok", label: T("Save"), icon: "content-save-outline" }, secondary: [back] });
+          body.innerHTML = `<ha-form id="tk-cform"></ha-form><div class="muted tk-scanmsg">${esc(T("Values per 100 g, as on the package."))}</div><div class="muted tk-scanmsg" id="tk-cmsg"></div>`;
+          const num = (n, label) => ({ name: n, selector: { number: { min: 0, max: 1000, step: 0.1, mode: "box", unit_of_measurement: n === "kcal" ? "kcal" : "g" } }, label });
+          const labels = { name: T("Name"), barcode: T("Barcode number"), kcal: T("Energy"), protein: T("Protein"), fat: T("Fat"), carbs: T("Carbohydrates") };
+          let data = { name, barcode, kcal: undefined, protein: undefined, fat: undefined, carbs: undefined };
+          const form = body.querySelector("#tk-cform");
+          form.hass = this._hass;
+          form.schema = [{ name: "name", required: true, selector: { text: {} } }, { name: "barcode", selector: { text: {} } }, num("kcal"), num("protein"), num("fat"), num("carbs")];
+          form.data = data;
+          form.computeLabel = (sc) => labels[sc.name] || sc.name;
+          form.addEventListener("value-changed", (e) => {
+            e.stopPropagation();
+            data = e.detail.value || data;
+          });
+          dlg.querySelector("#tk-cback").addEventListener("click", () => manualScan(data.barcode || ""));
+          dlg.querySelector("#tk-cok").addEventListener("click", async () => {
+            const msg = body.querySelector("#tk-cmsg");
+            if (!String(data.name || "").trim()) return void (msg.textContent = T("Give the food a name."));
+            if (data.kcal == null || data.kcal === "") return void (msg.textContent = T("Give the energy (kcal per 100 g)."));
+            const values = Object.fromEntries(["kcal", "protein", "fat", "carbs"].filter((k) => data[k] != null && data[k] !== "").map((k) => [k, Number(data[k])]));
+            const { ok, res: made } = await this._tkCall({ type: "hass_recipes/foods_save", name: String(data.name).trim(), source: "custom", values, barcode: String(data.barcode || "") });
+            if (!ok || !made) return;
+            foods.push(made);
+            startWith({ kind: "food", food_id: made.id, name: made.name });
+          });
+        };
+
+        const manualScan = (typed = "") => {
           this._planFooter(dlg, { secondary: [{ id: "tk-sback", label: T("Back"), icon: "arrow-left" }] });
-          const canCamera = !!(window.BarcodeDetector && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-          body.innerHTML = `${canCamera ? `<video id="tk-vid" class="tk-vid" playsinline muted></video>` : `<ha-alert alert-type="info">${esc(T("This browser cannot scan with the camera. Type the number under the barcode."))}</ha-alert>`}
+          body.innerHTML = `${canCamera ? `` : `<ha-alert alert-type="info">${esc(T("This browser cannot scan with the camera. Type the number under the barcode."))}</ha-alert>`}
             <ha-form id="tk-code"></ha-form>
-            <div class="tk-lookup"><ha-button id="tk-lookup" appearance="filled"><ha-icon slot="start" icon="mdi:magnify"></ha-icon>${esc(T("Look up"))}</ha-button></div>
+            <div class="tk-lookup tk-lookbtns"><ha-button id="tk-lookup" appearance="filled"><ha-icon slot="start" icon="mdi:magnify"></ha-icon>${esc(T("Look up"))}</ha-button>
+              ${canCamera ? `<ha-button id="tk-cam" appearance="plain"><ha-icon slot="start" icon="mdi:barcode-scan"></ha-icon>${esc(T("Scan with the camera"))}</ha-button>` : ""}
+              <ha-button id="tk-new" appearance="plain"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("Create a new food"))}</ha-button></div>
             <div class="muted tk-scanmsg" id="tk-scanmsg"></div>
             <div class="muted tk-scanmsg">${esc(T("Products come from Open Food Facts (ODbL)."))}</div>`;
-          let stream = null;
-          let timer = null;
-          const stop = () => {
-            clearInterval(timer);
-            if (stream) stream.getTracks().forEach((t) => t.stop());
-            stream = null;
-          };
           const msg = body.querySelector("#tk-scanmsg");
-          const lookup = async (raw) => {
-            stop();
-            msg.textContent = T("Looking up…");
-            try {
-              const food = await this._ws({ type: "hass_recipes/barcode", code: String(raw) });
-              if (!foods.some((f) => f.id === food.id)) foods.push(food);
-              startWith({ kind: "food", food_id: food.id, name: food.name });
-            } catch (err) {
-              msg.textContent = (err && err.message) || String(err);
-            }
-          };
-          let code = { code: "" };
+          let code = { code: typed };
           const form = body.querySelector("#tk-code");
           form.hass = this._hass;
           form.schema = [{ name: "code", selector: { text: {} } }];
@@ -1233,35 +1249,114 @@ export default function (h) {
             e.stopPropagation();
             code = e.detail.value || code;
           });
-          body.querySelector("#tk-lookup").addEventListener("click", () => lookup(code.code || ""));
-          dlg.querySelector("#tk-sback").addEventListener("click", () => {
+          body.querySelector("#tk-lookup").addEventListener("click", () => lookup(code.code || "", msg));
+          body.querySelector("#tk-new").addEventListener("click", () => createFood(String(code.code || "")));
+          const cam = body.querySelector("#tk-cam");
+          if (cam) cam.addEventListener("click", () => scanner());
+          dlg.querySelector("#tk-sback").addEventListener("click", pick);
+        };
+
+        const lookup = async (raw, msg) => {
+          msg.textContent = T("Looking up…");
+          try {
+            const food = await this._ws({ type: "hass_recipes/barcode", code: String(raw) });
+            if (!foods.some((f) => f.id === food.id)) foods.push(food);
+            startWith({ kind: "food", food_id: food.id, name: food.name });
+          } catch (err) {
+            msg.textContent = (err && err.message) || String(err);
+            const row = document.createElement("div");
+            row.className = "tk-lookup";
+            row.innerHTML = `<ha-button appearance="filled"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("Create a food with this barcode"))}</ha-button>`;
+            row.querySelector("ha-button").addEventListener("click", () => createFood(String(raw)));
+            msg.after(row);
+          }
+        };
+
+        // the camera, full screen: a frame to hold the barcode in, a way out, typing the number, and the torch
+        const scanner = () => {
+          const ov = document.createElement("div");
+          ov.className = "tk-scanner";
+          ov.setAttribute("popover", "manual");
+          ov.innerHTML = `<video class="tk-scanvid" playsinline muted></video>
+            <div class="tk-scanframe"><span>${esc(T("Scan the barcode here"))}</span></div>
+            <ha-icon-button class="tk-sx" label="${esc(T("Close"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>
+            <ha-icon-button class="tk-sk" label="${esc(T("Type the number"))}"><ha-icon icon="mdi:keyboard-outline"></ha-icon></ha-icon-button>
+            <ha-icon-button class="tk-st" label="${esc(T("Torch"))}" hidden><ha-icon icon="mdi:flashlight-off"></ha-icon></ha-icon-button>
+            <div class="tk-scanmsg2"></div>`;
+          this.shadowRoot.appendChild(ov);
+          if (ov.showPopover) ov.showPopover();
+          let stream = null;
+          let timer = null;
+          let busy = false;
+          const stop = () => {
+            clearInterval(timer);
+            if (stream) stream.getTracks().forEach((t) => t.stop());
+            stream = null;
+            if (ov.hidePopover) {
+              try {
+                ov.hidePopover();
+              } catch (_) {
+                /* already hidden */
+              }
+            }
+            ov.remove();
+          };
+          ov.querySelector(".tk-sx").addEventListener("click", () => {
             stop();
             pick();
           });
-          const vid = body.querySelector("#tk-vid");
-          if (vid) {
-            navigator.mediaDevices
-              .getUserMedia({ video: { facingMode: "environment" } })
-              .then((s) => {
-                stream = s;
-                vid.srcObject = s;
-                vid.play();
-                const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
-                timer = setInterval(async () => {
-                  if (!vid.isConnected) return stop(); // the dialog was closed
+          ov.querySelector(".tk-sk").addEventListener("click", () => {
+            stop();
+            manualScan();
+          });
+          const note = ov.querySelector(".tk-scanmsg2");
+          const vid = ov.querySelector("video");
+          navigator.mediaDevices
+            .getUserMedia({ video: { facingMode: "environment" } })
+            .then((s) => {
+              stream = s;
+              vid.srcObject = s;
+              vid.play();
+              const track = s.getVideoTracks()[0];
+              const torchBtn = ov.querySelector(".tk-st");
+              if (track && track.getCapabilities && track.getCapabilities().torch) {
+                let on = false;
+                torchBtn.hidden = false;
+                torchBtn.addEventListener("click", async () => {
+                  on = !on;
                   try {
-                    const found = await detector.detect(vid);
-                    if (found.length) lookup(found[0].rawValue);
+                    await track.applyConstraints({ advanced: [{ torch: on }] });
+                    torchBtn.querySelector("ha-icon").setAttribute("icon", on ? "mdi:flashlight" : "mdi:flashlight-off");
                   } catch (_) {
-                    /* the next frame */
+                    on = !on;
                   }
-                }, 400);
-              })
-              .catch(() => {
-                msg.textContent = T("The camera could not be opened. Type the number instead.");
-              });
-          }
+                });
+              }
+              const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
+              timer = setInterval(async () => {
+                if (!ov.isConnected) return stop();
+                if (busy) return;
+                try {
+                  const found = await detector.detect(vid);
+                  if (!found.length) return;
+                  busy = true;
+                  const raw = found[0].rawValue;
+                  stop();
+                  manualScan(raw);
+                  lookup(raw, body.querySelector("#tk-scanmsg"));
+                } catch (_) {
+                  /* the next frame */
+                }
+              }, 400);
+            })
+            .catch(() => {
+              stop();
+              manualScan();
+              body.querySelector("#tk-scanmsg").textContent = T("The camera could not be opened. Type the number instead.");
+            });
+          note.textContent = "";
         };
+
         // a dish without a recipe: the AI guesses what is in it, the numbers come from the food tables, and you can correct the weights
         const estimate = (prefill = "") => {
           const SCALES = { small: 0.75, normal: 1, large: 1.35 };

@@ -1032,6 +1032,7 @@ _FOOD_FIELDS = {
     vol.Optional("values"): {vol.Optional(key): _PER_100G for key in NUTRIENTS},
     vol.Optional("unit_grams"): {vol.All(str, vol.Length(min=1, max=40)): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10000))},
     vol.Optional("section"): vol.All(str, vol.Length(max=60)),
+    vol.Optional("barcode"): vol.All(str, vol.Length(max=40)),
 }
 
 
