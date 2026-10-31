@@ -290,7 +290,7 @@ export default function (h) {
             </ha-card>`;
         })
         .join("");
-      return `${this._tkPinHtml(d)}${this._tkWeekHtml(d)}${this._tkSummaryHtml(d.totals, p.goals, edit, d)}${this._tkWaterHtml(d)}${planned}${cards}`;
+      return `${this._tkPinHtml(d)}${this._tkWeekHtml(d)}${this._tkSummaryHtml(d.totals, p.goals, edit, d)}${planned}${cards}${this._tkWaterHtml(d)}`;
     },
 
     /** Water: a bar towards the goal, and glasses to add (or take away) with one tap. */
