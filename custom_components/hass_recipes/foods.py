@@ -10,6 +10,7 @@ calculation did not have to change. Free of Home Assistant imports, so it can be
 
 from __future__ import annotations
 
+import re
 from typing import Any
 import uuid
 
@@ -58,6 +59,41 @@ def clean_names(raw: Any) -> list[str]:
             seen.add(key)
             names.append(name)
     return names[:MAX_NAMES]
+
+
+# What one unit of an everyday food weighs, for foods taken from the databases (Frida has no unit weights).
+# (pattern on the food's name, {unit: grams}); the first pattern that fits wins. The user can change them.
+_DEFAULT_UNITS: list[tuple[re.Pattern[str], dict[str, float]]] = [
+    (re.compile(p, re.IGNORECASE), units)
+    for p, units in (
+        (r"^grovfranskbrød", {"skive": 35}),
+        (r"^franskbrød", {"skive": 30}),
+        (r"^rugbrød(?!, revet)", {"skive": 35}),
+        (r"toastbrød", {"skive": 25}),
+        (r"^(hvedebrød|sandwichbrød|kernebrød|havrebrød|surdejsbrød)", {"skive": 35}),
+        (r"^(ost|smelteost|cheddar|emmentaler|mozzarella|gouda|havarti|danbo|brie|camembert)\b(?!.*(revet|creme))", {"skive": 15}),
+        (r"^æg, høne, blomme", {"stk": 18}),
+        (r"^æg, høne, æggehvide", {"stk": 33}),
+        (r"^æg, høne.*\brå$", {"stk": 55}),
+        (r"^æble, uspec\., råt", {"stk": 150}),
+        (r"^banan.*rå", {"stk": 120}),
+        (r"^(appelsin|pære|nektarin|fersken)\b.*rå", {"stk": 150}),
+        (r"^kiwi.*rå", {"stk": 70}),
+        (r"^(tomat|agurk)\b.*rå", {"stk": 120}),
+        (r"^gulerod.*rå", {"stk": 60}),
+        (r"^kartoffel.*rå", {"stk": 170}),
+        (r"^(løg|rødløg), rå", {"stk": 110}),
+    )
+]
+
+
+def default_unit_grams(*names: str) -> dict[str, float]:
+    """The weights of one slice, piece and so on that a food from the databases starts with ({} when it is not an everyday food)."""
+    for name in names:
+        for pattern, units in _DEFAULT_UNITS:
+            if name and pattern.search(name):
+                return dict(units)
+    return {}
 
 
 def _title(key: str) -> str:
@@ -235,6 +271,10 @@ class FoodBook:
                 raise FoodError(f"“{key}” is already a name of {self.foods[owner]['name']}")
 
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
+        if "unit_grams" not in data and data.get("source") in (SOURCE_FRIDA, SOURCE_USDA):
+            found = self.db.get(data.get("frida_id")) if data["source"] == SOURCE_FRIDA else self.db.get_usda(data.get("usda_id"))
+            if found:
+                data = {**data, "unit_grams": default_unit_grams(found.get("name_da", ""), found.get("name_en", ""))}
         food = self._clean(data, uuid.uuid4().hex)
         self._check_names(food, None)
         for key in self._keys(food):

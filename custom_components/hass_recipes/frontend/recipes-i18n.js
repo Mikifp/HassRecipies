@@ -214,6 +214,7 @@ const da = {
     "Import from URL": "Importér fra URL",
     "Import from text": "Importér fra tekst",
     "Foods": "Fødevarer",
+    "Food database": "Fødevaredatabase",
     "Food": "Fødevare",
     "New food": "Ny fødevare",
     "Needs review": "Skal gennemses",

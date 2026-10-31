@@ -1050,13 +1050,15 @@ export default function (h) {
             },
           });
         };
-        const label = (item) => (item.kind === "recipe" ? "mdi:chef-hat" : item.kind === "food" ? "mdi:food-apple-outline" : "mdi:pencil-outline");
+        const label = (item) => (item.kind === "recipe" ? "mdi:chef-hat" : item.kind === "food" ? "mdi:food-apple-outline" : item.kind === "dbfood" ? "mdi:database-search-outline" : "mdi:pencil-outline");
         const how = (t) => (t.kind === "quick" ? `${num(t.kcal)} kcal` : howText(t));
         const pick = () => {
           this._planFooter(dlg);
           body.innerHTML = `<ha-input-search id="tk-q" appearance="outlined" placeholder="${esc(T("Search recipes and foods"))}"></ha-input-search><div id="tk-res" class="tk-res"></div>`;
           const res = body.querySelector("#tk-res");
           let shown = [];
+          let dbHits = []; // foods of the Frida and USDA databases that match what is typed and are not yours yet
+          let dbTimer = null;
           const row = (item, sub) => {
             shown.push(item);
             return `<ha-list-item-button data-n="${shown.length - 1}" headline="${esc(item.name)}" supporting-text="${esc(sub)}"><ha-icon slot="start" icon="${label(item)}"></ha-icon></ha-list-item-button>`;
@@ -1076,18 +1078,52 @@ export default function (h) {
             const found = fl.rankFoods(foods, [], needle, []).slice(0, needle ? 20 : 8);
             if (recipes.length) out += head("Recipes") + recipes.map((r) => row({ kind: "recipe", recipe_id: r.id, name: r.name }, r.servings ? `${r.servings} ${T("servings")}` : r.yield_amount ? `${r.yield_amount} ${r.yield_unit || ""}`.trim() : "")).join("");
             if (found.length) out += head("Foods") + found.map((f) => row({ kind: "food", food_id: f.id, name: f.name }, f.values.kcal != null ? `${num(f.values.kcal)} kcal / 100 g` : T("No nutrition yet"))).join("");
+            const mine = (h) => foods.some((f) => (h.source === "frida" ? f.frida_id === h.id : f.usda_id === h.id) || f.name.toLowerCase() === h.name.toLowerCase());
+            const wanted = needle.split(/\s+/).filter(Boolean);
+            // the typed words must be in the name: the database search also finds look-alikes, which are noise here
+            const named = (h) => wanted.every((w) => `${h.name} ${h.name_en || ""}`.toLowerCase().includes(w));
+            const more = dbHits.filter((h) => (h.source === "frida" || h.source === "usda") && named(h) && !mine(h)).slice(0, 12);
+            if (needle && more.length) out += head("Food database") + more.map((h) => row({ kind: "dbfood", source: h.source, db_id: h.id, name: h.name }, h.kcal != null ? `${num(h.kcal)} kcal / 100 g · ${h.source === "frida" ? "Frida" : "USDA"}` : h.source === "frida" ? "Frida" : "USDA")).join("");
             out += `<ha-list-item-button data-quick headline="${esc(T("Quick entry"))}" supporting-text="${esc(needle ? q.trim() : T("A name and kcal"))}"><ha-icon slot="start" icon="mdi:pencil-outline"></ha-icon></ha-list-item-button>`;
             res.innerHTML = `<ha-list-base>${out}</ha-list-base>`;
           };
           draw("");
-          body.querySelector("#tk-q").addEventListener("input", (e) => draw(e.target.value));
-          res.addEventListener("click", (e) => {
+          body.querySelector("#tk-q").addEventListener("input", (e) => {
+            draw(e.target.value);
+            clearTimeout(dbTimer);
+            const q = e.target.value.trim();
+            if (q.length < 2) {
+              dbHits = [];
+              return;
+            }
+            dbTimer = setTimeout(async () => {
+              try {
+                dbHits = await this._ws({ type: "hass_recipes/nutrition_search", query: q, limit: 20 });
+              } catch (err) {
+                dbHits = [];
+              }
+              if (body.querySelector("#tk-q") && body.querySelector("#tk-q").value.trim() === q) draw(q);
+            }, 250);
+          });
+          res.addEventListener("click", async (e) => {
             if (e.target.closest("[data-quick]")) {
               const typed = body.querySelector("#tk-q").value.trim();
               return startWith({ kind: "quick", name: typed, kcal: "" });
             }
             const item = e.target.closest("[data-n]");
-            if (item) startWith({ ...shown[+item.dataset.n] });
+            if (!item) return;
+            const picked = { ...shown[+item.dataset.n] };
+            if (picked.kind !== "dbfood") return startWith(picked);
+            // a food of the database becomes one of your foods, with the weight of a slice or a piece where that is known
+            const { ok, res: made } = await this._tkCall({
+              type: "hass_recipes/foods_save",
+              name: picked.name,
+              source: picked.source,
+              ...(picked.source === "frida" ? { frida_id: picked.db_id } : { usda_id: picked.db_id }),
+            });
+            if (!ok || !made) return;
+            foods.push(made);
+            startWith({ kind: "food", food_id: made.id, name: made.name });
           });
         };
         pick();
