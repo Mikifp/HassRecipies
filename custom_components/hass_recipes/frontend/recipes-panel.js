@@ -134,7 +134,6 @@ const STYLE = `
   .rd { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; padding: 16px 16px 96px; }
   .rd-left, .rd-right { display: grid; gap: 16px; min-width: 0; }
   .rd-bottom { grid-column: 1 / -1; }
-  .rd-bottom:empty { display: none; }
   .rd-nut { --expansion-panel-summary-padding: 0 8px; --expansion-panel-content-padding: 0; }
   .rd ha-card { display: block; overflow: hidden; }
   .rd-hero { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
