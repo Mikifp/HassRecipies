@@ -44,3 +44,10 @@ def test_energy_is_read_from_kilojoules_when_there_are_no_kcal_and_missing_energ
     assert round(food["values"]["kcal"]) == 100
     _raises(bc.food_from_product, {"product_name": "X", "nutriments": {}}, "12345678")
     _raises(bc.food_from_product, {"nutriments": {"energy-kcal_100g": 5}}, "12345678")
+
+
+def test_the_package_picture_is_kept_only_when_it_is_a_secure_address():
+    base = {"product_name": "Saft", "nutriments": {"energy-kcal_100g": 40}}
+    assert bc.food_from_product({**base, "image_front_small_url": "https://images.openfoodfacts.org/x.jpg"}, "12345678")["image"] == "https://images.openfoodfacts.org/x.jpg"
+    for bad in ("http://example.com/x.jpg", "javascript:alert(1)", ""):
+        assert bc.food_from_product({**base, "image_front_small_url": bad}, "12345678")["image"] == ""

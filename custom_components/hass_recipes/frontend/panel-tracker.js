@@ -1307,18 +1307,58 @@ export default function (h) {
             clearTimeout(timer);
             timer = setTimeout(async () => {
               try {
-                result = await this._ws({ type: "hass_recipes/dish_calc", lines: lines() });
+                const picks = Object.fromEntries(rows.map((r, i) => [String(i), r.pick]).filter(([, p]) => p));
+                result = await this._ws({ type: "hass_recipes/dish_calc", lines: lines(), picks });
                 paintTotals();
               } catch (err) {
                 msg.textContent = (err && err.message) || String(err);
               }
             }, 300);
           };
+          // tap a line to choose the food it is: the search shows the foods of the tables and your own
+          const pickFood = (i) => {
+            res.innerHTML = `<div class="tk-sub" style="margin-top:16px"><b>${esc(rows[i].food)}</b></div>
+              <ha-input-search id="tk-epq" appearance="outlined" placeholder="${esc(T("Search foods"))}"></ha-input-search>
+              <div id="tk-epr"></div>
+              <ha-button id="tk-epback" appearance="plain"><ha-icon slot="start" icon="mdi:arrow-left"></ha-icon>${esc(T("Back"))}</ha-button>`;
+            const list = res.querySelector("#tk-epr");
+            const search = async (q) => {
+              if (q.trim().length < 2) {
+                list.innerHTML = "";
+                return;
+              }
+              let hits = [];
+              try {
+                hits = await this._ws({ type: "hass_recipes/nutrition_search", query: q.trim(), limit: 12 });
+              } catch (err) {
+                hits = [];
+              }
+              list.innerHTML = `<ha-list-base>${hits.map((h, n) => `<ha-list-item-button data-ephit="${n}" headline="${esc(h.name)}" supporting-text="${esc(h.kcal != null ? `${num(h.kcal)} kcal / 100 g` : "")}"><ha-icon slot="start" icon="mdi:food-apple-outline"></ha-icon></ha-list-item-button>`).join("")}</ha-list-base>`;
+              list.querySelectorAll("[data-ephit]").forEach((el) =>
+                el.addEventListener("click", () => {
+                  const hit = hits[+el.dataset.ephit];
+                  rows[i].food = hit.name;
+                  rows[i].pick = { source: hit.source, id: hit.id };
+                  paintRows();
+                  recalc();
+                })
+              );
+            };
+            const input = res.querySelector("#tk-epq");
+            let t = null;
+            input.addEventListener("input", () => {
+              clearTimeout(t);
+              t = setTimeout(() => search(input.value || ""), 200);
+            });
+            res.querySelector("#tk-epback").addEventListener("click", paintRows);
+            input.value = rows[i].food;
+            search(rows[i].food);
+          };
           const paintRows = () => {
             res.innerHTML = `<div class="tk-sub" style="margin-top:16px"><b>${esc(dishName)}</b></div>
               <div class="tk-chips" id="tk-escale">${Object.keys(SCALES).map((k) => `<ha-assist-chip data-escale="${k}" label="${esc(T(k.charAt(0).toUpperCase() + k.slice(1)))}" ${k === scale ? "active" : ""}></ha-assist-chip>`).join("")}</div>
               ${rows.map((r, i) => `<div class="tk-erow"><ha-input data-eg="${i}" type="number" inputmode="decimal" min="0" value="${r.grams}"><span slot="end">g</span></ha-input>
-                  <div class="tk-ename"><div>${esc(r.food)}</div><div class="muted" data-ekcal="${i}"></div></div>
+                  <div class="tk-ename" data-epick="${i}" role="button" tabindex="0" style="cursor:pointer"><div>${esc(r.food)}</div><div class="muted" data-ekcal="${i}"></div></div>
                   <ha-icon-button data-edel="${i}" label="${esc(T("Remove"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button></div>`).join("")}
               <div class="tk-preview" id="tk-etotal"></div>
               <div class="muted tk-scanmsg">${esc(T("An estimate: the AI guesses what is in the dish, so check the weights. It is logged as estimated."))}</div>`;
@@ -1328,6 +1368,7 @@ export default function (h) {
                 recalc();
               })
             );
+            res.querySelectorAll("[data-epick]").forEach((el) => el.addEventListener("click", () => pickFood(+el.dataset.epick)));
             res.querySelectorAll("[data-edel]").forEach((b) =>
               b.addEventListener("click", () => {
                 rows.splice(+b.dataset.edel, 1);
@@ -1391,8 +1432,11 @@ export default function (h) {
           let dbTimer = null;
           const row = (item, sub) => {
             shown.push(item);
+            // a picture where there is one: a recipe's, or the package of a scanned product
+            const pic = item.image || (item.kind === "recipe" ? (this._recipes.find((r) => r.id === item.recipe_id) || {}).image : item.kind === "food" ? (foods.find((f) => f.id === item.food_id) || {}).image : "");
+            const start = pic ? `<img slot="start" class="thumb" src="${esc(pic)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<ha-icon slot="start" icon="${label(item)}"></ha-icon>`;
             const add = item.kind === "quick" ? "" : `<ha-icon-button slot="end" data-qa="${shown.length - 1}" label="${esc(T("Add"))}"><ha-icon icon="mdi:plus-circle-outline"></ha-icon></ha-icon-button>`;
-            return `<ha-list-item-button data-n="${shown.length - 1}" headline="${esc(item.name)}" supporting-text="${esc(sub)}"><ha-icon slot="start" icon="${label(item)}"></ha-icon>${add}</ha-list-item-button>`;
+            return `<ha-list-item-button data-n="${shown.length - 1}" headline="${esc(item.name)}" supporting-text="${esc(sub)}">${start}${add}</ha-list-item-button>`;
           };
           let filter = "all"; // all, mine (foods and favourites), recipes, database
           const head = (text) => `<div class="fm-head">${esc(T(text))}</div>`;
