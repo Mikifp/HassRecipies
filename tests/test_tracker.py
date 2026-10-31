@@ -179,6 +179,37 @@ def test_each_person_has_their_own_log_and_deleting_a_person_deletes_it():
     assert t.day(anna["id"], DAY)["totals"]["kcal"] == 100 and not [e for e in t._entries.values() if e["person_id"] == mikkel["id"]]
 
 
+def test_water_is_counted_per_day_and_can_be_undone():
+    *_, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    assert t.water(anna["id"], DAY) == {"ml": 0, "goal": 2000}
+    t.add_water(anna["id"], DAY, 250)
+    assert t.add_water(anna["id"], DAY, 500)["ml"] == 750
+    assert t.add_water(anna["id"], DAY, -250)["ml"] == 500
+    assert t.add_water(anna["id"], DAY, -5000)["ml"] == 0 and DAY not in t.person(anna["id"])["water"]
+    for bad in ("x", 20000):
+        try:
+            t.add_water(anna["id"], DAY, bad)
+        except tr.TrackerError:
+            continue
+        raise AssertionError("accepted a bad amount")
+    t.set_water_goal(anna["id"], 2500)
+    assert t.day(anna["id"], DAY)["water"] == {"ml": 0, "goal": 2500}
+
+
+def test_a_streak_counts_days_in_a_row_and_survives_today_being_empty():
+    *_, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    for day in ("2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29"):
+        t.add(anna["id"], day, "lunch", "quick", name="x", kcal=100)
+    t.add(anna["id"], "2026-10-20", "lunch", "quick", name="x", kcal=100)
+    t.add(anna["id"], "2026-10-21", "lunch", "quick", name="x", kcal=100)
+    assert t.streak(anna["id"], "2026-10-29") == {"current": 4, "best": 4}
+    assert t.streak(anna["id"], "2026-10-30")["current"] == 4  # today is not over yet
+    assert t.streak(anna["id"], "2026-10-31")["current"] == 0  # a day was missed
+    assert t.streak(anna["id"], "2026-10-31")["best"] == 4
+
+
 def test_a_range_gives_each_day_and_averages_the_days_that_were_logged():
     *_, t = _make()
     anna = t.ensure_user("u1", "Anna")
