@@ -1572,7 +1572,49 @@ export default function (h) {
 
     /** Whether this browser can read barcodes with the camera. */
     _barcodeCamera() {
-      return !!(window.BarcodeDetector && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    },
+
+    /**
+     * Something with `detect(video)` that returns [{ rawValue }]: the browser's own barcode reader where there is one,
+     * else ZXing (vendor/zxing.min.js, Apache 2.0), which is loaded the first time it is needed.
+     */
+    async _barcodeDetector() {
+      const formats = ["ean_13", "ean_8", "upc_a", "upc_e"];
+      if (window.BarcodeDetector) return new window.BarcodeDetector({ formats });
+      if (!window.ZXing) {
+        await new Promise((resolve, reject) => {
+          const el = document.createElement("script");
+          el.src = new URL("vendor/zxing.min.js", import.meta.url).href;
+          el.onload = resolve;
+          el.onerror = () => reject(new Error("The barcode reader could not be loaded"));
+          document.head.appendChild(el);
+        });
+      }
+      const Z = window.ZXing;
+      const reader = new Z.MultiFormatReader();
+      reader.setHints(new Map([[Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E]], [Z.DecodeHintType.TRY_HARDER, true]]));
+      const canvas = document.createElement("canvas");
+      return {
+        detect: async (source) => {
+          const w = source.videoWidth || source.width;
+          const h = source.videoHeight || source.height;
+          if (!w || !h) return [];
+          // the middle of the picture, where the frame is, no wider than 1000 px
+          const cw = Math.round(w * 0.8);
+          const ch = Math.round(h * 0.6);
+          const scale = Math.min(1, 1000 / cw);
+          canvas.width = Math.round(cw * scale);
+          canvas.height = Math.round(ch * scale);
+          canvas.getContext("2d", { willReadFrequently: true }).drawImage(source, Math.round((w - cw) / 2), Math.round((h - ch) / 2), cw, ch, 0, 0, canvas.width, canvas.height);
+          try {
+            const result = reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(canvas))));
+            return [{ rawValue: result.getText() }];
+          } catch (_) {
+            return []; // nothing readable in this picture
+          }
+        },
+      };
     },
 
     /**
@@ -1614,8 +1656,8 @@ export default function (h) {
       });
       const vid = ov.querySelector("video");
       navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: "environment" } })
-        .then((st) => {
+        .getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } })
+        .then(async (st) => {
           stream = st;
           vid.srcObject = st;
           vid.play();
@@ -1634,7 +1676,11 @@ export default function (h) {
               }
             });
           }
-          const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
+          // a barcode is small and close: keep the focus on it
+          if (track && track.getCapabilities && (track.getCapabilities().focusMode || []).includes("continuous")) {
+            track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+          }
+          const detector = await this._barcodeDetector();
           timer = setInterval(async () => {
             if (!ov.isConnected) return stop();
             if (busy) return;
