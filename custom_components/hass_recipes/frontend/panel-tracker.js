@@ -1600,10 +1600,10 @@ export default function (h) {
           const w = source.videoWidth || source.width;
           const h = source.videoHeight || source.height;
           if (!w || !h) return [];
-          // the middle of the picture, where the frame is, no wider than 1000 px
+          // the middle of the picture, where the frame is, no wider than 800 px
           const cw = Math.round(w * 0.8);
           const ch = Math.round(h * 0.6);
-          const scale = Math.min(1, 1000 / cw);
+          const scale = Math.min(1, 800 / cw);
           canvas.width = Math.round(cw * scale);
           canvas.height = Math.round(ch * scale);
           canvas.getContext("2d", { willReadFrequently: true }).drawImage(source, Math.round((w - cw) / 2), Math.round((h - ch) / 2), cw, ch, 0, 0, canvas.width, canvas.height);
@@ -1655,9 +1655,36 @@ export default function (h) {
         on.type();
       });
       const vid = ov.querySelector("video");
-      navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } })
-        .then(async (st) => {
+      // 4:3 uses the whole sensor; the 16:9 video modes crop it, which looks zoomed in
+      const size = { width: { ideal: 1280 }, height: { ideal: 960 }, frameRate: { ideal: 30, max: 30 } };
+      // phones with several back lenses may open a telephoto or macro one that cannot focus up close:
+      // the main lens is the one Android labels "camera 0". Opening it straight away avoids a slow second start.
+      const lens = async () => {
+        try {
+          const main = (await navigator.mediaDevices.enumerateDevices()).find((d) => d.kind === "videoinput" && d.deviceId && /(^|\D)0,\s*facing back/i.test(d.label));
+          if (main) return { deviceId: { exact: main.deviceId } };
+        } catch (_) {
+          /* labels are only known once the camera has been allowed */
+        }
+        return { facingMode: "environment" };
+      };
+      const detectorReady = this._barcodeDetector(); // load the reader while the camera starts
+      detectorReady.catch(() => {});
+      lens()
+        .then((which) => navigator.mediaDevices.getUserMedia({ video: { ...which, ...size } }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", ...size } })))
+        .then(async (first) => {
+          let st = first;
+          try {
+            // first visit: the labels were not known until now, so switch once to the main lens
+            const main = (await navigator.mediaDevices.enumerateDevices()).find((d) => d.kind === "videoinput" && /(^|\D)0,\s*facing back/i.test(d.label));
+            if (main && main.deviceId !== first.getVideoTracks()[0].getSettings().deviceId) {
+              first.getTracks().forEach((t) => t.stop());
+              st = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: main.deviceId }, ...size } });
+            }
+          } catch (_) {
+            /* keep the first camera */
+          }
+          if (!ov.isConnected) return st.getTracks().forEach((t) => t.stop());
           stream = st;
           vid.srcObject = st;
           vid.play();
@@ -1676,11 +1703,14 @@ export default function (h) {
               }
             });
           }
+          // some phones start zoomed in: show the widest view
+          const zoom = track && track.getCapabilities && track.getCapabilities().zoom;
+          if (zoom && zoom.min !== undefined) track.applyConstraints({ advanced: [{ zoom: zoom.min }] }).catch(() => {});
           // a barcode is small and close: keep the focus on it
           if (track && track.getCapabilities && (track.getCapabilities().focusMode || []).includes("continuous")) {
             track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
           }
-          const detector = await this._barcodeDetector();
+          const detector = await detectorReady;
           timer = setInterval(async () => {
             if (!ov.isConnected) return stop();
             if (busy) return;
@@ -1693,7 +1723,7 @@ export default function (h) {
             } catch (_) {
               /* the next frame */
             }
-          }, 400);
+          }, 500);
         })
         .catch(() => {
           stop();

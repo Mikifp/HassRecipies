@@ -278,7 +278,6 @@ export default function (h) {
           <div class="fd-main">
             <div class="fd-tool">
               ${compact ? "" : `<ha-input-search id="fsearch" appearance="outlined" placeholder="${esc(T("Search foods"))}" value="${esc(st.q)}"></ha-input-search>`}
-              ${canEdit ? `<ha-assist-chip data-fscan label="${esc(T("Scan barcode"))}"><ha-icon slot="icon" icon="mdi:barcode-scan"></ha-icon></ha-assist-chip>` : ""}
               ${chip("review", "Needs review", c.review)}${chip("mine", "Mine", c.mine)}${chip("frida", "From Frida", c.frida)}${c.usda ? chip("usda", "From USDA", c.usda) : ""}
               ${st.filter === "review" && standard && canEdit ? `<ha-button size="s" appearance="filled" data-fd="adopt-all"><ha-icon slot="start" icon="mdi:check-all"></ha-icon>${esc(`${T("Accept")} ${standard} ${T("standard choices")}`)}</ha-button>` : ""}
             </div>
@@ -557,6 +556,7 @@ export default function (h) {
         .join("");
       return `<div class="fd-detail">
           ${compact ? "" : `<div class="fd-dhead"><h2>${esc(d.name || T("New food"))}</h2>${close}</div>`}
+          ${canEdit && id === "new" ? `<ha-button size="s" appearance="plain" data-fscan><ha-icon slot="start" icon="mdi:barcode-scan"></ha-icon>${esc(T("Scan barcode"))}</ha-button><div class="muted">${esc(T("Fills in the food from the package."))}</div>` : ""}
           <ha-form id="fd-form"></ha-form>
           <h3>${esc(T("Nutrition per 100 g"))}</h3>
           <div class="fd-srcs">${src("frida", "Frida")}${src("usda", "USDA")}${src("custom", "My values")}${src("none", "None")}</div>
