@@ -366,6 +366,37 @@ class Nutrition:
         self._save()
         return self._describe_food(saved, self._usage()[0])
 
+    def estimate_lines(self, lines: list[str]) -> dict[str, Any]:
+        """Nutrition of a few typed ingredient lines ("90 g pasta, kogt") that are not a recipe: for estimating a dish."""
+        from .ingredients import parse_ingredient
+
+        custom, links = self._views()
+        parsed = [parse_ingredient(line) for line in lines if str(line).strip()]
+        result = calculate({"ingredients": lines}, parsed, self.db, custom, links)
+        items = []
+        for item in result["items"]:
+            match = item.get("match") or {}
+            items.append(
+                {
+                    "food": item["food"],
+                    "grams": item["grams"],
+                    "kcal": (item.get("values") or {}).get("kcal"),
+                    "matched": item["status"] == "ok",
+                    "match": match.get("name", ""),
+                }
+            )
+        total = {k: result["total"].get(k) for k in ("kcal", "protein", "carbs", "fat")}
+        # a guess is never exact: wider when something could not be matched or was matched on its own
+        spread = 0.2 + (0.1 if result["missing"] else 0) + (0.05 if result["unconfirmed"] else 0)
+        kcal = total["kcal"]
+        return {
+            "items": items,
+            "total": total,
+            "low": None if kcal is None else round(kcal * (1 - spread)),
+            "high": None if kcal is None else round(kcal * (1 + spread)),
+            "missing": result["missing"],
+        }
+
     def food_for_barcode(self, code: str) -> dict[str, Any] | None:
         """The food that was made for this barcode before, if any."""
         found = self.book.by_barcode(code)

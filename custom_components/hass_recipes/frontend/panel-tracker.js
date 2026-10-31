@@ -31,7 +31,7 @@ export default function (h) {
       return `${num(n, 2)} ${T(n === 1 ? "serving" : "servings")}`;
     }
     if (e.kind === "food") return `${num(e.amount, 1)} ${e.unit}`;
-    return T("Quick entry");
+    return e.estimated ? T("Estimated") : T("Quick entry");
   };
   /** What one usual portion of a food is: a slice, a piece, else 100 g ({ unit, amount, grams, kcal }). */
   const usualOf = (f) => {
@@ -1262,10 +1262,128 @@ export default function (h) {
               });
           }
         };
+        // a dish without a recipe: the AI guesses what is in it, the numbers come from the food tables, and you can correct the weights
+        const estimate = (prefill = "") => {
+          const SCALES = { small: 0.75, normal: 1, large: 1.35 };
+          const back = { id: "tk-eback", label: T("Back"), icon: "arrow-left" };
+          this._planFooter(dlg, { secondary: [back] });
+          dlg.querySelector("#tk-eback").addEventListener("click", pick);
+          let desc = { text: prefill };
+          let rows = [];
+          let result = null;
+          let dishName = "";
+          let scale = "normal";
+          body.innerHTML = `<ha-form id="tk-ed"></ha-form>
+            <div class="tk-lookup"><ha-button id="tk-eg" appearance="filled"><ha-icon slot="start" icon="mdi:creation"></ha-icon>${esc(T("Estimate"))}</ha-button></div>
+            <div class="muted tk-scanmsg" id="tk-emsg">${esc(T("Describe the dish and how much you had, for example: spaghetti bolognese, a large plate."))}</div>
+            <div id="tk-eres"></div>`;
+          const form = body.querySelector("#tk-ed");
+          form.hass = this._hass;
+          form.schema = [{ name: "text", selector: { text: {} } }];
+          form.data = desc;
+          form.computeLabel = () => T("Dish");
+          form.addEventListener("value-changed", (e) => {
+            e.stopPropagation();
+            desc = e.detail.value || desc;
+          });
+          const msg = body.querySelector("#tk-emsg");
+          const res = body.querySelector("#tk-eres");
+          const lines = () => rows.map((r) => `${r.grams} g ${r.food}`);
+          const paintTotals = () => {
+            const t = result.total;
+            const box = res.querySelector("#tk-etotal");
+            const range = result.low != null ? ` (${num(result.low)}–${num(result.high)})` : "";
+            box.textContent = t.kcal != null ? `≈ ${num(t.kcal)} kcal${range}${MACROS.map(([k, l]) => (t[k] != null ? ` · ${num(t[k])} g ${T(l).toLowerCase()}` : "")).join("")}` : "";
+            result.items.forEach((it, i) => {
+              const k = res.querySelector(`[data-ekcal="${i}"]`);
+              if (k) k.textContent = it.matched ? `${num(it.kcal)} kcal` : T("not found: counted as 0");
+            });
+            const save = dlg.querySelector("#tk-eadd");
+            const label = save && [...save.childNodes].filter((n) => n.nodeType === 3).pop();
+            if (label) label.textContent = t.kcal != null ? `${T("Add")} · ${num(t.kcal)} kcal` : T("Add");
+          };
+          let timer = null;
+          const recalc = () => {
+            clearTimeout(timer);
+            timer = setTimeout(async () => {
+              try {
+                result = await this._ws({ type: "hass_recipes/dish_calc", lines: lines() });
+                paintTotals();
+              } catch (err) {
+                msg.textContent = (err && err.message) || String(err);
+              }
+            }, 300);
+          };
+          const paintRows = () => {
+            res.innerHTML = `<div class="tk-sub" style="margin-top:16px"><b>${esc(dishName)}</b></div>
+              <div class="tk-chips" id="tk-escale">${Object.keys(SCALES).map((k) => `<ha-assist-chip data-escale="${k}" label="${esc(T(k.charAt(0).toUpperCase() + k.slice(1)))}" ${k === scale ? "active" : ""}></ha-assist-chip>`).join("")}</div>
+              ${rows.map((r, i) => `<div class="tk-erow"><ha-input data-eg="${i}" type="number" inputmode="decimal" min="0" value="${r.grams}"><span slot="end">g</span></ha-input>
+                  <div class="tk-ename"><div>${esc(r.food)}</div><div class="muted" data-ekcal="${i}"></div></div>
+                  <ha-icon-button data-edel="${i}" label="${esc(T("Remove"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button></div>`).join("")}
+              <div class="tk-preview" id="tk-etotal"></div>
+              <div class="muted tk-scanmsg">${esc(T("An estimate: the AI guesses what is in the dish, so check the weights. It is logged as estimated."))}</div>`;
+            res.querySelectorAll("[data-eg]").forEach((inp) =>
+              inp.addEventListener("input", () => {
+                rows[+inp.dataset.eg].grams = Math.max(0, parseFloat(String(inp.value).replace(",", ".")) || 0);
+                recalc();
+              })
+            );
+            res.querySelectorAll("[data-edel]").forEach((b) =>
+              b.addEventListener("click", () => {
+                rows.splice(+b.dataset.edel, 1);
+                paintRows();
+                recalc();
+              })
+            );
+            res.querySelectorAll("[data-escale]").forEach((c) =>
+              c.addEventListener("click", () => {
+                const factor = SCALES[c.dataset.escale] / SCALES[scale];
+                scale = c.dataset.escale;
+                rows.forEach((r) => (r.grams = Math.round(r.grams * factor)));
+                paintRows();
+                recalc();
+              })
+            );
+            paintTotals();
+          };
+          const showResult = (r) => {
+            result = r;
+            rows = r.items.filter((i) => i.grams != null).map((i) => ({ food: i.food, grams: Math.round(i.grams) }));
+            scale = "normal";
+            this._planFooter(dlg, { primary: { id: "tk-eadd", label: T("Add"), icon: "check" }, secondary: [back] });
+            dlg.querySelector("#tk-eback").addEventListener("click", pick);
+            dlg.querySelector("#tk-eadd").addEventListener("click", async () => {
+              const t = result.total;
+              if (t.kcal == null) return;
+              close();
+              const fields = Object.fromEntries(["kcal", "protein", "carbs", "fat"].filter((k) => t[k] != null).map((k) => [k, Math.round(t[k] * 10) / 10]));
+              const { ok } = await this._tkCall({ type: "hass_recipes/tracker_add", person_id: d.person.id, date: d.date, meal, kind: "quick", name: dishName || desc.text, estimated: true, ...fields });
+              if (ok) await this._tkLoad();
+            });
+            paintRows();
+          };
+          body.querySelector("#tk-eg").addEventListener("click", async () => {
+            const text = (desc.text || "").trim();
+            if (text.length < 2) {
+              msg.textContent = T("Describe the dish first.");
+              return;
+            }
+            msg.textContent = T("Asking the AI…");
+            res.innerHTML = "";
+            try {
+              const r = await this._ws({ type: "hass_recipes/dish_estimate", description: text });
+              dishName = r.name || text;
+              msg.textContent = "";
+              showResult(r);
+            } catch (err) {
+              msg.textContent = (err && err.message) || String(err);
+            }
+          });
+        };
         const pick = () => {
           this._planFooter(dlg);
           body.innerHTML = `<ha-input-search id="tk-q" appearance="outlined" placeholder="${esc(T("Search recipes and foods"))}"></ha-input-search>
-            <div class="tk-chips tk-filters" id="tk-filters">${[["all", "All"], ["mine", "Mine"], ["recipes", "Recipes"], ["db", "Database"]].map(([v, l]) => `<ha-assist-chip data-filter="${v}" label="${esc(T(l))}" ${v === "all" ? "active" : ""}></ha-assist-chip>`).join("")}<ha-assist-chip data-scan label="${esc(T("Scan"))}"><ha-icon slot="icon" icon="mdi:barcode-scan"></ha-icon></ha-assist-chip></div>
+            <div class="tk-chips tk-filters" id="tk-filters">${[["all", "All"], ["mine", "Mine"], ["recipes", "Recipes"], ["db", "Database"]].map(([v, l]) => `<ha-assist-chip data-filter="${v}" label="${esc(T(l))}" ${v === "all" ? "active" : ""}></ha-assist-chip>`).join("")}<ha-assist-chip data-scan label="${esc(T("Scan"))}"><ha-icon slot="icon" icon="mdi:barcode-scan"></ha-icon></ha-assist-chip><ha-assist-chip data-estimate-chip label="${esc(T("Estimate"))}"><ha-icon slot="icon" icon="mdi:creation-outline"></ha-icon></ha-assist-chip></div>
             <div id="tk-res" class="tk-res"></div>`;
           const res = body.querySelector("#tk-res");
           let shown = [];
@@ -1302,12 +1420,15 @@ export default function (h) {
             const named = (h) => wanted.every((w) => `${h.name} ${h.name_en || ""}`.toLowerCase().includes(w));
             const more = !show("db") ? [] : dbHits.filter((h) => (h.source === "frida" || h.source === "usda") && named(h) && !mine(h)).slice(0, 12);
             if (needle && more.length) out += head("Food database") + more.map((h) => row({ kind: "dbfood", source: h.source, db_id: h.id, name: h.name }, h.kcal != null ? `${num(h.kcal)} kcal / 100 g · ${h.source === "frida" ? "Frida" : "USDA"}` : h.source === "frida" ? "Frida" : "USDA")).join("");
-            out += `<ha-list-item-button data-quick headline="${esc(T("Quick entry"))}" supporting-text="${esc(needle ? q.trim() : T("A name and kcal"))}"><ha-icon slot="start" icon="mdi:pencil-outline"></ha-icon></ha-list-item-button>`;
+            out += `<ha-list-item-button data-quick headline="${esc(T("Quick entry"))}" supporting-text="${esc(needle ? q.trim() : T("A name and kcal"))}"><ha-icon slot="start" icon="mdi:pencil-outline"></ha-icon></ha-list-item-button>
+              <ha-list-item-button data-estimate headline="${esc(T("Estimate a dish"))}" supporting-text="${esc(T("No recipe? Describe it and get a guess"))}"><ha-icon slot="start" icon="mdi:creation-outline"></ha-icon></ha-list-item-button>`;
             res.innerHTML = `<ha-list-base>${out}</ha-list-base>`;
           };
           draw("");
           const scanChip = body.querySelector("[data-scan]");
           if (scanChip) scanChip.addEventListener("click", () => scan());
+          const estChip = body.querySelector("[data-estimate-chip]");
+          if (estChip) estChip.addEventListener("click", () => estimate((body.querySelector("#tk-q").value || "").trim()));
           body.querySelectorAll("[data-filter]").forEach((chip) =>
             chip.addEventListener("click", () => {
               filter = chip.dataset.filter;
@@ -1356,6 +1477,7 @@ export default function (h) {
               e.stopPropagation();
               return quickAdd({ ...shown[+qa.dataset.qa] });
             }
+            if (e.target.closest("[data-estimate]")) return estimate((body.querySelector("#tk-q").value || "").trim());
             if (e.target.closest("[data-quick]")) {
               const typed = body.querySelector("#tk-q").value.trim();
               return startWith({ kind: "quick", name: typed, kcal: "" });

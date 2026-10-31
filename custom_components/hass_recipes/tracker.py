@@ -315,7 +315,7 @@ class Tracker:
             day = parse_date(day).isoformat()
         except MealPlanError as err:
             raise TrackerError(str(err)) from err
-        keep = ("recipe_id", "food_id", "by", "servings", "amount", "unit", "name", "kcal", "protein", "carbs", "fat", "plan_id")
+        keep = ("recipe_id", "food_id", "by", "servings", "amount", "unit", "name", "kcal", "protein", "carbs", "fat", "plan_id", "estimated")
         entry = {
             "id": uuid.uuid4().hex,
             "person_id": person_id,
