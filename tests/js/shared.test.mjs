@@ -122,6 +122,11 @@ test("a step keeps the ids of the ingredients it uses", () => {
 
 test("an ingredient's text is split into amount, unit and food, and joined again", () => {
   assert.deepEqual(s.splitAmount("200 g butter"), { amount: "200", unit: "g", food: "butter" });
+  assert.deepEqual(s.splitAmount("400 gram mel"), { amount: "400", unit: "g", food: "mel" });
+  assert.deepEqual(s.splitAmount("1,5 kilogram kartofler"), { amount: "1,5", unit: "kg", food: "kartofler" });
+  assert.deepEqual(s.splitAmount("2 liter mælk"), { amount: "2", unit: "l", food: "mælk" });
+  assert.equal(s.shortUnits("250 milliliter fløde"), "250 ml fløde");
+  assert.equal(s.joinAmount({ amount: "3", unit: "gram", food: "smør" }), "3 g smør");
   assert.deepEqual(s.splitAmount("2 dl mælk"), { amount: "2", unit: "dl", food: "mælk" });
   assert.deepEqual(s.splitAmount("2 løg"), { amount: "2", unit: "", food: "løg" }); // løg is not a unit
   assert.deepEqual(s.splitAmount("1 1/2 tsk salt"), { amount: "1 1/2", unit: "tsk", food: "salt" });

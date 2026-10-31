@@ -75,7 +75,7 @@ export default function (h) {
     /** Where the nutrition table goes: Home Assistant's data table, put in by `_nuMountTables` once the page is drawn. */
     _nuTableHtml(d, k, full) {
       return `<div class="nu-tablehost" data-full="${full ? 1 : 0}"></div>
-        ${d.per_100g ? `<div class="muted nu-basis">${esc(h.T("Per 100 g is based on the"))} ${num(d.weight, 0)} g ${esc(h.T("of ingredients that were counted"))}.</div>` : ""}`;
+        ${d.per_100g ? `<div class="muted nu-basis">${esc(h.T("Per 100 g is based on the"))} ${num(d.weight, 0)} g ${esc(h.T("of ingredients"))}${d.weight_uncounted ? `, ${esc(h.T("of which"))} ${num(d.weight_uncounted, 0)} g ${esc(h.T("has no nutrition values and counts as 0"))}` : ""}.</div>` : ""}`;
     },
 
     /** The nutrition tables of the page: per 100 g, per serving, per unit the recipe makes, and the whole recipe. */
