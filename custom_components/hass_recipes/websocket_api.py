@@ -14,7 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
 from .access import can_edit
-from .ai import async_tidy, available as ai_available
+from .ai import async_estimate_dish, async_tidy, available as ai_available
 from .const import DOMAIN, SIGNAL_TIMERS
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .images import MAX_IMAGE_BYTES, image_url
@@ -189,6 +189,8 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_tracker_water,
         ws_tracker_water_goal,
         ws_barcode,
+        ws_dish_estimate,
+        ws_dish_calc,
         ws_sites,
         ws_sites_search,
     ):
@@ -1251,6 +1253,7 @@ _NUM = vol.Any(None, vol.Coerce(float))
         vol.Optional("carbs"): _NUM,
         vol.Optional("fat"): _NUM,
         vol.Optional("plan_id"): str,
+        vol.Optional("estimated"): bool,
     }
 )
 @websocket_api.async_response
@@ -1499,3 +1502,25 @@ async def ws_barcode(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
     connection.send_result(msg["id"], found)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/dish_estimate", vol.Required("description"): vol.All(str, vol.Length(min=2, max=300))})
+@websocket_api.async_response
+@_edits_async
+async def ws_dish_estimate(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """A dish without a recipe: the AI says what it is probably made of, the nutrition is worked out from the food tables."""
+    try:
+        dish = await async_estimate_dish(hass, msg["description"])
+    except RecipeImportError as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+        return
+    connection.send_result(msg["id"], {"name": dish["name"], **_nutrition(hass).estimate_lines(dish["lines"])})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/dish_calc", vol.Required("lines"): vol.All([vol.All(str, vol.Length(max=160))], vol.Length(max=30))}
+)
+@callback
+def ws_dish_calc(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The nutrition of ingredient lines the user has adjusted (no AI)."""
+    connection.send_result(msg["id"], _nutrition(hass).estimate_lines(msg["lines"]))

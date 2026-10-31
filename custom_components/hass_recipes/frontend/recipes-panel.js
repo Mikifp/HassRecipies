@@ -408,6 +408,8 @@ const STYLE = `
   .tk-water .tk-kbar.done { --control-slider-color: var(--success-color, #43a047); --control-slider-background: var(--success-color, #43a047); }
   .tk-wbtns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   .tk-vid { width: 100%; max-height: 260px; border-radius: 12px; background: #000; object-fit: cover; margin-bottom: 12px; }
+  .tk-erow { display: grid; grid-template-columns: 96px 1fr auto; gap: 8px; align-items: center; margin-top: 4px; }
+  .tk-ename { min-width: 0; overflow-wrap: anywhere; }
   .tk-lookup { margin-top: 8px; }
   .tk-scanmsg { margin-top: 8px; font-size: 0.85em; }
   .tk-week { display: flex; gap: 2px; margin-bottom: 8px; }

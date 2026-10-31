@@ -329,3 +329,16 @@ def test_a_food_made_from_the_database_starts_with_the_weight_of_a_slice_or_a_pi
     # and it can be tracked in slices
     assert round(nutrition.food_amount(saved["id"], 2, "skive")["grams"]) == 60
     assert round(nutrition.food_amount(saved["id"], 2, "skive (tyk)")["grams"]) == 90  # a thick slice
+
+
+def test_a_dish_without_a_recipe_is_worked_out_from_lines_with_a_range():
+    recipes, nutrition = _make()
+    est = nutrition.estimate_lines(["90 g pasta, kogt", "120 g oksekød, hakket", "10 g olie", "50 g noget ukendt"])
+    assert [i["food"] for i in est["items"]][0].startswith("pasta") and est["items"][0]["grams"] == 90
+    assert est["total"]["kcal"] and est["low"] < est["total"]["kcal"] < est["high"]
+    # something that could not be matched widens the range and is reported
+    assert est["missing"] >= 1 and not est["items"][3]["matched"]
+    clean = nutrition.estimate_lines(["100 g franskbrød"])
+    assert clean["missing"] == 0 and clean["items"][0]["matched"]
+    assert (est["high"] - est["low"]) / est["total"]["kcal"] > (clean["high"] - clean["low"]) / clean["total"]["kcal"]
+    assert nutrition.estimate_lines([])["total"]["kcal"] is None or nutrition.estimate_lines([])["total"]["kcal"] == 0
