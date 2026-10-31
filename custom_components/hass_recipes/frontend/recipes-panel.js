@@ -411,7 +411,7 @@ const STYLE = `
   .tk-wbtns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   .tk-lookbtns { display: flex; flex-wrap: wrap; gap: 8px; }
   .tk-scanner { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: #000; color: #fff; overflow: hidden; }
-  .tk-scanvid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .tk-scanvid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
   .tk-scanframe { position: absolute; top: 50%; left: 50%; width: min(80vw, 380px); aspect-ratio: 1; transform: translate(-50%, -58%); border: 4px solid #fff; border-radius: 28px; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.4); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 14px; box-sizing: border-box; font-weight: 500; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); }
   .tk-scanner ha-icon-button { position: absolute; color: #fff; --mdc-icon-button-size: 56px; --mdc-icon-size: 32px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); }
   .tk-scanner .tk-sx { top: max(12px, env(safe-area-inset-top)); left: 12px; }
