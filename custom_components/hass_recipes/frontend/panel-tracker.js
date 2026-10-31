@@ -1655,8 +1655,12 @@ export default function (h) {
         on.type();
       });
       const vid = ov.querySelector("video");
+      // ask for a picture shaped like the screen, so it is not cropped to fill it
+      const portrait = window.innerHeight > window.innerWidth;
+      const long = 1920;
+      const short = Math.round(long * (portrait ? window.innerWidth / window.innerHeight : window.innerHeight / window.innerWidth));
       navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } })
+        .getUserMedia({ video: { facingMode: "environment", width: { ideal: portrait ? short : long }, height: { ideal: portrait ? long : short } } })
         .then(async (st) => {
           stream = st;
           vid.srcObject = st;
@@ -1676,6 +1680,9 @@ export default function (h) {
               }
             });
           }
+          // some phones start zoomed in: show the widest view
+          const zoom = track && track.getCapabilities && track.getCapabilities().zoom;
+          if (zoom && zoom.min !== undefined) track.applyConstraints({ advanced: [{ zoom: zoom.min }] }).catch(() => {});
           // a barcode is small and close: keep the focus on it
           if (track && track.getCapabilities && (track.getCapabilities().focusMode || []).includes("continuous")) {
             track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
