@@ -650,6 +650,7 @@ const da = {
     "Energy (kcal)": "Energi (kcal)",
     "Per serving": "Pr. portion",
     "Whole recipe": "Hele opskriften",
+    "Whole": "Hele",
     "Calculating…": "Beregner…",
     "Check ingredients": "Tjek ingredienser",
     "Show ingredients": "Vis ingredienser",

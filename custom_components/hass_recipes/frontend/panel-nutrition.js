@@ -85,7 +85,7 @@ export default function (h) {
       const d = st && st.data;
       if (!d) return;
       const k = this._scale || 1;
-      const compact = this._brCompact();
+      const compact = this._brCompact() || this.clientWidth < 700;
       // the unit is in the row's name, so that the numbers are short enough for a phone
       const plain = (v, unit) => (v == null ? "–" : num(v, unit === "kcal" ? 0 : 1));
       root.querySelectorAll(".nu-tablehost").forEach((host) => {
@@ -134,7 +134,7 @@ export default function (h) {
           // one column besides 100 g: per unit the recipe makes, else per serving, else the whole recipe
           ...col(compact ? d.yield_unit || h.T("piece") : `${h.T("Per")} ${d.yield_unit || h.T("piece")}`, "unit", !!d.per_unit),
           ...col(compact ? h.T("Serving") : h.T("Per serving"), "serving", !d.per_unit && !!d.per_serving),
-          ...col(k === 1 ? h.T("Whole recipe") : `${h.T("Whole recipe")} ×${num(k, 2)}`, "whole", !d.per_unit && !d.per_serving),
+          ...col(compact ? (k === 1 ? h.T("Whole") : `×${num(k, 2)}`) : k === 1 ? h.T("Whole recipe") : `${h.T("Whole recipe")} ×${num(k, 2)}`, "whole", !d.per_unit && !d.per_serving),
         };
         t.data = rows;
         host.replaceChildren(t);
@@ -178,7 +178,7 @@ export default function (h) {
           attention ? "playlist-check" : "format-list-bulleted"
         }"></ha-icon>${attention ? "Check ingredients" : "Show ingredients"}</ha-button></div>${this._nuSourceHtml(d)}`;
       }
-      return `<ha-card class="rd-nut" header="Nutrition">${body}</ha-card>`;
+      return `<ha-card class="rd-nut"><ha-expansion-panel id="rd-nutpanel" left-chevron ${this._nuOpen ? "expanded" : ""}><div slot="header" class="rd-sh">${esc(h.T("Nutrition"))}</div>${body}</ha-expansion-panel></ha-card>`;
     },
 
     // ---- the page: every ingredient line and its food ----
