@@ -224,6 +224,7 @@ const da = {
     Scan: "Scan",
     "Look up": "Slå op",
     "Scan the barcode here": "Scan stregkode her",
+    "Scan barcode": "Scan stregkode",
     "Scan with the camera": "Scan med kameraet",
     "Create a new food": "Opret en ny fødevare",
     "Create a food with this barcode": "Opret en fødevare med denne stregkode",

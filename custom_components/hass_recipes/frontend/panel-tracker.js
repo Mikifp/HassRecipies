@@ -1196,7 +1196,7 @@ export default function (h) {
         const label = (item) => (item.kind === "recipe" ? "mdi:chef-hat" : item.kind === "food" ? "mdi:food-apple-outline" : item.kind === "dbfood" ? "mdi:database-search-outline" : "mdi:pencil-outline");
         const how = (t) => (t.kind === "quick" ? `${num(t.kcal)} kcal` : howText(t));
         // scan a barcode with the camera (where the browser can), or type the number: the product comes from Open Food Facts
-        const canCamera = !!(window.BarcodeDetector && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+        const canCamera = this._barcodeCamera();
         const scan = (manual = false) => (canCamera && !manual ? scanner() : manualScan());
 
         // a food of your own for a barcode Open Food Facts does not know (or that you would rather enter yourself)
@@ -1272,90 +1272,19 @@ export default function (h) {
           }
         };
 
-        // the camera, full screen: a frame to hold the barcode in, a way out, typing the number, and the torch
-        const scanner = () => {
-          const ov = document.createElement("div");
-          ov.className = "tk-scanner";
-          ov.setAttribute("popover", "manual");
-          ov.innerHTML = `<video class="tk-scanvid" playsinline muted></video>
-            <div class="tk-scanframe"><span>${esc(T("Scan the barcode here"))}</span></div>
-            <ha-icon-button class="tk-sx" label="${esc(T("Close"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>
-            <ha-icon-button class="tk-sk" label="${esc(T("Type the number"))}"><ha-icon icon="mdi:keyboard-outline"></ha-icon></ha-icon-button>
-            <ha-icon-button class="tk-st" label="${esc(T("Torch"))}" hidden><ha-icon icon="mdi:flashlight-off"></ha-icon></ha-icon-button>
-            <div class="tk-scanmsg2"></div>`;
-          this.shadowRoot.appendChild(ov);
-          if (ov.showPopover) ov.showPopover();
-          let stream = null;
-          let timer = null;
-          let busy = false;
-          const stop = () => {
-            clearInterval(timer);
-            if (stream) stream.getTracks().forEach((t) => t.stop());
-            stream = null;
-            if (ov.hidePopover) {
-              try {
-                ov.hidePopover();
-              } catch (_) {
-                /* already hidden */
-              }
-            }
-            ov.remove();
-          };
-          ov.querySelector(".tk-sx").addEventListener("click", () => {
-            stop();
-            pick();
-          });
-          ov.querySelector(".tk-sk").addEventListener("click", () => {
-            stop();
-            manualScan();
-          });
-          const note = ov.querySelector(".tk-scanmsg2");
-          const vid = ov.querySelector("video");
-          navigator.mediaDevices
-            .getUserMedia({ video: { facingMode: "environment" } })
-            .then((s) => {
-              stream = s;
-              vid.srcObject = s;
-              vid.play();
-              const track = s.getVideoTracks()[0];
-              const torchBtn = ov.querySelector(".tk-st");
-              if (track && track.getCapabilities && track.getCapabilities().torch) {
-                let on = false;
-                torchBtn.hidden = false;
-                torchBtn.addEventListener("click", async () => {
-                  on = !on;
-                  try {
-                    await track.applyConstraints({ advanced: [{ torch: on }] });
-                    torchBtn.querySelector("ha-icon").setAttribute("icon", on ? "mdi:flashlight" : "mdi:flashlight-off");
-                  } catch (_) {
-                    on = !on;
-                  }
-                });
-              }
-              const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
-              timer = setInterval(async () => {
-                if (!ov.isConnected) return stop();
-                if (busy) return;
-                try {
-                  const found = await detector.detect(vid);
-                  if (!found.length) return;
-                  busy = true;
-                  const raw = found[0].rawValue;
-                  stop();
-                  manualScan(raw);
-                  lookup(raw, body.querySelector("#tk-scanmsg"));
-                } catch (_) {
-                  /* the next frame */
-                }
-              }, 400);
-            })
-            .catch(() => {
-              stop();
+        const scanner = () =>
+          this._barcodeScanner({
+            code: (raw) => {
+              manualScan(raw);
+              lookup(raw, body.querySelector("#tk-scanmsg"));
+            },
+            close: pick,
+            type: () => manualScan(),
+            fail: () => {
               manualScan();
               body.querySelector("#tk-scanmsg").textContent = T("The camera could not be opened. Type the number instead.");
-            });
-          note.textContent = "";
-        };
+            },
+          });
 
         // a dish without a recipe: the AI guesses what is in it, the numbers come from the food tables, and you can correct the weights
         const estimate = (prefill = "") => {
@@ -1639,6 +1568,91 @@ export default function (h) {
         };
         pick();
       }, { subtitle: `${dayLabel(d.date, d.today)} · ${d.person.name}`, fill: true });
+    },
+
+    /** Whether this browser can read barcodes with the camera. */
+    _barcodeCamera() {
+      return !!(window.BarcodeDetector && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    },
+
+    /**
+     * The camera, full screen: a frame to hold the barcode in, a way out, typing the number, and the torch.
+     * `on`: code(raw) when one is read, close() for the X, type() for typing the number, fail() when the camera cannot be opened.
+     */
+    _barcodeScanner(on) {
+      const ov = document.createElement("div");
+      ov.className = "tk-scanner";
+      ov.setAttribute("popover", "manual");
+      ov.innerHTML = `<video class="tk-scanvid" playsinline muted></video>
+        <div class="tk-scanframe"><span>${esc(T("Scan the barcode here"))}</span></div>
+        <ha-icon-button class="tk-sx" label="${esc(T("Close"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>
+        <ha-icon-button class="tk-sk" label="${esc(T("Type the number"))}"><ha-icon icon="mdi:keyboard-outline"></ha-icon></ha-icon-button>
+        <ha-icon-button class="tk-st" label="${esc(T("Torch"))}" hidden><ha-icon icon="mdi:flashlight-off"></ha-icon></ha-icon-button>`;
+      this.shadowRoot.appendChild(ov);
+      if (ov.showPopover) ov.showPopover();
+      let stream = null;
+      let timer = null;
+      let busy = false;
+      const stop = () => {
+        clearInterval(timer);
+        if (stream) stream.getTracks().forEach((t) => t.stop());
+        stream = null;
+        try {
+          if (ov.hidePopover) ov.hidePopover();
+        } catch (_) {
+          /* already hidden */
+        }
+        ov.remove();
+      };
+      ov.querySelector(".tk-sx").addEventListener("click", () => {
+        stop();
+        on.close();
+      });
+      ov.querySelector(".tk-sk").addEventListener("click", () => {
+        stop();
+        on.type();
+      });
+      const vid = ov.querySelector("video");
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: "environment" } })
+        .then((st) => {
+          stream = st;
+          vid.srcObject = st;
+          vid.play();
+          const track = st.getVideoTracks()[0];
+          const torchBtn = ov.querySelector(".tk-st");
+          if (track && track.getCapabilities && track.getCapabilities().torch) {
+            let lit = false;
+            torchBtn.hidden = false;
+            torchBtn.addEventListener("click", async () => {
+              lit = !lit;
+              try {
+                await track.applyConstraints({ advanced: [{ torch: lit }] });
+                torchBtn.querySelector("ha-icon").setAttribute("icon", lit ? "mdi:flashlight" : "mdi:flashlight-off");
+              } catch (_) {
+                lit = !lit;
+              }
+            });
+          }
+          const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
+          timer = setInterval(async () => {
+            if (!ov.isConnected) return stop();
+            if (busy) return;
+            try {
+              const found = await detector.detect(vid);
+              if (!found.length) return;
+              busy = true;
+              stop();
+              on.code(found[0].rawValue);
+            } catch (_) {
+              /* the next frame */
+            }
+          }, 400);
+        })
+        .catch(() => {
+          stop();
+          on.fail();
+        });
     },
 
     /** Change or delete what was logged. */
