@@ -22,6 +22,8 @@ from .nutrition_store import Nutrition, NutritionError
 NUTRIENTS = ("kcal", "protein", "carbs", "fat")
 MAX_RANGE_DAYS = 400
 MAX_PERSONS = 30
+DEFAULT_WATER_GOAL = 2000  # ml
+MAX_WATER = 10000  # ml in a day
 KINDS = ("recipe", "food", "quick")
 
 
@@ -87,7 +89,7 @@ class Tracker:
 
     @staticmethod
     def _copy(person: dict[str, Any]) -> dict[str, Any]:
-        return dict(person, goals=dict(person["goals"]), profile=dict(person.get("profile", {})), weights=dict(person.get("weights", {})))
+        return dict(person, goals=dict(person["goals"]), profile=dict(person.get("profile", {})), weights=dict(person.get("weights", {})), water=dict(person.get("water", {})))
 
     def person(self, person_id: str) -> dict[str, Any]:
         person = self._persons.get(person_id)
@@ -151,6 +153,63 @@ class Tracker:
         person["goals"] = clean
         self._changed(person_id)
         return person
+
+    # ---- water ----
+    def water(self, person_id: str, day: str) -> dict[str, Any]:
+        person = self.person(person_id)
+        goal = person.get("water_goal") or DEFAULT_WATER_GOAL
+        return {"ml": person.get("water", {}).get(day, 0), "goal": goal}
+
+    def add_water(self, person_id: str, day: str, ml: Any) -> dict[str, Any]:
+        """Drink ``ml`` more (or less, to undo): the day's total stays between 0 and 10 litres."""
+        person = self.person(person_id)
+        day = parse_date(day).isoformat()
+        try:
+            change = int(round(float(ml)))
+        except (TypeError, ValueError) as err:
+            raise TrackerError("Give the amount of water in ml") from err
+        if abs(change) > MAX_WATER:
+            raise TrackerError("That is too much water at once")
+        water = person.setdefault("water", {})
+        total = max(0, min(MAX_WATER, water.get(day, 0) + change))
+        if total:
+            water[day] = total
+        else:
+            water.pop(day, None)
+        self._changed(person_id, day)
+        return self.water(person_id, day)
+
+    def set_water_goal(self, person_id: str, ml: Any) -> dict[str, Any]:
+        person = self.person(person_id)
+        try:
+            goal = int(round(float(ml)))
+        except (TypeError, ValueError) as err:
+            raise TrackerError("Give the goal in ml") from err
+        if not 250 <= goal <= MAX_WATER:
+            raise TrackerError("A water goal is between 250 and 10000 ml")
+        person["water_goal"] = goal
+        self._changed(person_id)
+        return person
+
+    # ---- streak ----
+    def streak(self, person_id: str, day: str) -> dict[str, int]:
+        """Days in a row with something logged, up to ``day`` (the day before when ``day`` has nothing yet), and the best run."""
+        days = {e["date"] for e in self._entries.values() if e["person_id"] == person_id}
+        current = 0
+        cursor = parse_date(day)
+        if cursor.isoformat() not in days:
+            cursor -= timedelta(days=1)
+        while cursor.isoformat() in days:
+            current += 1
+            cursor -= timedelta(days=1)
+        best = run = 0
+        previous = None
+        for d in sorted(days):
+            at = parse_date(d)
+            run = run + 1 if previous is not None and at - previous == timedelta(days=1) else 1
+            best = max(best, run)
+            previous = at
+        return {"current": current, "best": max(best, current)}
 
     # ---- body, weight and what is needed ----
     def set_profile(self, person_id: str, raw: dict[str, Any]) -> dict[str, Any]:
@@ -330,6 +389,8 @@ class Tracker:
             "favourites": list(person.get("favourites", [])),
             "usual": self.usual(person_id, entries),
             "previous": self.previous(person_id, day),
+            "water": self.water(person_id, day),
+            "streak": self.streak(person_id, day),
         }
 
     def planned(self, person_id: str, day: str) -> list[dict[str, Any]]:

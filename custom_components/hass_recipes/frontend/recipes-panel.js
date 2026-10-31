@@ -398,6 +398,18 @@ const STYLE = `
   .tk-ringside .tk-mrow { grid-template-columns: 44px minmax(48px, 1fr) auto; gap: 6px; font-size: 0.75em; }
   .tk-ringrow { gap: 12px; }
   .tk-ringside .tk-mrow span { white-space: nowrap; }
+  .tk-streak { margin-bottom: 8px; }
+  .tk-streak ha-assist-chip { --md-assist-chip-icon-color: var(--warning-color, #f5a623); }
+  .tk-water { margin-top: 12px; }
+  .tk-whead { display: flex; align-items: center; gap: 8px; }
+  .tk-whead .muted { margin-inline-start: auto; }
+  .tk-whead ha-icon-button { margin: -8px -8px -8px 0; }
+  .tk-water .tk-kbar { margin-top: 8px; }
+  .tk-water .tk-kbar.done { --control-slider-color: var(--success-color, #43a047); --control-slider-background: var(--success-color, #43a047); }
+  .tk-wbtns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .tk-vid { width: 100%; max-height: 260px; border-radius: 12px; background: #000; object-fit: cover; margin-bottom: 12px; }
+  .tk-lookup { margin-top: 8px; }
+  .tk-scanmsg { margin-top: 8px; font-size: 0.85em; }
   .tk-week { display: flex; gap: 2px; margin-bottom: 8px; }
   .tk-wd { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 0.8em; }
   .tk-wd ha-button { --ha-button-height: 36px; }

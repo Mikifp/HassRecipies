@@ -309,6 +309,7 @@ class Nutrition:
             "values": values,
             "unit_grams": dict(food["unit_grams"]),
             "section": food["section"],
+            "barcode": food.get("barcode", ""),
             "used_in": len(recipes),
             "recipes": sorted(recipes)[:30],
         }
@@ -364,6 +365,11 @@ class Nutrition:
             raise NutritionError(str(err)) from err
         self._save()
         return self._describe_food(saved, self._usage()[0])
+
+    def food_for_barcode(self, code: str) -> dict[str, Any] | None:
+        """The food that was made for this barcode before, if any."""
+        found = self.book.by_barcode(code)
+        return self._describe_food(found, self._usage()[0]) if found else None
 
     def delete_food(self, food_id: str) -> bool:
         if not self.book.delete(food_id):

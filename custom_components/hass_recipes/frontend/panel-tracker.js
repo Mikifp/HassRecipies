@@ -290,14 +290,37 @@ export default function (h) {
             </ha-card>`;
         })
         .join("");
-      return `${this._tkPinHtml(d)}${this._tkWeekHtml(d)}${this._tkSummaryHtml(d.totals, p.goals, edit, d)}${planned}${cards}`;
+      return `${this._tkPinHtml(d)}${this._tkWeekHtml(d)}${this._tkSummaryHtml(d.totals, p.goals, edit, d)}${planned}${cards}${this._tkWaterHtml(d)}`;
+    },
+
+    /** Water: a bar towards the goal, and glasses to add (or take away) with one tap. */
+    _tkWaterHtml(d) {
+      const w = d.water;
+      if (!w) return "";
+      const edit = d.person.editable;
+      return `<ha-card class="tk-water"><div class="card-content">
+          <div class="tk-whead"><ha-icon icon="mdi:cup-water"></ha-icon><b>${esc(T("Water"))}</b><span class="muted">${num(w.ml)} / ${num(w.goal)} ml</span>
+            ${edit ? `<ha-icon-button data-tkact="water-goal" label="${esc(T("Water goal"))}"><ha-icon icon="mdi:cog-outline"></ha-icon></ha-icon-button>` : ""}</div>
+          <ha-control-slider id="tk-s-water" class="tk-kbar ${w.ml >= w.goal ? "done" : ""}"></ha-control-slider>
+          ${edit ? `<div class="tk-wbtns"><ha-button size="s" appearance="tonal" data-tkwater="250"><ha-icon slot="start" icon="mdi:cup-water"></ha-icon>+250 ml</ha-button>
+            <ha-button size="s" appearance="tonal" data-tkwater="500"><ha-icon slot="start" icon="mdi:water"></ha-icon>+500 ml</ha-button>
+            ${w.ml ? `<ha-button size="s" appearance="plain" data-tkwater="-250"><ha-icon slot="start" icon="mdi:undo"></ha-icon>${esc(T("Undo"))}</ha-button>` : ""}</div>` : ""}
+        </div></ha-card>`;
+    },
+
+    /** The days in a row with something logged. */
+    _tkStreakHtml(d) {
+      const s = d.streak;
+      if (!s || s.current < 1) return "";
+      const label = `${s.current} ${T(s.current === 1 ? "day" : "days")} ${T("in a row")}${s.best > s.current ? ` · ${T("best")} ${s.best}` : ""}`;
+      return `<div class="tk-streak"><ha-assist-chip label="${esc(label)}"><ha-icon slot="icon" icon="mdi:fire"></ha-icon></ha-assist-chip></div>`;
     },
 
     /** The seven days of the week on screen, to jump between them. */
     _tkWeekHtml(d) {
       const monday = mondayOf(parseDay(d.date));
       const fmt = new Intl.DateTimeFormat(state.language || undefined, { weekday: "narrow" });
-      return `<div class="tk-week">${Array.from({ length: 7 }, (_, i) => {
+      return `${this._tkStreakHtml(d)}<div class="tk-week">${Array.from({ length: 7 }, (_, i) => {
         const day = addDays(monday, i);
         const iso = isoDate(day);
         return `<div class="tk-wd"><span class="muted">${esc(fmt.format(day))}</span><ha-button size="s" data-tkday="${iso}" appearance="${iso === d.date ? "filled" : "plain"}" variant="${iso === d.today || iso === d.date ? "brand" : "neutral"}">${day.getDate()}</ha-button></div>`;
@@ -377,6 +400,19 @@ export default function (h) {
         const goals = st.data.person.goals;
         const { totals } = st.data;
         const style = this._tkMacroStyle();
+        const wbar = root.getElementById("tk-s-water");
+        if (wbar) {
+          await this._tkElement("ha-control-slider", { type: "tile", entity: "light.x", features: [{ type: "light-brightness" }] });
+          const w = st.data.water;
+          wbar.min = 0;
+          wbar.max = Math.max(w.goal, w.ml, 1);
+          wbar.value = w.ml;
+          wbar.step = 1;
+          wbar.mode = "start";
+          wbar.showHandle = false;
+          wbar.setAttribute("aria-readonly", "true");
+          wbar.setAttribute("aria-label", `${T("Water")} ${num(w.ml)} ml`);
+        }
         if (goals.kcal == null) return;
         if (style === "gauges") {
           const ready = await this._tkElement("ha-gauge", { type: "gauge", entity: "sun.sun" });
@@ -552,6 +588,8 @@ export default function (h) {
           return this._tkCalcDialog();
         case "weight":
           return this._tkWeightDialog();
+        case "water-goal":
+          return this._tkWaterGoalDialog();
         case "usual": {
           const [meal, i] = el.dataset.tkusual.split(":");
           const t = (d.usual[meal] || [])[Number(i)];
@@ -700,6 +738,32 @@ export default function (h) {
         dlg.querySelector("#tk-gok").addEventListener("click", async () => {
           close();
           const { ok } = await this._tkCall({ type: "hass_recipes/tracker_goals", person_id: p.id, goals: data });
+          if (ok) await this._tkLoad();
+        });
+      }, { subtitle: p.name });
+    },
+
+    _tkWaterGoalDialog() {
+      const p = this._tkState().data.person;
+      const goal = this._tkState().data.water.goal;
+      this._planDialog(T("Water goal"), `<div id="tk-body"><ha-form id="tk-wg"></ha-form></div>`, (dlg, close) => {
+        this._planFooter(dlg, { primary: { id: "tk-wgok", label: T("Save") }, secondary: [{ id: "tk-wgcancel", label: T("Cancel") }] });
+        dlg.querySelector("#tk-wgcancel").addEventListener("click", close);
+        let data = { ml: goal };
+        const form = dlg.querySelector("#tk-wg");
+        form.hass = this._hass;
+        form.schema = [{ name: "ml", required: true, selector: { number: { min: 250, max: 10000, step: 50, mode: "box", unit_of_measurement: "ml" } } }];
+        form.data = data;
+        form.computeLabel = () => T("A day's water (ml)");
+        form.addEventListener("value-changed", (e) => {
+          e.stopPropagation();
+          data = e.detail.value || data;
+          form.data = data;
+        });
+        dlg.querySelector("#tk-wgok").addEventListener("click", async () => {
+          if (!data.ml) return;
+          close();
+          const { ok } = await this._tkCall({ type: "hass_recipes/tracker_water_goal", person_id: p.id, ml: Number(data.ml) });
           if (ok) await this._tkLoad();
         });
       }, { subtitle: p.name });
@@ -1131,10 +1195,77 @@ export default function (h) {
         };
         const label = (item) => (item.kind === "recipe" ? "mdi:chef-hat" : item.kind === "food" ? "mdi:food-apple-outline" : item.kind === "dbfood" ? "mdi:database-search-outline" : "mdi:pencil-outline");
         const how = (t) => (t.kind === "quick" ? `${num(t.kcal)} kcal` : howText(t));
+        // scan a barcode with the camera (where the browser can), or type the number: the product comes from Open Food Facts
+        const scan = () => {
+          this._planFooter(dlg, { secondary: [{ id: "tk-sback", label: T("Back"), icon: "arrow-left" }] });
+          const canCamera = !!(window.BarcodeDetector && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+          body.innerHTML = `${canCamera ? `<video id="tk-vid" class="tk-vid" playsinline muted></video>` : `<ha-alert alert-type="info">${esc(T("This browser cannot scan with the camera. Type the number under the barcode."))}</ha-alert>`}
+            <ha-form id="tk-code"></ha-form>
+            <div class="tk-lookup"><ha-button id="tk-lookup" appearance="filled"><ha-icon slot="start" icon="mdi:magnify"></ha-icon>${esc(T("Look up"))}</ha-button></div>
+            <div class="muted tk-scanmsg" id="tk-scanmsg"></div>
+            <div class="muted tk-scanmsg">${esc(T("Products come from Open Food Facts (ODbL)."))}</div>`;
+          let stream = null;
+          let timer = null;
+          const stop = () => {
+            clearInterval(timer);
+            if (stream) stream.getTracks().forEach((t) => t.stop());
+            stream = null;
+          };
+          const msg = body.querySelector("#tk-scanmsg");
+          const lookup = async (raw) => {
+            stop();
+            msg.textContent = T("Looking up…");
+            try {
+              const food = await this._ws({ type: "hass_recipes/barcode", code: String(raw) });
+              if (!foods.some((f) => f.id === food.id)) foods.push(food);
+              startWith({ kind: "food", food_id: food.id, name: food.name });
+            } catch (err) {
+              msg.textContent = (err && err.message) || String(err);
+            }
+          };
+          let code = { code: "" };
+          const form = body.querySelector("#tk-code");
+          form.hass = this._hass;
+          form.schema = [{ name: "code", selector: { text: {} } }];
+          form.data = code;
+          form.computeLabel = () => T("Barcode number");
+          form.addEventListener("value-changed", (e) => {
+            e.stopPropagation();
+            code = e.detail.value || code;
+          });
+          body.querySelector("#tk-lookup").addEventListener("click", () => lookup(code.code || ""));
+          dlg.querySelector("#tk-sback").addEventListener("click", () => {
+            stop();
+            pick();
+          });
+          const vid = body.querySelector("#tk-vid");
+          if (vid) {
+            navigator.mediaDevices
+              .getUserMedia({ video: { facingMode: "environment" } })
+              .then((s) => {
+                stream = s;
+                vid.srcObject = s;
+                vid.play();
+                const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
+                timer = setInterval(async () => {
+                  if (!vid.isConnected) return stop(); // the dialog was closed
+                  try {
+                    const found = await detector.detect(vid);
+                    if (found.length) lookup(found[0].rawValue);
+                  } catch (_) {
+                    /* the next frame */
+                  }
+                }, 400);
+              })
+              .catch(() => {
+                msg.textContent = T("The camera could not be opened. Type the number instead.");
+              });
+          }
+        };
         const pick = () => {
           this._planFooter(dlg);
           body.innerHTML = `<ha-input-search id="tk-q" appearance="outlined" placeholder="${esc(T("Search recipes and foods"))}"></ha-input-search>
-            <div class="tk-chips tk-filters" id="tk-filters">${[["all", "All"], ["mine", "Mine"], ["recipes", "Recipes"], ["db", "Database"]].map(([v, l]) => `<ha-assist-chip data-filter="${v}" label="${esc(T(l))}" ${v === "all" ? "active" : ""}></ha-assist-chip>`).join("")}</div>
+            <div class="tk-chips tk-filters" id="tk-filters">${[["all", "All"], ["mine", "Mine"], ["recipes", "Recipes"], ["db", "Database"]].map(([v, l]) => `<ha-assist-chip data-filter="${v}" label="${esc(T(l))}" ${v === "all" ? "active" : ""}></ha-assist-chip>`).join("")}<ha-assist-chip data-scan label="${esc(T("Scan"))}"><ha-icon slot="icon" icon="mdi:barcode-scan"></ha-icon></ha-assist-chip></div>
             <div id="tk-res" class="tk-res"></div>`;
           const res = body.querySelector("#tk-res");
           let shown = [];
@@ -1175,6 +1306,8 @@ export default function (h) {
             res.innerHTML = `<ha-list-base>${out}</ha-list-base>`;
           };
           draw("");
+          const scanChip = body.querySelector("[data-scan]");
+          if (scanChip) scanChip.addEventListener("click", () => scan());
           body.querySelectorAll("[data-filter]").forEach((chip) =>
             chip.addEventListener("click", () => {
               filter = chip.dataset.filter;
@@ -1303,6 +1436,10 @@ export default function (h) {
           return this._tkGo(isoDate(new Date(d.getFullYear(), d.getMonth() + Math.sign(n), 1, 12)));
         }
         this._tkGo(isoDate(addDays(base, n)));
+      });
+      on("[data-tkwater]", "click", async (e) => {
+        const { ok } = await this._tkCall({ type: "hass_recipes/tracker_water", person_id: st.data.person.id, date: st.date || st.data.date, ml: Number(e.currentTarget.dataset.tkwater) });
+        if (ok) await this._tkLoad();
       });
       on("[data-tkday]", "click", (e) => this._tkGo(e.currentTarget.dataset.tkday));
       on("[data-tkact]", "click", (e) => this._tkAct(e.currentTarget.dataset.tkact, e.currentTarget));

@@ -23,6 +23,7 @@ from .mealplan import MealPlanError
 from .migrate import from_mealie
 from .nutrition import NUTRIENTS, SOURCE_CUSTOM, SOURCE_FRIDA, SOURCE_IGNORE, SOURCE_USDA, food_key as _key
 from .nutrition_store import Nutrition, NutritionError
+from .barcode import API_URL, FIELDS, USER_AGENT, BarcodeError, clean_code, food_from_product
 from .calorie_calc import CalcError, calculate
 from .tracker import Tracker, TrackerError
 from .page_session import page_session
@@ -185,6 +186,9 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_tracker_profile,
         ws_tracker_weight,
         ws_tracker_weight_delete,
+        ws_tracker_water,
+        ws_tracker_water_goal,
+        ws_barcode,
         ws_sites,
         ws_sites_search,
     ):
@@ -1451,3 +1455,47 @@ async def ws_sites_search(hass: HomeAssistant, connection: websocket_api.ActiveC
     """Recipes on the sites whose name has every word of the query (open one with import_url to read it)."""
     ids = msg.get("sites") or list(SITES)
     connection.send_result(msg["id"], {"results": await _sites(hass).search(ids, msg["query"], msg["limit"])})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/tracker_water", vol.Required("person_id"): str, vol.Required("date"): _DAY, vol.Required("ml"): vol.Coerce(float)}
+)
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_water(hass, connection, msg, tracker) -> None:
+    """Water drunk on a day: ml more, or negative to undo."""
+    connection.send_result(msg["id"], tracker.add_water(msg["person_id"], msg["date"], msg["ml"]))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/tracker_water_goal", vol.Required("person_id"): str, vol.Required("ml"): vol.Coerce(float)})
+@websocket_api.async_response
+@_tracker_guard
+async def ws_tracker_water_goal(hass, connection, msg, tracker) -> None:
+    connection.send_result(msg["id"], _person_view(connection, tracker.set_water_goal(msg["person_id"], msg["ml"])))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/barcode", vol.Required("code"): vol.All(str, vol.Length(max=40))})
+@websocket_api.async_response
+@_edits_async
+async def ws_barcode(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """A scanned barcode: the food made for it before, or one made now from Open Food Facts (one lookup per scan)."""
+    nutrition = _nutrition(hass)
+    try:
+        code = clean_code(msg["code"])
+        found = nutrition.food_for_barcode(code)
+        if found is None:
+            try:
+                async with async_get_clientsession(hass).get(
+                    API_URL.format(code=code), params={"fields": FIELDS}, headers={"User-Agent": USER_AGENT}, timeout=ClientTimeout(total=10)
+                ) as resp:
+                    body = await resp.json(content_type=None) if resp.status == 200 else {}
+            except (ClientError, asyncio.TimeoutError, ValueError) as err:
+                raise BarcodeError("Open Food Facts could not be reached. Try again, or type the food in") from err
+            product = body.get("product") if isinstance(body, dict) and body.get("status") == 1 else None
+            if not product:
+                raise BarcodeError("Open Food Facts does not know this barcode")
+            found = nutrition.save_food(food_from_product(product, code))
+    except (BarcodeError, NutritionError) as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+        return
+    connection.send_result(msg["id"], found)

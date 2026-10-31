@@ -178,6 +178,9 @@ class FoodBook:
         keys += [food_key(a) for a in food.get("aliases") or []]
         return [k for k in keys if k]
 
+    def by_barcode(self, code: str) -> dict[str, Any] | None:
+        return next((f for f in self.foods.values() if code and f.get("barcode") == code), None)
+
     def by_key(self) -> dict[str, str]:
         """Ingredient name (as a key) -> id of the food it is. A name belongs to the first food that has it."""
         out: dict[str, str] = {}
@@ -259,6 +262,7 @@ class FoodBook:
             "values": values,
             "unit_grams": clean_unit_grams(data.get("unit_grams")),
             "section": str(data.get("section") or "").strip()[:60],
+            "barcode": re.sub(r"\D", "", str(data.get("barcode") or ""))[:14],
             # made for an ingredient name by choosing a food for it, not by the user on the Foods page
             "auto": bool(data.get("auto")),
         }
