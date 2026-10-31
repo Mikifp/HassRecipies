@@ -375,7 +375,8 @@ def calculate(
     known = {k: False for k in NUTRIENTS}
     items = []
     counted = 0
-    counted_grams = 0.0  # what the counted ingredients weigh: the weight the totals are of
+    counted_grams = 0.0  # what the counted ingredients weigh
+    uncounted_grams = 0.0  # what ingredients without nutrition values weigh: in the weight, 0 in the numbers
     for index, parsed in enumerate(parsed_ingredients):
         if parsed.get("header"):
             continue
@@ -395,8 +396,10 @@ def calculate(
         }
         if match and match["source"] == SOURCE_IGNORE:
             item["status"] = "ignored"
+            uncounted_grams += grams or 0
         elif match is None:
             item["status"] = "no_match"
+            uncounted_grams += grams or 0
         elif grams is None:
             item["status"] = "no_grams"
         else:
@@ -419,9 +422,10 @@ def calculate(
     per_serving = (
         {k: None if v is None else round(v / servings, 1) for k, v in total.items()} if servings else None
     )
-    # per 100 g of what was counted, and per unit of what the recipe says it makes (24 boller)
+    # per 100 g of everything that has a weight (ingredients without nutrition values count as 0), and per unit of what the recipe says it makes (24 boller)
+    weight = counted_grams + uncounted_grams
     per_100g = (
-        {k: None if v is None else round(v * 100 / counted_grams, 1) for k, v in total.items()} if counted_grams > 0 else None
+        {k: None if v is None else round(v * 100 / weight, 1) for k, v in total.items()} if counted_grams > 0 else None
     )
     yield_amount = recipe.get("yield_amount")
     makes = float(yield_amount) if isinstance(yield_amount, (int, float)) and not isinstance(yield_amount, bool) and yield_amount > 0 else None
@@ -431,7 +435,8 @@ def calculate(
         "total": total,
         "per_serving": per_serving,
         "per_100g": per_100g,
-        "weight": round(counted_grams, 1),
+        "weight": round(weight, 1),
+        "weight_uncounted": round(uncounted_grams, 1),
         "per_unit": per_unit,
         "makes": makes,
         "yield_unit": str(recipe.get("yield_unit") or "").strip(),

@@ -177,7 +177,7 @@ export const joinSubs = (text, alts, comment = "") => {
  */
 export const ingredientParts = (recipe, i) => {
   const item = (recipe.ingredient_items || [])[i];
-  if (item) return { main: item.raw || "", alts: [...(item.alternatives || [])], comment: item.comment || "" };
+  if (item) return { main: shortUnits(item.raw || ""), alts: [...(item.alternatives || [])], comment: item.comment || "" };
   return splitSubs((recipe.ingredients || [])[i] ?? "");
 };
 
@@ -307,10 +307,21 @@ export const splitAmount = (text) => {
     unit = w[1];
     rest = rest.slice(w[0].length);
   }
-  return { amount: m[1].trim(), unit, food: rest.trim() };
+  return { amount: m[1].trim(), unit: shortUnit(unit), food: rest.trim() };
 };
 
-export const joinAmount = ({ amount = "", unit = "", food = "" }) => [amount, unit, food].map((x) => String(x).trim()).filter(Boolean).join(" ");
+const SHORT_UNITS = { gram: "g", grams: "g", gr: "g", gramme: "g", kilogram: "kg", kilograms: "kg", kilo: "kg", kilos: "kg", kilogrammer: "kg", liter: "l", liters: "l", litre: "l", litres: "l", milliliter: "ml", milliliters: "ml", millilitre: "ml", millilitres: "ml" };
+
+/** The short form of a weight or volume unit: gram -> g, kilogram -> kg, liter -> l, milliliter -> ml. Other units stay as typed. */
+export const shortUnit = (unit) => SHORT_UNITS[String(unit ?? "").replace(/\.$/, "").toLowerCase()] || unit;
+
+/** An ingredient line with the unit after its amount in the short form ("400 gram mel" -> "400 g mel"). */
+export const shortUnits = (line) => {
+  const { amount, unit, food } = splitAmount(line);
+  return amount && unit ? joinAmount({ amount, unit, food }) : line;
+};
+
+export const joinAmount = ({ amount = "", unit = "", food = "" }) => [amount, shortUnit(unit), food].map((x) => String(x).trim()).filter(Boolean).join(" ");
 
 
 /**
