@@ -1655,12 +1655,9 @@ export default function (h) {
         on.type();
       });
       const vid = ov.querySelector("video");
-      // ask for a picture shaped like the screen, so it is not cropped to fill it
-      const portrait = window.innerHeight > window.innerWidth;
-      const long = 1920;
-      const short = Math.round(long * (portrait ? window.innerWidth / window.innerHeight : window.innerHeight / window.innerWidth));
+      // 4:3 uses the whole sensor; the 16:9 video modes crop it, which looks zoomed in
       navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: "environment", width: { ideal: portrait ? short : long }, height: { ideal: portrait ? long : short } } })
+        .getUserMedia({ video: { facingMode: "environment", width: { ideal: 2048 }, height: { ideal: 1536 } } })
         .then(async (st) => {
           stream = st;
           vid.srcObject = st;
