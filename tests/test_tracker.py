@@ -210,6 +210,26 @@ def test_a_streak_counts_days_in_a_row_and_survives_today_being_empty():
     assert t.streak(anna["id"], "2026-10-31")["best"] == 4
 
 
+def test_a_removed_home_assistant_user_is_not_made_again_by_the_sync():
+    *_, t = _make()
+    users = [types.SimpleNamespace(id="u1", name="Anna", is_active=True, system_generated=False),
+             types.SimpleNamespace(id="u2", name="Dummy", is_active=True, system_generated=False)]
+
+    async def get_users():
+        return users
+
+    t._hass.auth = types.SimpleNamespace(async_get_users=get_users)
+    asyncio.run(t.async_sync_users())
+    assert [p["name"] for p in t.persons()] == ["Anna", "Dummy"]
+    dummy = t.person_for_user("u2")
+    assert t.delete_person(dummy["id"])
+    asyncio.run(t.async_sync_users())
+    assert [p["name"] for p in t.persons()] == ["Anna"]
+    assert t._hidden_users == {"u2"}
+    t.ensure_user("u2", "Dummy")  # the user opens the tracker themself: back
+    assert [p["name"] for p in t.persons()] == ["Anna", "Dummy"] and not t._hidden_users
+
+
 def test_a_range_gives_each_day_and_averages_the_days_that_were_logged():
     *_, t = _make()
     anna = t.ensure_user("u1", "Anna")

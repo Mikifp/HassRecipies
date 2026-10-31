@@ -217,12 +217,16 @@ def test_nutrition_is_also_given_per_100_g_and_per_unit_the_recipe_makes():
     nutrition.save_custom({"name": "Hjemmelavet pesto", "kcal": 450, "fat": 45, "protein": "5"})
     r = recipes.create({"name": "x", "servings": "2", "yield_amount": 12, "yield_unit": "boller", "ingredients": ["200 g hjemmelavet pesto", "1 salt til smag"]})
     result = nutrition.for_recipe(r["id"])
-    assert result["total"]["kcal"] == 900 and result["weight"] == 200.0  # only what was counted weighs
+    assert result["total"]["kcal"] == 900 and result["weight"] == 200.0 and result["weight_uncounted"] == 0
     assert result["per_100g"]["kcal"] == 450 and result["per_100g"]["protein"] == 5 and result["per_100g"]["carbs"] is None
     assert result["per_unit"]["kcal"] == 75 and result["makes"] == 12 and result["yield_unit"] == "boller"
     plain = recipes.create({"name": "y", "ingredients": ["100 g hjemmelavet pesto"]})
     result = nutrition.for_recipe(plain["id"])
     assert result["per_unit"] is None and result["makes"] is None and result["per_100g"]["fat"] == 45
+    # an ingredient without nutrition values still weighs: per 100 g is of the whole weight, its numbers are 0
+    diluted = nutrition.for_recipe(recipes.create({"name": "w", "ingredients": ["200 g hjemmelavet pesto", "200 g ukendt pulver"]})["id"])
+    assert diluted["weight"] == 400.0 and diluted["weight_uncounted"] == 200.0
+    assert diluted["total"]["kcal"] == 900 and diluted["per_100g"]["kcal"] == 225
     nothing = nutrition.for_recipe(recipes.create({"name": "z", "ingredients": ["noget ukendt"]})["id"])
     assert nothing["per_100g"] is None and nothing["weight"] == 0
 

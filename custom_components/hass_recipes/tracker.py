@@ -56,6 +56,7 @@ class Tracker:
         self._plan = plan
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, TRACKER_STORAGE_KEY)
         self._persons: dict[str, dict[str, Any]] = {}
+        self._hidden_users: set[str] = set()  # Home Assistant users removed from the tracker: not made again by the sync
         self._entries: dict[str, dict[str, Any]] = {}
         self._listeners: list[Any] = []
 
@@ -66,9 +67,10 @@ class Tracker:
             person.setdefault("profile", {})
             person.setdefault("weights", {})
         self._entries = {e["id"]: e for e in data.get("entries", [])}
+        self._hidden_users = set(data.get("hidden_users", []))
 
     def _save(self) -> None:
-        self._store.async_delay_save(lambda: {"persons": list(self._persons.values()), "entries": list(self._entries.values())}, 1)
+        self._store.async_delay_save(lambda: {"persons": list(self._persons.values()), "entries": list(self._entries.values()), "hidden_users": sorted(self._hidden_users)}, 1)
 
     def add_listener(self, func):
         """Call ``func`` when anything changes; returns the function that stops it."""
@@ -103,15 +105,16 @@ class Tracker:
         found = self.person_for_user(user_id)
         if found:
             return found
+        self._hidden_users.discard(user_id)  # a user who opens the tracker themself is back
         person = {"id": uuid.uuid4().hex, "name": (name or "User").strip()[:60], "user_id": user_id, "goals": {}, "favourites": [], "profile": {}, "weights": {}}
         self._persons[person["id"]] = person
         self._save()
         return person
 
     async def async_sync_users(self) -> None:
-        """A person for every active Home Assistant user."""
+        """A person for every active Home Assistant user, except those removed from the tracker."""
         for user in await self._hass.auth.async_get_users():
-            if getattr(user, "is_active", True) and not getattr(user, "system_generated", False):
+            if getattr(user, "is_active", True) and not getattr(user, "system_generated", False) and user.id not in self._hidden_users:
                 self.ensure_user(user.id, user.name)
 
     def add_person(self, name: str) -> dict[str, Any]:
@@ -130,7 +133,9 @@ class Tracker:
     def delete_person(self, person_id: str) -> bool:
         if person_id not in self._persons:
             return False
-        del self._persons[person_id]
+        removed = self._persons.pop(person_id)
+        if removed.get("user_id"):
+            self._hidden_users.add(removed["user_id"])  # or the next sync would make the person again
         self._entries = {k: e for k, e in self._entries.items() if e["person_id"] != person_id}
         self._changed(person_id)
         return True
