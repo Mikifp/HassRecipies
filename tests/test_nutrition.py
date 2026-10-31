@@ -314,9 +314,9 @@ def test_a_food_made_from_the_database_starts_with_the_weight_of_a_slice_or_a_pi
     recipes, nutrition = _make()
     bread = next(f for _, f in nutrition.db.search("franskbrød", 3) if f["name_da"] == "Franskbrød")
     saved = nutrition.save_food({"name": "Franskbrød", "source": nu.SOURCE_FRIDA, "frida_id": bread["id"]})
-    assert saved["unit_grams"] == {"skive": 30.0} and saved["values"]["kcal"] == bread["kcal"]
+    assert saved["unit_grams"] == {"skive": 30.0, "skive (tynd)": 20.0, "skive (tyk)": 45.0} and saved["values"]["kcal"] == bread["kcal"]
     apple = next(f for _, f in nutrition.db.search("æble", 3) if f["name_da"] == "Æble, uspec., råt")
-    assert nutrition.save_food({"name": "Æble", "source": nu.SOURCE_FRIDA, "frida_id": apple["id"]})["unit_grams"] == {"stk": 150.0}
+    assert nutrition.save_food({"name": "Æble", "source": nu.SOURCE_FRIDA, "frida_id": apple["id"]})["unit_grams"]["stk"] == 150.0
     # weights given by the user are kept, and a food with no everyday weight starts with none
     own = nutrition.save_food({"name": "Mit brød", "source": nu.SOURCE_FRIDA, "frida_id": bread["id"], "unit_grams": {"skive": 40}})
     assert own["unit_grams"] == {"skive": 40.0}
@@ -324,3 +324,4 @@ def test_a_food_made_from_the_database_starts_with_the_weight_of_a_slice_or_a_pi
     assert nutrition.save_food({"name": "Tørret æble", "source": nu.SOURCE_FRIDA, "frida_id": tea["id"]})["unit_grams"] == {}
     # and it can be tracked in slices
     assert round(nutrition.food_amount(saved["id"], 2, "skive")["grams"]) == 60
+    assert round(nutrition.food_amount(saved["id"], 2, "skive (tyk)")["grams"]) == 90  # a thick slice

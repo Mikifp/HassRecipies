@@ -879,7 +879,7 @@ export default function (h) {
         if (draft.amount == null) draft.amount = ctx.start(draft.by);
       }
       if (draft.kind !== "quick") {
-        const units = draft.kind === "food" ? ["g", ...Object.keys((ctx.food && ctx.food.unit_grams) || {})] : [];
+        const units = draft.kind === "food" ? ["g", ...new Set(Object.keys((ctx.food && ctx.food.unit_grams) || {}).map((u) => u.replace(/\s*\([^)]*\)\s*$/, "")))] : [];
         return this._tkStepper(dlg, body, draft, ctx, draft.kind === "recipe" ? ways : units.map((u) => ({ value: u, label: u })), { onSave, onDelete, onStar, starred, onBack, saveLabel });
       }
       const num0 = (min, step) => ({ number: { min, max: 100000, step, mode: "box" } });
@@ -954,16 +954,27 @@ export default function (h) {
         if (isRecipe) return w === "grams" ? 10 : w === "yield" ? 1 : 0.5;
         return w === "g" ? 10 : 0.5;
       };
+      // a unit can come in sizes: "skive", "skive (tynd)", "skive (tyk)"; the chips name the unit, a second row the size
+      const food = isRecipe ? null : ctx.food;
+      const ug = (food && food.unit_grams) || {};
+      const baseOf = (u) => String(u || "").replace(/\s*\([^)]*\)\s*$/, "");
+      const sizesOf = (u) => Object.keys(ug).filter((k) => baseOf(k) === baseOf(u)).sort((a, b) => ug[a] - ug[b]);
+      const sizeName = (k) => {
+        const m = k.match(/\(([^)]*)\)\s*$/);
+        return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : T("Normal");
+      };
       const chips = (list, current, attr) => list.map((x) => `<ha-assist-chip ${attr}="${esc(x.value)}" label="${esc(x.label)}" ${x.value === current ? "active" : ""}></ha-assist-chip>`).join("");
       const meals = this._planMeals();
       body.innerHTML = `<div class="tk-fhead"><b>${esc(draft.name || "")}</b></div>
-        ${ways.length > 1 ? `<div class="tk-chips" id="tk-ways">${chips(ways, draft[key], "data-way")}</div>` : ""}
+        ${ways.length > 1 ? `<div class="tk-chips" id="tk-ways">${chips(ways, isRecipe ? draft[key] : baseOf(draft[key]), "data-way")}</div>` : ""}
+        <div class="tk-chips" id="tk-sizes"></div>
         <div class="tk-stepper">
           <ha-icon-button id="tk-minus" label="${esc(T("Less"))}"><ha-icon icon="mdi:minus"></ha-icon></ha-icon-button>
           <ha-input id="tk-amt" type="number" appearance="outlined" inputmode="decimal" min="0"></ha-input>
           <ha-icon-button id="tk-plus" label="${esc(T("More"))}"><ha-icon icon="mdi:plus"></ha-icon></ha-icon-button>
         </div>
         <div class="tk-preview" id="tk-pv"></div>
+        <div class="muted tk-weight" id="tk-wt"></div>
         <div class="tk-sub">${esc(T("Meal"))}</div>
         <div class="tk-chips" id="tk-meals">${chips(meals.map((m) => ({ value: m.id, label: this._planLabel(m.id) })), draft.meal, "data-meal")}</div>`;
       this._tkFooter(dlg, { onSave, onDelete, onStar, starred, onBack, saveLabel });
@@ -972,9 +983,29 @@ export default function (h) {
         const c = this._tkCalc(draft, ctx);
         body.querySelector("#tk-pv").textContent = c && c.kcal != null ? `${num(c.kcal)} kcal${MACROS.map(([k, l]) => (c[k] != null ? ` · ${num(c[k])} g ${T(l).toLowerCase()}` : "")).join("")}` : isRecipe ? T("This recipe has no nutrition yet: link its ingredients to foods first.") : "";
       };
+      // the size chips of the chosen unit, and what one of it is assumed to weigh
+      const paintSizes = () => {
+        const box = body.querySelector("#tk-sizes");
+        const sizes = isRecipe || draft.unit === "g" ? [] : sizesOf(draft.unit);
+        box.innerHTML = sizes.length > 1 ? chips(sizes.map((k) => ({ value: k, label: `${sizeName(k)} · ${num(ug[k])} g` })), draft.unit, "data-size") : "";
+        box.querySelectorAll("[data-size]").forEach((chip) =>
+          chip.addEventListener("click", () => {
+            draft.unit = chip.dataset.size;
+            paintSizes();
+            show();
+          })
+        );
+        const per = ug[draft.unit];
+        const amount = Number(draft.amount) || 0;
+        body.querySelector("#tk-wt").textContent =
+          isRecipe || draft.unit === "g" || !per
+            ? ""
+            : `${T("Assumed weight")}: 1 ${draft.unit} = ${num(per)} g${amount && amount !== 1 ? ` · ${num(amount)} = ${num(amount * per)} g` : ""}. ${T("Change it on the Foods page.")}`;
+      };
       const show = () => {
         input.value = String(Math.round((Number(draft.amount) || 0) * 100) / 100);
         preview();
+        paintSizes();
       };
       const nudge = (dir) => {
         draft.amount = Math.max(0, Math.round(((Number(draft.amount) || 0) + dir * step()) * 100) / 100);
@@ -985,11 +1016,13 @@ export default function (h) {
       input.addEventListener("input", () => {
         draft.amount = parseFloat(String(input.value).replace(",", ".")) || 0;
         preview();
+        paintSizes();
       });
       body.querySelectorAll("[data-way]").forEach((chip) =>
         chip.addEventListener("click", () => {
           const before = draft[key];
-          draft[key] = chip.dataset.way;
+          // a unit with sizes starts at its normal size (or the smallest, when there is no plain one)
+          draft[key] = isRecipe || chip.dataset.way === "g" ? chip.dataset.way : ug[chip.dataset.way] != null ? chip.dataset.way : sizesOf(chip.dataset.way)[0] || chip.dataset.way;
           // another unit starts from a sensible amount (a serving, a piece, an average portion, 100 g)
           if (draft[key] !== before) draft.amount = isRecipe ? ctx.start(draft.by) : draft.unit === "g" ? 100 : 1;
           body.querySelectorAll("[data-way]").forEach((c) => c.toggleAttribute("active", c === chip));

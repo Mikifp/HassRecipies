@@ -66,23 +66,23 @@ def clean_names(raw: Any) -> list[str]:
 _DEFAULT_UNITS: list[tuple[re.Pattern[str], dict[str, float]]] = [
     (re.compile(p, re.IGNORECASE), units)
     for p, units in (
-        (r"^grovfranskbrød", {"skive": 35}),
-        (r"^franskbrød", {"skive": 30}),
-        (r"^rugbrød(?!, revet)", {"skive": 35}),
-        (r"toastbrød", {"skive": 25}),
-        (r"^(hvedebrød|sandwichbrød|kernebrød|havrebrød|surdejsbrød)", {"skive": 35}),
-        (r"^(ost|smelteost|cheddar|emmentaler|mozzarella|gouda|havarti|danbo|brie|camembert)\b(?!.*(revet|creme))", {"skive": 15}),
+        (r"^grovfranskbrød", {"skive": 35, "skive (tynd)": 22, "skive (tyk)": 50}),
+        (r"^franskbrød", {"skive": 30, "skive (tynd)": 20, "skive (tyk)": 45}),
+        (r"^rugbrød(?!, revet)", {"skive": 35, "skive (tynd)": 25, "skive (tyk)": 50}),
+        (r"toastbrød", {"skive": 25, "skive (tynd)": 18, "skive (tyk)": 35}),
+        (r"^(hvedebrød|sandwichbrød|kernebrød|havrebrød|surdejsbrød)", {"skive": 35, "skive (tynd)": 25, "skive (tyk)": 50}),
+        (r"^(ost|smelteost|cheddar|emmentaler|mozzarella|gouda|havarti|danbo|brie|camembert)\b(?!.*(revet|creme))", {"skive": 15, "skive (tynd)": 8, "skive (tyk)": 25}),
         (r"^æg, høne, blomme", {"stk": 18}),
         (r"^æg, høne, æggehvide", {"stk": 33}),
-        (r"^æg, høne.*\brå$", {"stk": 55}),
-        (r"^æble, uspec\., råt", {"stk": 150}),
-        (r"^banan.*rå", {"stk": 120}),
-        (r"^(appelsin|pære|nektarin|fersken)\b.*rå", {"stk": 150}),
+        (r"^æg, høne.*\brå$", {"stk": 55, "stk (lille)": 45, "stk (stor)": 65}),
+        (r"^æble, uspec\., råt", {"stk": 150, "stk (lille)": 100, "stk (stor)": 200}),
+        (r"^banan.*rå", {"stk": 120, "stk (lille)": 90, "stk (stor)": 150}),
+        (r"^(appelsin|pære|nektarin|fersken)\b.*rå", {"stk": 150, "stk (lille)": 110, "stk (stor)": 200}),
         (r"^kiwi.*rå", {"stk": 70}),
-        (r"^(tomat|agurk)\b.*rå", {"stk": 120}),
+        (r"^(tomat|agurk)\b.*rå", {"stk": 120, "stk (lille)": 70, "stk (stor)": 180}),
         (r"^gulerod.*rå", {"stk": 60}),
-        (r"^kartoffel.*rå", {"stk": 170}),
-        (r"^(løg|rødløg), rå", {"stk": 110}),
+        (r"^kartoffel.*rå", {"stk": 170, "stk (lille)": 100, "stk (stor)": 250}),
+        (r"^(løg|rødløg), rå", {"stk": 110, "stk (lille)": 70, "stk (stor)": 180}),
     )
 ]
 
