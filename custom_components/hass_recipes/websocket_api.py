@@ -1032,6 +1032,7 @@ _FOOD_FIELDS = {
     vol.Optional("values"): {vol.Optional(key): _PER_100G for key in NUTRIENTS},
     vol.Optional("unit_grams"): {vol.All(str, vol.Length(min=1, max=40)): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10000))},
     vol.Optional("section"): vol.All(str, vol.Length(max=60)),
+    vol.Optional("barcode"): vol.All(str, vol.Length(max=40)),
 }
 
 
@@ -1518,9 +1519,14 @@ async def ws_dish_estimate(hass: HomeAssistant, connection: websocket_api.Active
 
 
 @websocket_api.websocket_command(
-    {vol.Required("type"): f"{DOMAIN}/dish_calc", vol.Required("lines"): vol.All([vol.All(str, vol.Length(max=160))], vol.Length(max=30))}
+    {
+        vol.Required("type"): f"{DOMAIN}/dish_calc",
+        vol.Required("lines"): vol.All([vol.All(str, vol.Length(max=160))], vol.Length(max=30)),
+        # the food the user chose for a line, by the line's number
+        vol.Optional("picks", default={}): {str: {vol.Required("source"): vol.In([SOURCE_FRIDA, SOURCE_USDA, SOURCE_CUSTOM]), vol.Required("id"): vol.Any(int, str)}},
+    }
 )
 @callback
 def ws_dish_calc(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """The nutrition of ingredient lines the user has adjusted (no AI)."""
-    connection.send_result(msg["id"], _nutrition(hass).estimate_lines(msg["lines"]))
+    connection.send_result(msg["id"], _nutrition(hass).estimate_lines(msg["lines"], msg["picks"]))

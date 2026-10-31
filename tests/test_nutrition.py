@@ -342,3 +342,15 @@ def test_a_dish_without_a_recipe_is_worked_out_from_lines_with_a_range():
     assert clean["missing"] == 0 and clean["items"][0]["matched"]
     assert (est["high"] - est["low"]) / est["total"]["kcal"] > (clean["high"] - clean["low"]) / clean["total"]["kcal"]
     assert nutrition.estimate_lines([])["total"]["kcal"] is None or nutrition.estimate_lines([])["total"]["kcal"] == 0
+
+
+def test_a_food_chosen_for_a_line_is_used_whatever_its_name_says():
+    recipes, nutrition = _make()
+    sauce = next(f for _, f in nutrition.db.search_usda("spaghetti marinara sauce", 10) if "marinara" in f["name_en"].lower())
+    line = "100 g " + sauce["name_en"]
+    picked = nutrition.estimate_lines([line], {"0": {"source": "usda", "id": sauce["id"]}})
+    assert picked["total"]["kcal"] == round(sauce["kcal"], 1) and picked["items"][0]["matched"] and picked["missing"] == 0
+    mixed = nutrition.estimate_lines(["100 g franskbrød", "100 g sauce"], {"1": {"source": "usda", "id": sauce["id"]}})
+    bread = nutrition.estimate_lines(["100 g franskbrød"])["total"]["kcal"]
+    assert abs(mixed["total"]["kcal"] - (bread + sauce["kcal"])) < 0.2
+    assert [i["grams"] for i in mixed["items"]] == [100, 100]

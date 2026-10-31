@@ -26,7 +26,7 @@ export default function (h) {
     Object.entries(grams || {})
       .map(([unit, g]) => `1 ${unit} = ${num(g, 1)} g`)
       .join(", ");
-  const blank = () => ({ id: "", name: "", aliases: [], source: "none", frida_id: null, frida_name: "", usda_id: null, usda_name: "", values: {}, unit_rows: [], section: "", used_in: 0, recipes: [] });
+  const blank = () => ({ id: "", name: "", aliases: [], source: "none", frida_id: null, frida_name: "", usda_id: null, usda_name: "", values: {}, unit_rows: [], section: "", barcode: "", used_in: 0, recipes: [] });
 
   return {
     // ---- data ----
@@ -216,6 +216,48 @@ export default function (h) {
       });
     },
 
+    // ---- a new food from a barcode: Open Food Facts fills it in; a code it does not know starts an empty food with the code on it ----
+    _fdScan() {
+      if (this._barcodeCamera()) {
+        this._barcodeScanner({ code: (raw) => this._fdBarcode(raw), close: () => {}, type: () => this._fdTypeCode(), fail: () => this._fdTypeCode() });
+      } else this._fdTypeCode();
+    },
+
+    _fdTypeCode() {
+      this._planDialog(T("Scan barcode"), `<ha-form id="fd-code"></ha-form><div class="muted">${esc(T("Products come from Open Food Facts (ODbL)."))}</div>`, (dlg, close) => {
+        this._planFooter(dlg, { primary: { id: "fd-lookup", label: T("Look up"), icon: "magnify" }, secondary: [{ id: "fd-ccancel", label: T("Cancel") }] });
+        let code = { code: "" };
+        const form = dlg.querySelector("#fd-code");
+        form.hass = this._hass;
+        form.schema = [{ name: "code", selector: { text: {} } }];
+        form.data = code;
+        form.computeLabel = () => T("Barcode number");
+        form.addEventListener("value-changed", (e) => {
+          e.stopPropagation();
+          code = e.detail.value || code;
+        });
+        dlg.querySelector("#fd-ccancel").addEventListener("click", close);
+        dlg.querySelector("#fd-lookup").addEventListener("click", () => {
+          close();
+          this._fdBarcode(String(code.code || ""));
+        });
+      });
+    },
+
+    async _fdBarcode(code) {
+      const st = this._fdState();
+      try {
+        const food = await this._ws({ type: "hass_recipes/barcode", code: String(code) });
+        this._error = "";
+        await this._fdRefresh(food.id);
+      } catch (err) {
+        st.draft = { ...blank(), barcode: String(code).replace(/\D/g, "") };
+        st.draftFor = "new";
+        this._error = (err && err.message) || String(err);
+        this._go({ name: "foods", id: "new" }, false, this._brCompact() ? undefined : "replace");
+      }
+    },
+
     // ---- the page ----
     _foodsHtml() {
       const st = this._fdState();
@@ -236,6 +278,7 @@ export default function (h) {
           <div class="fd-main">
             <div class="fd-tool">
               ${compact ? "" : `<ha-input-search id="fsearch" appearance="outlined" placeholder="${esc(T("Search foods"))}" value="${esc(st.q)}"></ha-input-search>`}
+              ${canEdit ? `<ha-assist-chip data-fscan label="${esc(T("Scan barcode"))}"><ha-icon slot="icon" icon="mdi:barcode-scan"></ha-icon></ha-assist-chip>` : ""}
               ${chip("review", "Needs review", c.review)}${chip("mine", "Mine", c.mine)}${chip("frida", "From Frida", c.frida)}${c.usda ? chip("usda", "From USDA", c.usda) : ""}
               ${st.filter === "review" && standard && canEdit ? `<ha-button size="s" appearance="filled" data-fd="adopt-all"><ha-icon slot="start" icon="mdi:check-all"></ha-icon>${esc(`${T("Accept")} ${standard} ${T("standard choices")}`)}</ha-button>` : ""}
             </div>
@@ -580,7 +623,7 @@ export default function (h) {
     },
 
     _fdSaveBody(d) {
-      const body = { name: d.name.trim(), aliases: d.aliases.map((a) => String(a).trim()).filter(Boolean), source: d.source, section: d.section || "" };
+      const body = { name: d.name.trim(), aliases: d.aliases.map((a) => String(a).trim()).filter(Boolean), source: d.source, section: d.section || "", barcode: String(d.barcode || "") };
       if (d.source === "frida") body.frida_id = d.frida_id;
       if (d.source === "usda") body.usda_id = d.usda_id;
       if (d.source === "custom") body.values = Object.fromEntries(FORM.filter(([k]) => d.values[k] != null).map(([k]) => [k, d.values[k]]));
@@ -838,6 +881,7 @@ export default function (h) {
           }
         });
       }
+      on("[data-fscan]", "click", () => this._fdScan());
       on("[data-ffilter]", "click", (e) => {
         const key = e.currentTarget.dataset.ffilter;
         st.touched = true;
@@ -867,10 +911,11 @@ export default function (h) {
           { name: "name", required: true, selector: { text: {} } },
           { name: "aliases", selector: { text: { multiple: true } } },
           { name: "section", selector: { text: {} } },
+          { name: "barcode", selector: { text: {} } },
         ];
-        form.computeLabel = (sc) => T({ name: "Name", aliases: "Other name", section: "Shop section" }[sc.name]);
+        form.computeLabel = (sc) => T({ name: "Name", aliases: "Other name", section: "Shop section", barcode: "Barcode number" }[sc.name]);
         form.computeHelper = (sc) => (sc.name === "aliases" ? T("Other names for it in recipes, like “butter”.") : "");
-        form.data = { name: d.name, aliases: d.aliases, section: d.section };
+        form.data = { name: d.name, aliases: d.aliases, section: d.section, barcode: d.barcode || "" };
         form.addEventListener("value-changed", (e) => {
           e.stopPropagation();
           const v = e.detail.value || {};
@@ -878,6 +923,7 @@ export default function (h) {
           d.name = String(v.name || "");
           d.aliases = v.aliases || [];
           d.section = String(v.section || "");
+          d.barcode = String(v.barcode || "").replace(/\D/g, "");
         });
       }
       const values = root.getElementById("fd-values");

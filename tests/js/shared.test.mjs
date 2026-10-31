@@ -137,3 +137,12 @@ test("an ingredient's text is split into amount, unit and food, and joined again
   assert.deepEqual(s.splitAmount(""), { amount: "", unit: "", food: "" });
   for (const line of ["200 g butter", "2 løg", "1 1/2 tsk salt", "salt efter smag", "½ dåse tomater"]) assert.equal(s.joinAmount(s.splitAmount(line)), line);
 });
+
+test("a chip also covers the describing word before the noun, so it is not said twice", () => {
+  const text = "Tilsæt hakket oksekød og flåede tomater.";
+  const chips = s.detectChips(text, [
+    { key: "a", text: "600 gram hakket oksekød" },
+    { key: "b", text: "2 dåser flåede tomater" },
+  ]);
+  assert.deepEqual(chips.map((c) => text.slice(c.start, c.start + c.len)), ["hakket oksekød", "flåede tomater"]);
+});

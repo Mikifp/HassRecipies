@@ -523,11 +523,13 @@ export default function (h) {
               .join("") || `<div class="card-content muted">This recipe has no steps yet.</div>`
           }
         </ha-card>`;
+      const nutrition = this._nutritionCardHtml(r, k);
+      const narrow = this.clientWidth < 760; // one column: the nutrition goes last
       const notes = r.notes
         ? `<ha-card class="rd-notes" header="${esc(T("Notes"))}"><div class="card-content" style="white-space:pre-wrap">${esc(r.notes)}</div></ha-card>`
         : "";
       this._fab = `<ha-button class="fab" size="l" data-act="cook" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>Cook</ha-button>`;
-      return `<div class="rd"><div class="rd-left">${info}${ingredients}${this._nutritionCardHtml(r, k)}${notes}</div><div class="rd-right">${steps}</div></div>`;
+      return `<div class="rd"><div class="rd-left">${info}${ingredients}${narrow ? "" : nutrition}${notes}</div><div class="rd-right">${steps}</div>${narrow ? `<div class="rd-bottom">${nutrition}</div>` : ""}</div>`;
     },
 
     /** Wire up the HA elements of the recipe page. */
@@ -535,6 +537,9 @@ export default function (h) {
       const r = this._recipe(this._view.id);
       if (!r) return;
       this._nuMountTables(root);
+      on("#rd-nutpanel", "expanded-changed", (e) => {
+        if (e.target.id === "rd-nutpanel") this._nuOpen = e.detail.expanded;
+      });
       this._bindScale(root);
       this._bindIngChecks(on);
       on("[data-chip][data-value]", "click", (e) => {

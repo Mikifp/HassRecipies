@@ -263,6 +263,7 @@ class FoodBook:
             "unit_grams": clean_unit_grams(data.get("unit_grams")),
             "section": str(data.get("section") or "").strip()[:60],
             "barcode": re.sub(r"\D", "", str(data.get("barcode") or ""))[:14],
+            "image": str(data.get("image") or "")[:500] if str(data.get("image") or "").startswith("https://") else "",
             # made for an ingredient name by choosing a food for it, not by the user on the Foods page
             "auto": bool(data.get("auto")),
         }

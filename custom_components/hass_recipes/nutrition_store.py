@@ -310,6 +310,7 @@ class Nutrition:
             "unit_grams": dict(food["unit_grams"]),
             "section": food["section"],
             "barcode": food.get("barcode", ""),
+            "image": food.get("image", ""),
             "used_in": len(recipes),
             "recipes": sorted(recipes)[:30],
         }
@@ -366,35 +367,77 @@ class Nutrition:
         self._save()
         return self._describe_food(saved, self._usage()[0])
 
-    def estimate_lines(self, lines: list[str]) -> dict[str, Any]:
-        """Nutrition of a few typed ingredient lines ("90 g pasta, kogt") that are not a recipe: for estimating a dish."""
+    def _pick_values(self, pick: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+        """(name, nutrients per 100 g) of a food the user chose for a line: a food of Frida or USDA, or one of their own."""
+        source, food_id = pick.get("source"), pick.get("id")
+        if source == SOURCE_FRIDA:
+            found = self.db.get(food_id)
+            return (found["name_da"], found) if found else None
+        if source == SOURCE_USDA:
+            found = self.db.get_usda(food_id)
+            return (found["name_en"], found) if found else None
+        mine = self.book.foods.get(str(food_id))
+        if mine is not None:
+            info = self._describe_food(mine, {})
+            return (mine["name"], info["values"])
+        return None
+
+    def estimate_lines(self, lines: list[str], picks: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+        """Nutrition of a few typed ingredient lines ("90 g pasta, kogt") that are not a recipe: for estimating a dish.
+
+        ``picks`` says, by the line's number, which food the user chose for it ({"source": "frida", "id": 12}); such a
+        line is not matched by its words.
+        """
+        import re
+
         from .ingredients import parse_ingredient
 
+        picks = picks or {}
         custom, links = self._views()
-        parsed = [parse_ingredient(line) for line in lines if str(line).strip()]
-        result = calculate({"ingredients": lines}, parsed, self.db, custom, links)
-        items = []
-        for item in result["items"]:
-            match = item.get("match") or {}
-            items.append(
-                {
-                    "food": item["food"],
-                    "grams": item["grams"],
-                    "kcal": (item.get("values") or {}).get("kcal"),
-                    "matched": item["status"] == "ok",
-                    "match": match.get("name", ""),
-                }
-            )
-        total = {k: result["total"].get(k) for k in ("kcal", "protein", "carbs", "fat")}
+        slots: list[dict[str, Any] | None] = [None] * len(lines)
+        totals = {k: 0.0 for k in ("kcal", "protein", "carbs", "fat")}
+        known = {k: False for k in totals}
+        rest = [i for i, line in enumerate(lines) if str(line).strip() and str(i) not in picks]
+        missing = unconfirmed = 0
+        if rest:
+            parsed = [parse_ingredient(lines[i]) for i in rest]
+            result = calculate({"ingredients": [lines[i] for i in rest]}, parsed, self.db, custom, links)
+            missing, unconfirmed = result["missing"], result["unconfirmed"]
+            for i, item in zip(rest, result["items"], strict=True):
+                match = item.get("match") or {}
+                slots[i] = {"food": item["food"], "grams": item["grams"], "kcal": (item.get("values") or {}).get("kcal"), "matched": item["status"] == "ok", "match": match.get("name", "")}
+            for k in totals:
+                if result["total"].get(k) is not None:
+                    totals[k] += result["total"][k]
+                    known[k] = True
+        for i, line in enumerate(lines):
+            pick = picks.get(str(i))
+            if not pick or not str(line).strip():
+                continue
+            chosen = self._pick_values(pick)
+            grams_match = re.match(r"\s*(\d+(?:[.,]\d+)?)\s*g\b\s*(.*)", str(line))
+            grams = float(grams_match.group(1).replace(",", ".")) if grams_match else None
+            if chosen is None or grams is None:
+                slots[i] = {"food": str(line), "grams": grams, "kcal": None, "matched": False, "match": ""}
+                missing += 1
+                continue
+            name, values = chosen
+            for k in totals:
+                if values.get(k) is not None:
+                    totals[k] += values[k] * grams / 100
+                    known[k] = True
+            kcal = None if values.get("kcal") is None else values["kcal"] * grams / 100
+            slots[i] = {"food": grams_match.group(2).strip() or name, "grams": grams, "kcal": kcal, "matched": True, "match": name}
+        total = {k: round(totals[k], 1) if known[k] else None for k in totals}
         # a guess is never exact: wider when something could not be matched or was matched on its own
-        spread = 0.2 + (0.1 if result["missing"] else 0) + (0.05 if result["unconfirmed"] else 0)
+        spread = 0.2 + (0.1 if missing else 0) + (0.05 if unconfirmed else 0)
         kcal = total["kcal"]
         return {
-            "items": items,
+            "items": [s for s in slots if s is not None],
             "total": total,
             "low": None if kcal is None else round(kcal * (1 - spread)),
             "high": None if kcal is None else round(kcal * (1 + spread)),
-            "missing": result["missing"],
+            "missing": missing,
         }
 
     def food_for_barcode(self, code: str) -> dict[str, Any] | None:

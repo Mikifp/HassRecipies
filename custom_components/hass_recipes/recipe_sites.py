@@ -146,6 +146,18 @@ def page_title(page: str) -> str:
     return re.split(r"\s+[|–-]\s+", clean_text(meta.group(1)))[0][:120]
 
 
+def page_image(page: str, base: str) -> str:
+    """A recipe page's picture: its og:image (or twitter:image), as a full http(s) address."""
+    for tag in re.findall(r"<meta\b[^>]*>", page[:200_000], re.IGNORECASE):
+        if re.search(r"(?:property|name)=[\"'](?:og:image|twitter:image)(?::url)?[\"']", tag, re.IGNORECASE):
+            content = re.search(r"content=[\"']([^\"']+)", tag, re.IGNORECASE)
+            if content:
+                url = urljoin(base, html.unescape(content.group(1)).strip())
+                if urlparse(url).scheme in ("http", "https") and len(url) <= 500:
+                    return url
+    return ""
+
+
 def site_of(url: str) -> Site | None:
     """The site an address is on."""
     host = (urlparse(url).hostname or "").removeprefix("www.")
@@ -179,6 +191,7 @@ class RecipeSites:
         self._indexes: dict[str, _Index] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._titles: dict[str, str] = {}
+        self._images: dict[str, str] = {}
         self._on_change: Callable[[], None] | None = None
 
     # ---- what is kept between restarts ----
@@ -331,23 +344,26 @@ class RecipeSites:
         return out
 
     async def _real_titles(self, hits: list[dict[str, Any]]) -> None:
-        """The real titles of the hits (an address leaves out æ, ø and å on some sites)."""
+        """The real titles of the hits (an address leaves out æ, ø and å on some sites), and their pictures."""
         semaphore = asyncio.Semaphore(8)
 
-        async def title(url: str) -> None:
+        async def read(url: str) -> None:
             async with semaphore:
                 page = await self._read(url, 300_000)
-                if page and (found := page_title(page)):
-                    self._titles[url] = found
+                if page:
+                    if found := page_title(page):
+                        self._titles[url] = found
+                    self._images[url] = page_image(page, url)
 
-        missing = {hit["url"] for hit in hits if hit["url"] not in self._titles}
+        missing = {hit["url"] for hit in hits if hit["url"] not in self._titles or hit["url"] not in self._images}
         if missing:
             try:
-                await asyncio.wait_for(asyncio.gather(*(title(u) for u in missing)), timeout=12)
+                await asyncio.wait_for(asyncio.gather(*(read(u) for u in missing)), timeout=12)
             except TimeoutError:
                 pass
         for hit in hits:
             hit["title"] = self._titles.get(hit["url"], hit["title"])
+            hit["image"] = self._images.get(hit["url"], "")
 
     def status(self) -> dict[str, Any]:
         """How many recipes each site's list has (0 until it has been read)."""

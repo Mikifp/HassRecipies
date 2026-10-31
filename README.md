@@ -106,6 +106,8 @@ The **Tracker** tab keeps a daily log of what each person eats, with kcal first 
 - **Sensors:** two sensors per person, `sensor.calorie_tracker_<name>_calories_today` and `..._calories_remaining` (the macros and the goal are attributes), and the event `hass_recipes_tracker_changed`.
 - **Dashboard card:** `type: custom:hass-recipes-calories-card` shows today for you, or for `person: <name>`.
 
+- **Barcodes:** the **Scan** chip (in Add food, and on the Foods tab) opens the camera full screen. The browser's own barcode reader is used where it has one, otherwise the bundled ZXing reader. The camera needs HTTPS (or `localhost`); without it you type the number. A product is looked up once at Open Food Facts (only the number is sent) and kept as a food of your own; a barcode it does not know can be made into a food by hand.
+
 The tracker log is not part of the recipe backup yet.
 
 ## Recipe sites
@@ -253,4 +255,4 @@ CI runs both test suites, a syntax check of the front-end, hassfest and the HACS
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The bundled nutrition data (`custom_components/hass_recipes/data/frida.json`) is from the Danish Food Composition Database, © DTU Food Institute, and is licensed separately under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+MIT, see [LICENSE](LICENSE). The bundled nutrition data (`custom_components/hass_recipes/data/frida.json`) is from the Danish Food Composition Database, © DTU Food Institute, and is licensed separately under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The barcode reader `custom_components/hass_recipes/frontend/vendor/zxing.min.js` is [ZXing](https://github.com/zxing-js/library) (Apache License 2.0, see `vendor/zxing.LICENSE`). Product data from barcodes is from [Open Food Facts](https://world.openfoodfacts.org) (ODbL).

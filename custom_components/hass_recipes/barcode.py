@@ -11,7 +11,7 @@ import re
 from typing import Any
 
 API_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
-FIELDS = "product_name,product_name_da,brands,nutriments,serving_quantity,product_quantity"
+FIELDS = "product_name,product_name_da,brands,nutriments,serving_quantity,product_quantity,image_front_small_url"
 USER_AGENT = "HassRecipes (Home Assistant integration; https://github.com/Mikifp/HassRecipies)"
 _CODE = re.compile(r"^\d{8,14}$")
 KJ_PER_KCAL = 4.184
@@ -74,4 +74,12 @@ def food_from_product(product: dict[str, Any], code: str) -> dict[str, Any]:
     pack = _number(product.get("product_quantity"))
     if pack and pack > 0 and pack != portion:
         unit_grams["pakke"] = pack
-    return {"name": name[:120], "source": "custom", "values": values, "unit_grams": unit_grams, "barcode": code}
+    image = str(product.get("image_front_small_url") or "")
+    return {
+        "name": name[:120],
+        "source": "custom",
+        "values": values,
+        "unit_grams": unit_grams,
+        "barcode": code,
+        "image": image if image.startswith("https://") and len(image) <= 500 else "",
+    }

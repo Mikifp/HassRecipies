@@ -357,6 +357,7 @@ export const foodWords = (text) => {
     // "kidney-bønner" is also found as "bønner"
     .flatMap((w) => (w.includes("-") ? [w, ...w.split("-").filter((p) => p.length >= 3)] : [w]))
     .slice(0, 4);
+  out.all = words; // in the order of the line: the chip also covers the words before the noun that the text has too
   const compound = seq.some((w) => JOIN.has(w.toLowerCase()));
   if (compound) {
     out.unshift(seq.join(" "));
@@ -383,7 +384,15 @@ export const detectChips = (text, items) => {
       const found = [];
       let m;
       while ((m = re.exec(text))) {
-        if (!taken(m.index, m.index + m[0].length)) found.push({ key, start: m.index, len: m[0].length });
+        let start = m.index;
+        // "hakket oksekød": the chip is the whole food, so it also takes the "hakket" before the noun
+        const at = words.all.findIndex((w) => w.toLowerCase() === word.toLowerCase());
+        for (let i = at - 1; at > 0 && i >= 0; i--) {
+          const before = new RegExp(`(?<![\\p{L}])${escRe(words.all[i])}\\p{L}{0,4}\\s+$`, "iu").exec(text.slice(0, start));
+          if (!before || taken(before.index, start)) break;
+          start = before.index;
+        }
+        if (!taken(start, m.index + m[0].length)) found.push({ key, start, len: m.index + m[0].length - start });
       }
       return found;
     };

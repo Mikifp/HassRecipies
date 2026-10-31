@@ -43,7 +43,7 @@ export default function (h) {
       return `<ha-list-base>${st.results
         .map(
           (r, n) => `<ha-list-item-button data-site-open="${n}" headline="${esc(r.title)}" supporting-text="${esc(r.site_name)}">
-            <ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>
+            ${r.image ? `<img slot="start" class="thumb" src="${esc(r.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>`}
             <ha-icon-button slot="end" data-site-link="${n}" label="${esc(T("Open the page"))}"><ha-icon icon="mdi:open-in-new"></ha-icon></ha-icon-button></ha-list-item-button>`
         )
         .join("")}</ha-list-base>`;
