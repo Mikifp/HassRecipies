@@ -167,6 +167,16 @@ const STYLE = `
   .rd-ings .ing-text { display: block; line-height: 1.4; }
   .rd-step { --ha-list-item-headline-line-clamp: none; }
   .rd-num { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--secondary-background-color); color: var(--secondary-text-color); border: 1px solid var(--divider-color); font-size: 12px; box-sizing: border-box; --mdc-icon-size: 16px; }
+  .rd-progress { padding: 0 16px 12px; display: grid; gap: 8px; }
+  .rd-ptext { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--secondary-text-color); --mdc-icon-size: 20px; }
+  .rd-progress.finished .rd-ptext { color: var(--success-color, #43a047); font-weight: 500; }
+  .rd-pbar { height: 6px; border-radius: 3px; background: var(--divider-color); overflow: hidden; }
+  .rd-pbar > div { height: 100%; border-radius: 3px; background: var(--primary-color); transition: width .35s ease; }
+  .rd-progress.finished .rd-pbar > div { background: var(--success-color, #43a047); }
+  .rd-step { transition: background .25s, opacity .25s; border-inline-start: 4px solid transparent; }
+  .rd-step.current { border-inline-start-color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 9%, transparent); }
+  .rd-step.current .rd-text { font-size: 1.12em; font-weight: 500; }
+  .rd-step.current .rd-num { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
   .rd-step.done .rd-num { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
   .rd-text { display: block; line-height: 1.9; white-space: pre-line; }
   .rd-step.done .rd-text { opacity: .55; text-decoration: line-through; }

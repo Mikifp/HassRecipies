@@ -434,7 +434,7 @@ export default function (h) {
         </div>`;
     },
 
-    _rdStepHtml(r, k, { s, n, num }) {
+    _rdStepHtml(r, k, { s, n, num }, current = false) {
       const done = this._doneSteps.has(n);
       const { html: textHtml, links } = this._stepTextParts(r, s, k, n);
       const timers = timerSpecs(r, n, num, s.timers || [], state.language)
@@ -446,7 +446,7 @@ export default function (h) {
           }</ha-button>`;
         })
         .join("");
-      return `<ha-list-item-base interactive class="rd-step ${done ? "done" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}">
+      return `<ha-list-item-base interactive class="rd-step ${done ? "done" : ""} ${current ? "current" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}">
           <span slot="start" class="rd-num">${done ? `<ha-icon icon="mdi:check"></ha-icon>` : num}</span>
           <span slot="headline" class="rd-text">${textHtml}</span>
           ${links || timers ? `<span slot="supporting-text" class="rd-extra">${links}${timers}</span>` : ""}
@@ -517,11 +517,29 @@ export default function (h) {
             .join("")}
           <div class="card-actions"><ha-button appearance="plain" size="s" data-act="shop" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:cart-outline"></ha-icon>Add to shopping list</ha-button></div>
         </ha-card>`;
+      // the page doubles as a live guide: the first step not yet done is the current one, with progress above
+      const stepGroups = this._rdStepGroups(r);
+      const allSteps = stepGroups.flatMap((g) => g.steps);
+      const doneCount = allSteps.filter((x) => this._doneSteps.has(x.n)).length;
+      const currentStep = (allSteps.find((x) => !this._doneSteps.has(x.n)) || {}).n;
+      const progress = allSteps.length
+        ? `<div class="rd-progress ${doneCount === allSteps.length ? "finished" : ""}">
+            <div class="rd-ptext">${
+              doneCount === allSteps.length
+                ? `<ha-icon icon="mdi:party-popper"></ha-icon>${esc(T("All done, enjoy!"))}`
+                : doneCount
+                  ? `${esc(T("Step"))} ${doneCount + 1} ${esc(T("of"))} ${allSteps.length}`
+                  : `${allSteps.length} ${esc(T("steps"))}`
+            }</div>
+            <div class="rd-pbar"><div style="width:${Math.round((doneCount / allSteps.length) * 100)}%"></div></div>
+          </div>`
+        : "";
       const steps = `<ha-card class="rd-steps" header="${esc(T("Instructions"))}">
+          ${progress}
           ${
-            this._rdStepGroups(r)
+            stepGroups
               .map((g) => {
-                const list = `<ha-list-base>${g.steps.map((x) => this._rdStepHtml(r, k, x)).join("")}</ha-list-base>`;
+                const list = `<ha-list-base>${g.steps.map((x) => this._rdStepHtml(r, k, x, x.n === currentStep)).join("")}</ha-list-base>`;
                 return g.title
                   ? `<ha-expansion-panel left-chevron expanded class="rd-sec"><div slot="header" class="rd-sh">${esc(g.title)}<span class="muted">${g.steps.length}</span></div>${list}</ha-expansion-panel>`
                   : list;

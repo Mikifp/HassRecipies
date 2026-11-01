@@ -226,6 +226,8 @@ const da = {
     "Scan the barcode here": "Scan stregkode her",
     "Scan barcode": "Scan stregkode",
     "Start cooking": "Start madlavning",
+    "All done, enjoy!": "Færdig, velbekomme!",
+    "steps": "trin",
     "Fills in the food from the package.": "Udfylder fødevaren fra emballagen.",
     "Scan with the camera": "Scan med kameraet",
     "Create a new food": "Opret en ny fødevare",
