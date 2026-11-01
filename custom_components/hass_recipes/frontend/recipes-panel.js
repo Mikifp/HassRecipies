@@ -16,7 +16,7 @@ const parts = await Promise.all(["panel-timers", "panel-progress", "panel-browse
 const STYLE = `
   :host { --hq-loud: var(--ha-color-fill-primary-loud-resting, var(--primary-color)); --hq-on-loud: var(--ha-color-on-primary-loud, #fff); --hq-normal: var(--ha-color-fill-primary-normal-resting, color-mix(in srgb, var(--primary-color) 14%, #fff)); --hq-on-normal: var(--ha-color-on-primary-normal, var(--primary-color)); --hq-outline: var(--outline-color, var(--divider-color)); display: block; height: 100%; overflow: auto; background: var(--primary-background-color); color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
   * { box-sizing: border-box; }
-  :host(.compact) { overflow: visible; height: auto; }
+  :host(.compact), :host(.fdwide) { overflow: visible; height: auto; }
   .cq { container-type: inline-size; min-height: 100%; }
   .sticky { position: sticky; top: 0; z-index: 2; }
   header { display: flex; align-items: center; box-sizing: border-box; height: 56px; padding: 8px 12px; background: var(--sidebar-background-color, var(--app-header-background-color, var(--card-background-color))); border-bottom: 1px solid var(--divider-color); font-size: var(--ha-font-size-xl, 20px); font-weight: 400; color: var(--sidebar-text-color, var(--primary-text-color)); }
@@ -372,7 +372,7 @@ const STYLE = `
   .fd-tool { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px); }
   .fd-tool ha-input-search { width: 260px; }
   .fd-tool ha-assist-chip { cursor: pointer; }
-  .fd-pane { width: 400px; flex: none; box-sizing: border-box; border-left: 1px solid var(--divider-color); background: var(--primary-background-color); padding: var(--ha-space-4, 16px); overflow-y: auto; max-height: calc(100vh - 56px); position: sticky; top: 56px; }
+  .fd-pane { align-self: flex-start; width: 400px; flex: none; box-sizing: border-box; border-left: 1px solid var(--divider-color); background: var(--primary-background-color); padding: var(--ha-space-4, 16px); overflow-y: auto; max-height: calc(100vh - 56px); position: sticky; top: 56px; }
   .fd-detail-page { padding: var(--ha-space-4, 16px); max-width: 640px; margin: 0 auto; padding-bottom: 96px; }
   .fd-dhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .fd-dhead h2 { margin: 0; font-size: var(--ha-font-size-xl, 20px); font-weight: 400; }
@@ -978,6 +978,7 @@ class HassRecipesPanel extends HTMLElement {
         }
       } catch (_) { /* history unavailable: navigation still works without it */ }
     }
+    if (view.name === "foods" && prev.name === "foods" && prev.id && view.id && !this._brCompact() && this._fdSwapPane()) return;
     this._render();
     // choosing another food beside the foods list leaves the list where it is
     if (!(view.name === "foods" && prev && prev.name === "foods" && !this._brCompact())) this.scrollTo(0, 0);
@@ -1085,6 +1086,7 @@ class HassRecipesPanel extends HTMLElement {
     // on a phone Home Assistant scrolls the page, not this panel: stay out of the way so the top bar can stick to it
     const compactNow = this._brCompact();
     this.classList.toggle("compact", compactNow);
+    this.classList.toggle("fdwide", v.name === "foods" && !compactNow); // the foods pane is sticky, which needs the page itself to scroll
     // on a cold load the page has no width yet: look again once it has one
     this._compactSeen = compactNow;
     if (!this._compactCheck) {

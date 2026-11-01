@@ -200,6 +200,19 @@ export default function (h) {
         });
     },
 
+    /** Choosing another food beside the list: change the pane and the tint only, the page stays as it is. */
+    _fdSwapPane() {
+      const aside = this.shadowRoot.querySelector(".fd-pane");
+      if (!aside) return false;
+      this._error = "";
+      aside.innerHTML = this._fdDetailHtml();
+      aside.scrollTop = 0;
+      const on = (sel, ev, fn) => aside.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, fn));
+      this._bindFoods({ getElementById: (id) => aside.querySelector(`#${id}`), querySelectorAll: (sel) => aside.querySelectorAll(sel) }, on);
+      this._fdHighlight();
+      return true;
+    },
+
     /** Tint the row of the food that is open beside the list (the table has no such thing itself). */
     _fdHighlight() {
       const t = this._fdTable;
