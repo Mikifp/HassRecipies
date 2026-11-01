@@ -417,7 +417,7 @@ export default function (h) {
           ? `<ha-list-base>${list
               .map(
                 (c, n) =>
-                  `<ha-list-item-button data-n="${n}" headline="${esc(c.name)}" supporting-text="${esc(c.sub || "")}"><ha-icon slot="start" icon="mdi:${c.suggested ? "star-outline" : c.kind === "food" ? "food-apple-outline" : c.kind === "frida" ? "database-outline" : "flag-outline"}"></ha-icon></ha-list-item-button>`
+                  `<ha-list-item-button data-n="${n}" headline="${esc(c.name)}" supporting-text="${esc(c.sub || "")}"><ha-icon slot="start" icon="mdi:${c.kind !== "food" ? "plus" : c.suggested ? "star-outline" : "food-apple-outline"}"></ha-icon></ha-list-item-button>`
               )
               .join("")}</ha-list-base>`
           : `<p class="muted">${esc(T("No foods found. Try another word."))}</p>`;
@@ -490,7 +490,7 @@ export default function (h) {
         const text = (st.fnQ || "").trim();
         const hits = st.fnHits || [];
         const rows = hits
-          .map((f, n) => `<ha-list-item-button data-n="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`)
+          .map((f, n) => `<ha-list-item-button data-n="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"><ha-icon slot="start" icon="mdi:plus"></ha-icon></ha-list-item-button>`)
           .join("");
         const scratch = `<ha-list-item-button data-scratch headline="${esc(text ? `${T("Create")} “${text}” ${T("from scratch")}` : T("Enter the details myself"))}"><ha-icon slot="start" icon="mdi:plus"></ha-icon></ha-list-item-button>`;
         res.innerHTML = `${text ? (hits.length || st.fnBusy ? "" : `<p class="muted">${esc(T("No foods found. Try another word."))}</p>`) : `<p class="muted">${esc(T("Search Frida and USDA, or scan a barcode with the icon."))}</p>`}${hits.length ? `<p class="muted">${esc(T("Saved under the name you typed; the match only gives the numbers."))}</p>` : ""}<ha-list-base>${rows}${scratch}</ha-list-base>`;
