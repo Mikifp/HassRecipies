@@ -234,6 +234,25 @@ class FoodDatabase:
         return hits[:limit]
 
 
+    def groups(self) -> dict[str, list[dict[str, Any]]]:
+        """The food groups of Frida and USDA with how many foods each has, by name."""
+        out: dict[str, list[dict[str, Any]]] = {}
+        for source, foods in ((SOURCE_FRIDA, self.foods), (SOURCE_USDA, self.usda)):
+            counts: dict[str, int] = {}
+            for food in foods.values():
+                group = str(food.get("group") or "").strip()
+                if group:
+                    counts[group] = counts.get(group, 0) + 1
+            out[source] = [{"name": n, "count": c} for n, c in sorted(counts.items(), key=lambda i: i[0].casefold())]
+        return out
+
+    def in_group(self, source: str, group: str) -> list[dict[str, Any]]:
+        """Every food of a group, by name."""
+        foods = self.usda if source == SOURCE_USDA else self.foods
+        found = [describe(source, f) for f in foods.values() if str(f.get("group") or "").strip() == group]
+        return sorted(found, key=lambda f: f["name"].casefold())
+
+
 # ---- custom ingredients --------------------------------------------------------
 
 def clean_custom(data: dict[str, Any]) -> dict[str, Any]:

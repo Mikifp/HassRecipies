@@ -431,3 +431,23 @@ def test_suggestions_can_be_usda_foods_and_accepting_one_makes_a_usda_food():
     n.set_unit_grams("tortilla", "piece", 40)
     assert n.book.food_for_key("tortilla")["unit_grams"] == {"piece": 40.0}
     assert n.book.food_for_key("tortilla")["source"] == "usda"
+
+
+def test_database_groups_and_what_is_already_a_food():
+    db = DB
+    groups = db.groups()
+    assert any(g["name"] == "Bærfrugt" for g in groups["frida"])
+    assert groups["usda"]
+    berries = db.in_group("frida", "Bærfrugt")
+    assert berries and all(f["group"] == "Bærfrugt" and f["source"] == "frida" for f in berries)
+    assert [f["name"].casefold() for f in berries] == sorted(f["name"].casefold() for f in berries)
+
+
+def test_a_database_food_says_which_food_of_yours_it_already_is():
+    _recipes, n = _make()
+    n.assign_groups([{"keys": ["Hvedemel"], "source": "frida", "source_id": HVEDEMEL}])
+    flour = [f for f in n.in_group("frida", DB.get(HVEDEMEL)["group"]) if f["id"] == HVEDEMEL][0]
+    assert flour["used"] == "Hvedemel"
+    other = [f for f in n.in_group("frida", DB.get(HVEDEMEL)["group"]) if f["id"] != HVEDEMEL][0]
+    assert "used" not in other
+    assert [h for h in n.search("hvedemel", 5) if h["id"] == HVEDEMEL and h["source"] == "frida"][0]["used"] == "Hvedemel"

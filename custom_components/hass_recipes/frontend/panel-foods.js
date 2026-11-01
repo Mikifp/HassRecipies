@@ -567,6 +567,7 @@ export default function (h) {
               ${compact ? "" : `<ha-input-search id="fsearch" appearance="outlined" placeholder="${esc(T("Search foods"))}" value="${esc(st.q)}"></ha-input-search>`}
               ${chip("review", "Needs review", c.review)}${chip("mine", "Mine", c.mine)}${chip("frida", "From Frida", c.frida)}${c.usda ? chip("usda", "From USDA", c.usda) : ""}
               ${st.filter === "review" && canEdit && st.data && st.data.review.length ? `<ha-button size="s" appearance="filled" data-fd="triage-start"><ha-icon slot="start" icon="mdi:playlist-check"></ha-icon>${esc(T("Review one by one"))}</ha-button>` : ""}
+              ${canEdit ? `<ha-button size="s" appearance="plain" data-fd="bulk"><ha-icon slot="start" icon="mdi:playlist-plus"></ha-icon>${esc(T("Add from databases"))}</ha-button>` : ""}
               ${st.filter === "review" && standard && canEdit ? `<ha-button size="s" appearance="filled" data-fd="adopt-all"><ha-icon slot="start" icon="mdi:check-all"></ha-icon>${esc(`${T("Accept")} ${standard} ${T("standard choices")}`)}</ha-button>` : ""}
             </div>
             ${st.filter === "review" ? this._fdGroupsHtml() : ""}
@@ -967,6 +968,9 @@ export default function (h) {
         case "merge":
           this._fdPickFood(d);
           break;
+        case "bulk":
+          this._fdBulkDialog();
+          break;
         case "adopt-all": {
           const keys = st.data.review.filter((r) => r.suggestion && r.suggestion.confidence === "standard").map((r) => r.key);
           const { ok, res } = await this._fdCall({ type: "hass_recipes/foods_adopt", keys });
@@ -1003,6 +1007,128 @@ export default function (h) {
           break;
         }
       }
+    },
+
+    /** Add several foods at once: search Frida and USDA, tick what you want (the ticks stay through new searches), add them all. */
+    _fdBulkDialog() {
+      const html = `<ha-input-search id="fb-q" appearance="outlined" placeholder="${esc(T("Search foods"))}"></ha-input-search>
+        <div class="fd-bchips"><ha-assist-chip data-src="all" label="${esc(T("All"))}" active></ha-assist-chip><ha-assist-chip data-src="frida" label="Frida"></ha-assist-chip><ha-assist-chip data-src="usda" label="USDA"></ha-assist-chip></div>
+        <div id="fb-res" class="fd-bres"></div>`;
+      this._planDialog(T("Add from databases"), html, (dlg, close) => {
+        const picked = new Map(); // "frida:12" -> the hit, kept while the search changes
+        const res = dlg.querySelector("#fb-res");
+        const q = dlg.querySelector("#fb-q");
+        const keyOf = (f) => `${f.source}:${f.id}`;
+        let src = "all";
+        let found = [];
+        let ticket = 0;
+        const footer = () => {
+          this._planFooter(dlg, { primary: { id: "fb-add", label: picked.size ? `${T("Add")} ${picked.size} ${T(picked.size === 1 ? "food" : "foods")}` : T("Add"), icon: "plus", attrs: picked.size ? "" : "disabled" }, secondary: [{ id: "fb-cancel", label: T("Cancel") }] });
+          dlg.querySelector("#fb-cancel").addEventListener("click", close);
+          dlg.querySelector("#fb-add").addEventListener("click", add);
+        };
+        let groups = null; // { frida: [{name, count}], usda: [...] }, loaded when first needed
+        let grp = null; // the group being browsed: { source, name }
+        let list = []; // the foods of that group
+        const row = (f, n) => {
+          const sub = [f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · ");
+          return `<label class="fd-brow ${f.used ? "used" : ""}"><ha-checkbox data-n="${n}" ${f.used ? "disabled" : picked.has(keyOf(f)) ? "checked" : ""}></ha-checkbox><span class="fd-bname">${esc(f.name)}<small>${esc(sub)}</small>${f.used ? `<small class="fd-bused"><ha-icon icon="mdi:check-circle-outline"></ha-icon>${esc(`${T("Already the food")} ${f.used}`)}</small>` : ""}</span></label>`;
+        };
+        const draw = () => {
+          const text = (q.value || "").trim();
+          let rows = [];
+          let html = "";
+          if (text) {
+            rows = found.filter((f) => src === "all" || f.source === src);
+            html = rows.length ? rows.map(row).join("") : `<p class="muted">${esc(T("No foods found. Try another word."))}</p>`;
+          } else if (grp) {
+            rows = list;
+            html = `<button type="button" class="fd-bback" data-back><ha-icon icon="mdi:arrow-left"></ha-icon>${esc(grp.name)}</button>${rows.map(row).join("")}`;
+          } else if (!groups) {
+            html = `<p class="muted">${esc(T("Loading…"))}</p>`;
+          } else {
+            html = ["frida", "usda"]
+              .filter((k) => src === "all" || src === k)
+              .map(
+                (k) =>
+                  `<h4 class="fd-bhead">${k === "frida" ? "Frida" : "USDA"}</h4>${(groups[k] || [])
+                    .map((g, i) => `<ha-list-item-button data-g="${k}:${i}" headline="${esc(g.name)}" supporting-text="${g.count} ${esc(T("foods"))}"><ha-icon slot="start" icon="mdi:folder-outline"></ha-icon></ha-list-item-button>`)
+                    .join("")}`
+              )
+              .join("");
+          }
+          res.innerHTML = html;
+          res._rows = rows;
+        };
+        const search = async (text) => {
+          const mine = ++ticket;
+          const hits = text.trim() ? await this._ws({ type: "hass_recipes/nutrition_search", query: text, limit: 50 }).catch(() => []) : [];
+          if (mine !== ticket) return;
+          found = hits.filter((x) => x.source === "frida" || x.source === "usda");
+          draw();
+        };
+        this._ws({ type: "hass_recipes/food_groups" })
+          .then((g) => {
+            groups = g;
+            draw();
+          })
+          .catch(() => {
+            groups = { frida: [], usda: [] };
+            draw();
+          });
+        res.addEventListener("click", async (e) => {
+          if (e.target.closest("[data-back]")) {
+            grp = null;
+            draw();
+            res.scrollTop = 0;
+            return;
+          }
+          const item = e.target.closest("[data-g]");
+          if (!item) return;
+          const [source, i] = item.dataset.g.split(":");
+          grp = { source, name: groups[source][+i].name };
+          list = [];
+          res.innerHTML = `<p class="muted">${esc(T("Loading…"))}</p>`;
+          const mine = grp;
+          const foods = await this._ws({ type: "hass_recipes/food_group", source, group: grp.name }).catch(() => []);
+          if (grp !== mine) return;
+          list = foods;
+          draw();
+          res.scrollTop = 0;
+        });
+        res.addEventListener("change", (e) => {
+          const box = e.target.closest("ha-checkbox");
+          const f = box && res._rows[+box.dataset.n];
+          if (!f) return;
+          if (box.checked) picked.set(keyOf(f), f);
+          else picked.delete(keyOf(f));
+          footer();
+        });
+        dlg.querySelectorAll("[data-src]").forEach((chip) =>
+          chip.addEventListener("click", () => {
+            src = chip.dataset.src;
+            dlg.querySelectorAll("[data-src]").forEach((c) => c.toggleAttribute("active", c === chip));
+            draw();
+          })
+        );
+        let timer = null;
+        q.addEventListener("input", () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => search(q.value), 200);
+        });
+        const add = async () => {
+          if (!picked.size) return;
+          const groups = [...picked.values()].map((f) => ({ keys: [f.name], source: f.source, source_id: f.id }));
+          close();
+          const { ok } = await this._fdCall({ type: "hass_recipes/foods_assign", groups });
+          if (!ok) return;
+          this._flash(`${groups.length} ${T(groups.length === 1 ? "food added." : "foods added.")}`);
+          await this._fdRefresh();
+        };
+        draw();
+        footer();
+        setTimeout(() => q.focus && q.focus(), 300);
+      });
     },
 
     /** Pick a Frida or USDA food for the food being edited. */

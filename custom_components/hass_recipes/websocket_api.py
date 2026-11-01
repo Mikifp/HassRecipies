@@ -157,6 +157,8 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_migrate_mealie,
         ws_nutrition,
         ws_nutrition_search,
+        ws_food_groups,
+        ws_food_group,
         ws_nutrition_link,
         ws_nutrition_unit_grams,
         ws_nutrition_custom_list,
@@ -932,6 +934,26 @@ def ws_nutrition(hass: HomeAssistant, connection: websocket_api.ActiveConnection
 @callback
 def ws_nutrition_search(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     connection.send_result(msg["id"], _nutrition(hass).search(msg["query"], msg["limit"]))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/food_groups"})
+@callback
+def ws_food_groups(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The food groups of Frida and USDA, to browse the databases by."""
+    connection.send_result(msg["id"], _nutrition(hass).groups())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/food_group",
+        vol.Required("source"): vol.In([SOURCE_FRIDA, SOURCE_USDA]),
+        vol.Required("group"): vol.All(str, vol.Length(max=120)),
+    }
+)
+@callback
+def ws_food_group(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Every food of one group of Frida or USDA, with the food of the user's it already is."""
+    connection.send_result(msg["id"], _nutrition(hass).in_group(msg["source"], msg["group"]))
 
 
 @websocket_api.websocket_command(

@@ -441,6 +441,17 @@ const STYLE = `
   .fd-tlast { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 4px 4px 4px 12px; border-radius: 12px; background: var(--secondary-background-color); }
   .fd-tdone { display: grid; justify-items: center; gap: 8px; padding: 32px 0; text-align: center; --mdc-icon-size: 56px; color: var(--success-color, #43a047); }
   .fd-tdone h2 { margin: 0; color: var(--primary-text-color); }
+  .fd-bres { height: min(55vh, 480px); overflow-y: auto; scrollbar-width: thin; } /* a fixed height keeps the search, filters and back button where they are */
+  .fd-bchips { display: flex; gap: 8px; margin: 8px 0; }
+  .fd-bchips ha-assist-chip { cursor: pointer; }
+  .fd-brow { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+  .fd-brow.used { opacity: .65; }
+  .fd-bused { display: flex; align-items: center; gap: 4px; }
+  .fd-bused ha-icon { --mdc-icon-size: 14px; }
+  .fd-bhead { margin: 12px 0 4px; font-size: var(--ha-font-size-m, 14px); font-weight: 500; }
+  .fd-bback { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 8px 0; color: var(--primary-color); font: inherit; cursor: pointer; text-align: left; }
+  .fd-bname { display: flex; flex-direction: column; min-width: 0; }
+  .fd-bname small { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); }
   .fd-fsearch { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
   .fd-fsearch ha-input-search { flex: 1; min-width: 0; }
   .tk-lookbtns { display: flex; flex-wrap: wrap; gap: 8px; }
