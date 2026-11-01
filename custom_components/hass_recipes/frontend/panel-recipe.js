@@ -500,14 +500,6 @@ export default function (h) {
           }</ha-list-base>
           ${canEdit ? `<div class="card-actions"><ha-button appearance="plain" size="s" data-act="plan-this" data-id="${esc(r.id)}">Add to meal plan</ha-button><ha-button appearance="plain" size="s" data-act="edit" data-id="${esc(r.id)}">Edit</ha-button></div>` : ""}
         </ha-card>`;
-      // the page doubles as a live guide: the first step not yet done is the current one, with progress above
-      const stepGroups = this._rdStepGroups(r);
-      const allSteps = stepGroups.flatMap((g) => g.steps);
-      const doneCount = allSteps.filter((x) => this._doneSteps.has(x.n)).length;
-      const currentStep = (allSteps.find((x) => !this._doneSteps.has(x.n)) || {}).n;
-      // what the current step needs is lit up in the ingredient list
-      const cur = currentStep === undefined ? null : r.instructions.map(normStep)[currentStep];
-      const used = new Set(cur ? this._stepChipIngredients(r, cur) : []);
       const ingredients = `<ha-card class="rd-ings" header="${esc(T("Ingredients"))}">
           <div class="card-content">${this._rdScaleHtml(r, k)}</div>
           ${this._rdIngredientGroups(r)
@@ -515,7 +507,7 @@ export default function (h) {
               const items = g.items
                 .map(
                   (n) =>
-                    `<ha-check-list-item left class="${used.has(n) && !this._checked.has(n) ? "used" : ""}" data-ing="${n}" ${this._checked.has(n) ? "selected" : ""}><span class="ing-text">${ingredientHtml(r, n, k, this._units)}</span></ha-check-list-item>`
+                    `<ha-check-list-item left data-ing="${n}" ${this._checked.has(n) ? "selected" : ""}><span class="ing-text">${ingredientHtml(r, n, k, this._units)}</span></ha-check-list-item>`
                 )
                 .join("");
               return g.title
@@ -525,6 +517,11 @@ export default function (h) {
             .join("")}
           <div class="card-actions"><ha-button appearance="plain" size="s" data-act="shop" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:cart-outline"></ha-icon>Add to shopping list</ha-button></div>
         </ha-card>`;
+      // the page doubles as a live guide: the first step not yet done is the current one, with progress above
+      const stepGroups = this._rdStepGroups(r);
+      const allSteps = stepGroups.flatMap((g) => g.steps);
+      const doneCount = allSteps.filter((x) => this._doneSteps.has(x.n)).length;
+      const currentStep = (allSteps.find((x) => !this._doneSteps.has(x.n)) || {}).n;
       const progress = allSteps.length
         ? `<div class="rd-progress ${doneCount === allSteps.length ? "finished" : ""}">
             <div class="rd-ptext">${
@@ -567,7 +564,7 @@ export default function (h) {
         const tabs = `<div class="rd-tabs">${tab("rd-tab-ings", "format-list-checks", T("Ingredients"), this._rdTab === "ings")}${tab("rd-tab-steps", "chef-hat", T("Steps"), this._rdTab === "steps")}</div>`;
         return `<div class="rd">${cover}${info}${tabs}${this._rdTab === "steps" ? steps : ingredients + notes}<div class="rd-bottom">${nutrition}</div></div>`;
       }
-      return `<div class="rd">${cover}<div class="rd-left">${ingredients}${info}${narrow ? "" : nutrition}${notes}</div><div class="rd-right">${steps}</div>${narrow ? `<div class="rd-bottom">${nutrition}</div>` : ""}</div>`;
+      return `<div class="rd">${cover}<div class="rd-left">${info}${ingredients}${narrow ? "" : nutrition}${notes}</div><div class="rd-right">${steps}</div>${narrow ? `<div class="rd-bottom">${nutrition}</div>` : ""}</div>`;
     },
 
     /** Wire up the HA elements of the recipe page. */
@@ -578,17 +575,6 @@ export default function (h) {
       on("#rd-nutpanel", "expanded-changed", (e) => {
         if (e.target.id === "rd-nutpanel") this._nuOpen = e.detail.expanded;
       });
-      // the round Cook button only shows once the cover's own button has scrolled away
-      if (this._rdIO) this._rdIO.disconnect();
-      const go = root.querySelector(".rd-go");
-      const fab = root.querySelector(".fab");
-      if (go && fab && typeof IntersectionObserver === "function") {
-        fab.style.display = "none";
-        this._rdIO = new IntersectionObserver(([e]) => {
-          fab.style.display = e.isIntersecting ? "none" : "";
-        });
-        this._rdIO.observe(go);
-      }
       this._bindScale(root);
       this._bindIngChecks(on);
       on("[data-chip][data-value]", "click", (e) => {
