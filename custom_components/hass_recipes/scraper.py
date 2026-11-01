@@ -18,6 +18,17 @@ except ImportError:  # loaded on its own (tests): importing a page then leaves t
     link_ingredients = None
 
 try:
+    from .ingredient_tidy import tidy_ingredients
+except ImportError:  # loaded on its own (tests)
+    import importlib.util as _ilu2
+    from pathlib import Path as _Path2
+
+    _spec2 = _ilu2.spec_from_file_location("hass_recipes_ingredient_tidy", _Path2(__file__).with_name("ingredient_tidy.py"))
+    _mod2 = _ilu2.module_from_spec(_spec2)
+    _spec2.loader.exec_module(_mod2)
+    tidy_ingredients = _mod2.tidy_ingredients
+
+try:
     from .textimport import parse_text
 except ImportError:  # loaded on its own (tests)
     import importlib.util as _ilu
@@ -460,6 +471,7 @@ def parse_page(page: str, url: str) -> dict[str, Any]:
     recipe = _merge(_scrapers_parse(page, url), own, url)
     if not any(str(i).startswith("## ") for i in recipe.get("ingredients") or []):
         _apply_groups(recipe, _ingredient_groups(page))
+    recipe["ingredients"] = tidy_ingredients(recipe.get("ingredients") or [])
     # a step that names an ingredient links to it, so the panel can show it as a chip in the text
     if link_ingredients is not None:
         recipe["instructions"] = link_ingredients(recipe.get("ingredients") or [], recipe.get("instructions") or [])
@@ -546,6 +558,7 @@ def parse_pasted(text: str, url: str = "") -> dict[str, Any]:
             recipe = recipe_from_node(node, "", url or _text(node.get("url")))
             if not recipe["ingredients"] and not recipe["instructions"]:
                 raise RecipeImportError("That Recipe has no ingredients or instructions")
+            recipe["ingredients"] = tidy_ingredients(recipe["ingredients"])
             if link_ingredients is not None:
                 recipe["instructions"] = link_ingredients(recipe["ingredients"], recipe["instructions"])
             return recipe

@@ -218,3 +218,17 @@ def test_ingredient_groups_ignored_when_items_do_not_match():
     page = GROUPED.replace('<li class="wprm-recipe-ingredient">7 ounces cheese</li>', "")
     r = scraper.parse_page(page, "https://example.com/buns")
     assert not any(str(i).startswith("## ") for i in r["ingredients"])
+
+
+def test_an_imported_page_has_its_ingredients_tidied():
+    page = (
+        '<html><head><script type="application/ld+json">{"@type":"Recipe","name":"Pasta",'
+        '"recipeIngredient":["2 løg, finthakket","½ bundt finthakket persille","salt og friskkværnet peber"],'
+        '"recipeInstructions":["Kog."]}</script></head></html>'
+    )
+    assert scraper.parse_page(page, "https://example.com/p")["ingredients"] == [
+        "2 løg // finthakket",
+        "0,5 bundt persille // finthakket",
+        "salt",
+        "peber // friskkværnet",
+    ]
