@@ -77,7 +77,7 @@ export default function (h) {
     _fdDraft() {
       const st = this._fdState();
       const id = this._view.id;
-      if (!id || id.startsWith("r~")) return null;
+      if (!id || id === "triage" || id.startsWith("r~")) return null;
       if (st.draftFor !== id || !st.draft) {
         const food = id === "new" ? null : this._fdFood(id);
         if (id !== "new" && !food) return null;
@@ -258,6 +258,181 @@ export default function (h) {
       }
     },
 
+    // ---- review one name at a time: the best matches as buttons, one tap and on to the next ----
+    _fdTriInit(force = false) {
+      const st = this._fdState();
+      if (!st.data) return null;
+      if (force || !st.tri) {
+        const keys = st.data.review.map((r) => r.key);
+        st.tri = { queue: keys, total: keys.length, done: 0, last: null, cache: {}, q: "" };
+      }
+      return st.tri;
+    },
+
+    _fdTriCurrent() {
+      const st = this._fdState();
+      const tri = this._fdTriInit();
+      if (!tri) return null;
+      while (tri.queue.length) {
+        const item = st.data.review.find((r) => r.key === tri.queue[0]);
+        if (item) return item;
+        tri.queue.shift(); // it became a food some other way
+      }
+      return null;
+    },
+
+    _fdTriageHtml(close, compact, canEdit) {
+      const tri = this._fdTriInit();
+      const head = compact ? "" : `<div class="fd-dhead"><h2>${esc(T("Review foods"))}</h2>${close}</div>`;
+      if (!tri) return `<div class="fd-detail">${head}<p class="muted">${esc(T("Loading…"))}</p></div>`;
+      const item = this._fdTriCurrent();
+      if (!item) {
+        return `<div class="fd-detail fd-tri">${head}<div class="fd-tdone"><ha-icon icon="mdi:party-popper"></ha-icon><h2>${esc(T("All done, enjoy!"))}</h2><p class="muted">${esc(`${tri.done} ${T("names reviewed")}`)}</p>
+          <ha-button appearance="filled" data-fd="close">${esc(T("Back to foods"))}</ha-button></div>${this._fdTriLastHtml(tri)}</div>`;
+      }
+      const recipes = item.recipes
+        .map((rid) => this._recipe(rid))
+        .filter(Boolean)
+        .slice(0, 3)
+        .map((x) => x.name)
+        .join(", ");
+      const at = Math.min(tri.done + 1, tri.total);
+      return `<div class="fd-detail fd-tri">
+          ${head}
+          <div class="fd-tprog"><span>${at} ${esc(T("of"))} ${tri.total}</span><div class="fd-tbar"><div style="width:${Math.round((tri.done / Math.max(1, tri.total)) * 100)}%"></div></div></div>
+          <h2 class="fd-tname">${esc(item.name)}</h2>
+          <p class="muted">${esc(`${T("Used in")} ${item.used_in} ${T("recipes")}`)}${recipes ? `: ${esc(recipes)}` : ""}</p>
+          ${canEdit ? `<ha-input-search id="tri-q" appearance="outlined" placeholder="${esc(T("Search foods"))}"></ha-input-search>
+          <div id="tri-cands"></div>
+          <div class="fd-tactions">
+            <ha-button appearance="plain" data-tri="new"><ha-icon slot="start" icon="mdi:plus"></ha-icon>${esc(T("Create new food"))}</ha-button>
+            <ha-button appearance="plain" data-tri="ignore">${esc(T("Don't count"))}</ha-button>
+            <ha-button appearance="plain" data-tri="skip">${esc(T("Skip"))}</ha-button>
+          </div>` : ""}
+          ${this._fdTriLastHtml(tri)}
+        </div>`;
+    },
+
+    _fdTriLastHtml(tri) {
+      return tri.last ? `<div class="fd-tlast"><span class="muted">${esc(tri.last.label)}</span><ha-button size="s" appearance="plain" data-tri="undo">${esc(T("Undo"))}</ha-button></div>` : "";
+    },
+
+    /** The matches for a name: the suggestion, foods you have that look alike, then Frida and USDA. */
+    async _fdTriCandidates(item, query = "") {
+      const st = this._fdState();
+      const tri = st.tri;
+      const cacheKey = `${item.key}|${query}`;
+      if (tri.cache[cacheKey]) return tri.cache[cacheKey];
+      const foods = st.data.foods;
+      const text = query.trim() || item.name;
+      const own = (query.trim()
+        ? fl.rankFoods(foods, [], query, this._fdRecent())
+        : fl.rankFoods(foods, [item.name], "", this._fdRecent()).filter((f) => fl.similarity(f, [item.name]) > 0)
+      )
+        .slice(0, 4)
+        .map((f) => ({ kind: "food", id: f.id, name: f.name, sub: f.values && f.values.kcal != null ? `${num(f.values.kcal)} kcal / 100 g` : T("No nutrition values yet") }));
+      const sug = item.suggestion;
+      const list = [];
+      const seen = new Set();
+      const add = (c) => {
+        const k = `${c.kind}:${c.id}`;
+        if (!seen.has(k)) {
+          seen.add(k);
+          list.push(c);
+        }
+      };
+      if (sug && !query.trim()) {
+        if (sug.source === "custom") {
+          const mine = foods.find((f) => String(f.id) === String(sug.id));
+          if (mine) add({ kind: "food", id: mine.id, name: mine.name, sub: sug.kcal != null ? `${num(sug.kcal)} kcal / 100 g` : "", suggested: true });
+        } else add({ kind: sug.source, id: sug.id, name: sug.name, sub: [T("Suggested"), sug.group, sug.kcal != null ? `${num(sug.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "), suggested: true });
+      }
+      own.forEach(add);
+      const hits = await this._ws({ type: "hass_recipes/nutrition_search", query: text, limit: 12 }).catch(() => []);
+      hits
+        .filter((x) => x.source === "frida" || x.source === "usda")
+        .slice(0, 5)
+        .forEach((x) => add({ kind: x.source, id: x.id, name: x.name, sub: [x.source === "frida" ? "Frida" : "USDA", x.group, x.kcal != null ? `${num(x.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · ") }));
+      tri.cache[cacheKey] = list;
+      return list;
+    },
+
+    async _fdTriDone(item, label, call) {
+      const st = this._fdState();
+      const { ok } = await this._fdCall(call);
+      if (!ok) return;
+      st.tri.queue.shift();
+      st.tri.done += 1;
+      st.tri.last = { key: item.key, label };
+      await this._fdRefresh();
+    },
+
+    _fdBindTriage(root) {
+      const box = root.getElementById("tri-cands");
+      const st = this._fdState();
+      const item = box ? this._fdTriCurrent() : null;
+      if (!box || !item) {
+        root.querySelectorAll("[data-tri=undo]").forEach((el) => el.addEventListener("click", () => this._fdTriUndo()));
+        return;
+      }
+      let shown = [];
+      let ticket = 0;
+      const draw = (list) => {
+        shown = list;
+        box.innerHTML = list.length
+          ? `<ha-list-base>${list
+              .map(
+                (c, n) =>
+                  `<ha-list-item-button data-n="${n}" headline="${esc(c.name)}" supporting-text="${esc(c.sub || "")}"><ha-icon slot="start" icon="mdi:${c.suggested ? "star-outline" : c.kind === "food" ? "food-apple-outline" : c.kind === "frida" ? "database-outline" : "flag-outline"}"></ha-icon></ha-list-item-button>`
+              )
+              .join("")}</ha-list-base>`
+          : `<p class="muted">${esc(T("No foods found. Try another word."))}</p>`;
+      };
+      const load = async (query) => {
+        const mine = ++ticket;
+        box.innerHTML = `<p class="muted">${esc(T("Loading…"))}</p>`;
+        const list = await this._fdTriCandidates(item, query);
+        if (mine === ticket) draw(list);
+      };
+      box.addEventListener("click", (e) => {
+        const row = e.target.closest("[data-n]");
+        if (!row) return;
+        const c = shown[+row.dataset.n];
+        const group = c.kind === "food" ? { keys: [item.key], food_id: c.id } : { keys: [item.key], source: c.kind, source_id: c.id };
+        this._fdTriDone(item, `${item.name} → ${c.name}`, { type: "hass_recipes/foods_assign", groups: [group] });
+      });
+      root.querySelectorAll("[data-tri]").forEach((el) =>
+        el.addEventListener("click", () => {
+          const act = el.dataset.tri;
+          if (act === "new") this._fdTriDone(item, `${item.name} → ${T("a new food")}`, { type: "hass_recipes/foods_assign", groups: [{ keys: [item.key], name: item.name }] });
+          else if (act === "ignore") this._fdTriDone(item, `${item.name}: ${T("not counted")}`, { type: "hass_recipes/nutrition_link", food: item.key, source: "ignore" });
+          else if (act === "skip") {
+            st.tri.queue.push(st.tri.queue.shift());
+            this._render();
+          } else if (act === "undo") this._fdTriUndo();
+        })
+      );
+      const q = root.getElementById("tri-q");
+      let timer = null;
+      q.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => load(q.value || ""), 200);
+      });
+      load("");
+    },
+
+    async _fdTriUndo() {
+      const st = this._fdState();
+      const last = st.tri && st.tri.last;
+      if (!last) return;
+      const { ok } = await this._fdCall({ type: "hass_recipes/nutrition_link", food: last.key, source: null });
+      if (!ok) return;
+      st.tri.queue.unshift(last.key);
+      st.tri.done = Math.max(0, st.tri.done - 1);
+      st.tri.last = null;
+      await this._fdRefresh();
+    },
+
     // ---- a new food starts with a search: Frida and USDA in one list, a barcode, or "from scratch" ----
     _fdFinderHtml(close, compact) {
       return `<div class="fd-detail">
@@ -357,6 +532,7 @@ export default function (h) {
             <div class="fd-tool">
               ${compact ? "" : `<ha-input-search id="fsearch" appearance="outlined" placeholder="${esc(T("Search foods"))}" value="${esc(st.q)}"></ha-input-search>`}
               ${chip("review", "Needs review", c.review)}${chip("mine", "Mine", c.mine)}${chip("frida", "From Frida", c.frida)}${c.usda ? chip("usda", "From USDA", c.usda) : ""}
+              ${st.filter === "review" && canEdit && st.data && st.data.review.length ? `<ha-button size="s" appearance="filled" data-fd="triage-start"><ha-icon slot="start" icon="mdi:playlist-check"></ha-icon>${esc(T("Review one by one"))}</ha-button>` : ""}
               ${st.filter === "review" && standard && canEdit ? `<ha-button size="s" appearance="filled" data-fd="adopt-all"><ha-icon slot="start" icon="mdi:check-all"></ha-icon>${esc(`${T("Accept")} ${standard} ${T("standard choices")}`)}</ha-button>` : ""}
             </div>
             ${st.filter === "review" ? this._fdGroupsHtml() : ""}
@@ -600,6 +776,7 @@ export default function (h) {
       const id = this._view.id;
       const canEdit = this._canEdit !== false;
       const close = compact ? "" : `<ha-icon-button data-fd="close" label="${esc(T("Close"))}"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>`;
+      if (id === "triage") return this._fdTriageHtml(close, compact, canEdit);
       if (id.startsWith("r~")) return this._fdReviewHtml(close, canEdit);
       const d = this._fdDraft();
       if (!d) return `<div class="fd-detail"><p class="muted">${esc(T(this._fdState().data ? "This food no longer exists." : "Loading…"))}</p></div>`;
@@ -777,6 +954,10 @@ export default function (h) {
         }
         case "link":
           this._fdAssignNames([this._fdReview(this._view.id).key]);
+          break;
+        case "triage-start":
+          this._fdTriInit(true);
+          this._go({ name: "foods", id: "triage" });
           break;
         case "ignore": {
           const r = this._fdReview(this._view.id);
@@ -962,6 +1143,7 @@ export default function (h) {
         });
       }
       this._fdBindFinder(root);
+      this._fdBindTriage(root);
       on("[data-fscan]", "click", () => this._fdScan());
       on("[data-ffilter]", "click", (e) => {
         const key = e.currentTarget.dataset.ffilter;

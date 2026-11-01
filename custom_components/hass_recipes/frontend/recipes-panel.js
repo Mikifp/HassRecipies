@@ -432,6 +432,15 @@ const STYLE = `
   .tk-water .tk-kbar { margin-top: 8px; }
   .tk-water .tk-kbar.done { --control-slider-color: var(--success-color, #43a047); --control-slider-background: var(--success-color, #43a047); }
   .tk-wbtns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .fd-tprog { display: flex; align-items: center; gap: 12px; color: var(--secondary-text-color); font-size: 14px; margin-bottom: 8px; }
+  .fd-tbar { flex: 1; height: 6px; border-radius: 3px; background: var(--divider-color); overflow: hidden; }
+  .fd-tbar > div { height: 100%; border-radius: 3px; background: var(--primary-color); transition: width .3s ease; }
+  .fd-tname { margin: 8px 0 0; font-size: 28px; font-weight: 500; overflow-wrap: anywhere; }
+  .fd-tri ha-input-search { display: block; margin: 8px 0; }
+  .fd-tactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .fd-tlast { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 4px 4px 4px 12px; border-radius: 12px; background: var(--secondary-background-color); }
+  .fd-tdone { display: grid; justify-items: center; gap: 8px; padding: 32px 0; text-align: center; --mdc-icon-size: 56px; color: var(--success-color, #43a047); }
+  .fd-tdone h2 { margin: 0; color: var(--primary-text-color); }
   .fd-fsearch { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
   .fd-fsearch ha-input-search { flex: 1; min-width: 0; }
   .tk-lookbtns { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1037,7 +1046,7 @@ class HassRecipesPanel extends HTMLElement {
     }
     if (foodDetail) {
       const d = this._fdDraft();
-      const name = v.id === "new" ? T("New food") : v.id.startsWith("r~") ? decodeURIComponent(v.id.slice(2)) : (d && d.name) || T("Food");
+      const name = v.id === "new" ? T("New food") : v.id === "triage" ? T("Review foods") : v.id.startsWith("r~") ? decodeURIComponent(v.id.slice(2)) : (d && d.name) || T("Food");
       return { header: `${iconBtn("back", "arrow-left", "Back")}<div class="main-title"><b>${esc(name)}</b></div>`, bottom: "" };
     }
     if (v.name === "edit") {
