@@ -553,6 +553,17 @@ export default function (h) {
         ? `<ha-card class="rd-notes" header="${esc(T("Notes"))}"><div class="card-content" style="white-space:pre-wrap">${esc(r.notes)}</div></ha-card>`
         : "";
       this._fab = `<ha-button class="fab" size="l" data-act="cook" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>Cook</ha-button>`;
+      if (narrow) {
+        // a phone: ingredients and steps are one tap apart instead of a screen and a half
+        if (this._rdTabFor !== r.id) {
+          this._rdTabFor = r.id;
+          this._rdTab = "ings";
+        }
+        const tab = (act, icon, name, on) =>
+          `<div class="tabwrap" data-act="${act}"><ha-tab name="${esc(name)}" ${on ? "active" : ""}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon></ha-tab></div>`;
+        const tabs = `<div class="rd-tabs">${tab("rd-tab-ings", "format-list-checks", T("Ingredients"), this._rdTab === "ings")}${tab("rd-tab-steps", "chef-hat", T("Steps"), this._rdTab === "steps")}</div>`;
+        return `<div class="rd">${cover}${info}${tabs}${this._rdTab === "steps" ? steps : ingredients + notes}<div class="rd-bottom">${nutrition}</div></div>`;
+      }
       return `<div class="rd">${cover}<div class="rd-left">${info}${ingredients}${narrow ? "" : nutrition}${notes}</div><div class="rd-right">${steps}</div>${narrow ? `<div class="rd-bottom">${nutrition}</div>` : ""}</div>`;
     },
 

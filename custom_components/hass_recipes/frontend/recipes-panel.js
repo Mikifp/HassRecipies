@@ -167,6 +167,8 @@ const STYLE = `
   .rd-ings .ing-text { display: block; line-height: 1.4; }
   .rd-step { --ha-list-item-headline-line-clamp: none; }
   .rd-num { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--secondary-background-color); color: var(--secondary-text-color); border: 1px solid var(--divider-color); font-size: 12px; box-sizing: border-box; --mdc-icon-size: 16px; }
+  .rd-tabs { position: sticky; top: 56px; z-index: 1; display: flex; margin: 0 -16px; padding: 0 16px; background: var(--primary-background-color); border-bottom: 1px solid var(--divider-color); }
+  .rd-tabs .tabwrap { flex: 1; max-width: none; }
   .rd-progress { padding: 0 16px 12px; display: grid; gap: 8px; }
   .rd-ptext { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--secondary-text-color); --mdc-icon-size: 20px; }
   .rd-progress.finished .rd-ptext { color: var(--success-color, #43a047); font-weight: 500; }
@@ -1494,6 +1496,11 @@ class HassRecipesPanel extends HTMLElement {
         this._returnTo({ name: "detail", id: this._view.id });
         break;
       }
+      case "rd-tab-ings":
+      case "rd-tab-steps":
+        this._rdTab = act === "rd-tab-steps" ? "steps" : "ings";
+        this._render();
+        break;
       case "cook-exit":
         this._returnTo({ name: "detail", id: this._view.id });
         break;

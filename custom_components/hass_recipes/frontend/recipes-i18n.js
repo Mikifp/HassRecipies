@@ -128,6 +128,7 @@ const da = {
     Scale: "Skala",
     Yield: "Udbytte",
     Ingredients: "Ingredienser",
+    Steps: "Trin",
     Instructions: "Fremgangsmåde",
     Notes: "Noter",
     "As written": "Som skrevet",
