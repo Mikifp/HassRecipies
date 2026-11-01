@@ -434,7 +434,7 @@ export default function (h) {
         </div>`;
     },
 
-    _rdStepHtml(r, k, { s, n, num }) {
+    _rdStepHtml(r, k, { s, n, num }, current = false) {
       const done = this._doneSteps.has(n);
       const { html: textHtml, links } = this._stepTextParts(r, s, k, n);
       const timers = timerSpecs(r, n, num, s.timers || [], state.language)
@@ -446,7 +446,7 @@ export default function (h) {
           }</ha-button>`;
         })
         .join("");
-      return `<ha-list-item-base interactive class="rd-step ${done ? "done" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}">
+      return `<ha-list-item-base interactive class="rd-step ${done ? "done" : ""} ${current ? "current" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}">
           <span slot="start" class="rd-num">${done ? `<ha-icon icon="mdi:check"></ha-icon>` : num}</span>
           <span slot="headline" class="rd-text">${textHtml}</span>
           ${links || timers ? `<span slot="supporting-text" class="rd-extra">${links}${timers}</span>` : ""}
@@ -461,14 +461,6 @@ export default function (h) {
       const row = (icon, headline, value) =>
         value ? `<ha-list-item-base headline="${esc(headline)}" supporting-text="${esc(value)}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon></ha-list-item-base>` : "";
       const unit = r.yield_unit || "";
-      const fact = (icon, label, value) => (value ? chip(icon, `${label} ${value}`, "") : "");
-      const facts = [
-        fact("timer-sand", T("Prep"), r.prep_time ? T(minutes(r.prep_time)) : ""),
-        fact("pot-steam-outline", T("Cook"), r.cook_time ? T(minutes(r.cook_time)) : ""),
-        fact("clock-outline", T("Total"), r.total_time ? T(minutes(r.total_time)) : ""),
-        r.yield_amount ? fact("cupcake", T("Makes"), `${fmtYield(r.yield_amount * k)}${unit ? ` ${unit}` : ""}`) : "",
-        r.servings ? fact("account-multiple-outline", T("Serves"), base !== null && k !== 1 ? formatNumber(base * k) : String(r.servings)) : "",
-      ].join("");
       // the cookbooks this recipe belongs to
       const cookbooks = (this._cookbooks || [])
         .filter((c) => this._matches(r, { categories: new Set(c.categories), tools: new Set(c.tools), tags: new Set(c.tags) }, (c.query || "").toLowerCase()))
@@ -481,12 +473,26 @@ export default function (h) {
       ].join("");
       const subtitle = [...(r.categories || []).slice(0, 2), cookbooks].filter(Boolean).join(" · ");
       this._rdSubtitle = subtitle;
-      const hero = r.image
-        ? `<img class="rd-hero" src="${esc(r.image)}" alt="">`
-        : `<div class="rd-hero rd-nohero"><ha-icon icon="mdi:silverware-fork-knife"></ha-icon></div>`;
+      // the cover: the dish across the top of the page, with its name and the numbers that matter over it
+      const pill = (icon, text) => (text ? `<span class="rd-pill"><ha-icon icon="mdi:${icon}"></ha-icon>${esc(text)}</span>` : "");
+      const pills = [
+        pill("timer-sand", r.prep_time ? `${T("Prep")} ${T(minutes(r.prep_time))}` : ""),
+        pill("pot-steam-outline", r.cook_time ? `${T("Cook")} ${T(minutes(r.cook_time))}` : ""),
+        pill("clock-outline", !r.prep_time && !r.cook_time && r.total_time ? `${T("Total")} ${T(minutes(r.total_time))}` : ""),
+        pill("account-multiple-outline", r.servings ? `${T("Serves")} ${base !== null && k !== 1 ? formatNumber(base * k) : r.servings}` : ""),
+        pill("cupcake", r.yield_amount ? `${T("Makes")} ${fmtYield(r.yield_amount * k)}${unit ? ` ${unit}` : ""}` : ""),
+      ].join("");
+      const cover = `<div class="rd-cover ${r.image ? "" : "rd-nocover"}">
+          ${r.image ? `<img src="${esc(r.image)}" alt="">` : `<ha-icon class="rd-coverbg" icon="mdi:silverware-fork-knife"></ha-icon>`}
+          <div class="rd-covertext">
+            ${subtitle ? `<div class="rd-kicker">${esc(subtitle)}</div>` : ""}
+            <h1>${esc(r.name)}</h1>
+            <div class="rd-pills">${pills}</div>
+            <ha-button class="rd-go" size="l" appearance="filled" data-act="cook" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>${esc(T("Start cooking"))}</ha-button>
+          </div>
+        </div>`;
       const info = `<ha-card class="rd-info">
-          ${hero}
-          <div class="card-content">${r.description ? `<p class="rd-desc">${esc(r.description)}</p>` : ""}${facts ? `<div class="rd-chips rd-facts">${facts}</div>` : ""}${chips ? `<div class="rd-chips">${chips}</div>` : ""}</div>
+          <div class="card-content">${r.description ? `<p class="rd-desc">${esc(r.description)}</p>` : ""}${chips ? `<div class="rd-chips">${chips}</div>` : ""}</div>
           <ha-list-base>${row("book-open-page-variant-outline", T("Cookbooks"), cookbooks)}${
             r.source_url
               ? `<a class="rd-src" href="${esc(r.source_url)}" target="_blank" rel="noopener noreferrer"><ha-list-item-base interactive headline="${esc(T("Source"))}" supporting-text="${esc(r.source_url)}"><ha-icon slot="start" icon="mdi:link-variant"></ha-icon><ha-icon slot="end" icon="mdi:open-in-new"></ha-icon></ha-list-item-base></a>`
@@ -511,11 +517,29 @@ export default function (h) {
             .join("")}
           <div class="card-actions"><ha-button appearance="plain" size="s" data-act="shop" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:cart-outline"></ha-icon>Add to shopping list</ha-button></div>
         </ha-card>`;
+      // the page doubles as a live guide: the first step not yet done is the current one, with progress above
+      const stepGroups = this._rdStepGroups(r);
+      const allSteps = stepGroups.flatMap((g) => g.steps);
+      const doneCount = allSteps.filter((x) => this._doneSteps.has(x.n)).length;
+      const currentStep = (allSteps.find((x) => !this._doneSteps.has(x.n)) || {}).n;
+      const progress = allSteps.length
+        ? `<div class="rd-progress ${doneCount === allSteps.length ? "finished" : ""}">
+            <div class="rd-ptext">${
+              doneCount === allSteps.length
+                ? `<ha-icon icon="mdi:party-popper"></ha-icon>${esc(T("All done, enjoy!"))}`
+                : doneCount
+                  ? `${esc(T("Step"))} ${doneCount + 1} ${esc(T("of"))} ${allSteps.length}`
+                  : `${allSteps.length} ${esc(T("steps"))}`
+            }</div>
+            <div class="rd-pbar"><div style="width:${Math.round((doneCount / allSteps.length) * 100)}%"></div></div>
+          </div>`
+        : "";
       const steps = `<ha-card class="rd-steps" header="${esc(T("Instructions"))}">
+          ${progress}
           ${
-            this._rdStepGroups(r)
+            stepGroups
               .map((g) => {
-                const list = `<ha-list-base>${g.steps.map((x) => this._rdStepHtml(r, k, x)).join("")}</ha-list-base>`;
+                const list = `<ha-list-base>${g.steps.map((x) => this._rdStepHtml(r, k, x, x.n === currentStep)).join("")}</ha-list-base>`;
                 return g.title
                   ? `<ha-expansion-panel left-chevron expanded class="rd-sec"><div slot="header" class="rd-sh">${esc(g.title)}<span class="muted">${g.steps.length}</span></div>${list}</ha-expansion-panel>`
                   : list;
@@ -529,7 +553,18 @@ export default function (h) {
         ? `<ha-card class="rd-notes" header="${esc(T("Notes"))}"><div class="card-content" style="white-space:pre-wrap">${esc(r.notes)}</div></ha-card>`
         : "";
       this._fab = `<ha-button class="fab" size="l" data-act="cook" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>Cook</ha-button>`;
-      return `<div class="rd"><div class="rd-left">${info}${ingredients}${narrow ? "" : nutrition}${notes}</div><div class="rd-right">${steps}</div>${narrow ? `<div class="rd-bottom">${nutrition}</div>` : ""}</div>`;
+      if (narrow) {
+        // a phone: ingredients and steps are one tap apart instead of a screen and a half
+        if (this._rdTabFor !== r.id) {
+          this._rdTabFor = r.id;
+          this._rdTab = "ings";
+        }
+        const tab = (act, icon, name, on) =>
+          `<div class="tabwrap" data-act="${act}"><ha-tab name="${esc(name)}" ${on ? "active" : ""}><ha-icon slot="icon" icon="mdi:${icon}"></ha-icon></ha-tab></div>`;
+        const tabs = `<div class="rd-tabs">${tab("rd-tab-ings", "format-list-checks", T("Ingredients"), this._rdTab === "ings")}${tab("rd-tab-steps", "chef-hat", T("Steps"), this._rdTab === "steps")}</div>`;
+        return `<div class="rd">${cover}${info}${tabs}${this._rdTab === "steps" ? steps : ingredients + notes}<div class="rd-bottom">${nutrition}</div></div>`;
+      }
+      return `<div class="rd">${cover}<div class="rd-left">${info}${ingredients}${narrow ? "" : nutrition}${notes}</div><div class="rd-right">${steps}</div>${narrow ? `<div class="rd-bottom">${nutrition}</div>` : ""}</div>`;
     },
 
     /** Wire up the HA elements of the recipe page. */

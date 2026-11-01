@@ -136,6 +136,17 @@ const STYLE = `
   .rd-bottom { grid-column: 1 / -1; }
   .rd-nut { --expansion-panel-summary-padding: 0 8px; --expansion-panel-content-padding: 0; }
   .rd ha-card { display: block; overflow: hidden; }
+  .rd-cover { position: relative; grid-column: 1 / -1; min-height: clamp(240px, 38vh, 400px); border-radius: 20px; overflow: hidden; display: flex; align-items: flex-end; color: #fff; background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 55%, #000)); box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,.25)); isolation: isolate; }
+  .rd-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+  .rd-cover::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,.45) 38%, rgba(0,0,0,0) 72%); }
+  .rd-coverbg { position: absolute; right: 24px; top: 16px; --mdc-icon-size: 160px; opacity: .18; z-index: -1; }
+  .rd-covertext { padding: 28px 28px 24px; display: grid; gap: 12px; justify-items: start; max-width: 100%; }
+  .rd-kicker { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+  .rd-covertext h1 { margin: 0; font-size: clamp(28px, 5vw, 46px); font-weight: 600; line-height: 1.1; text-shadow: 0 2px 12px rgba(0,0,0,.45); overflow-wrap: anywhere; }
+  .rd-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .rd-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 14px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.28); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); --mdc-icon-size: 18px; }
+  .rd-go { margin-top: 4px; }
+  @media (max-width: 600px) { .rd-cover { min-height: 260px; border-radius: 16px; } .rd-covertext { padding: 18px 16px 16px; } }
   .rd-hero { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
   .rd-nohero { display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--primary-color) 10%, var(--secondary-background-color)); color: var(--secondary-text-color); --mdc-icon-size: 48px; }
   .rd-desc { margin: 0 0 12px; color: var(--secondary-text-color); line-height: 1.5; }
@@ -156,6 +167,18 @@ const STYLE = `
   .rd-ings .ing-text { display: block; line-height: 1.4; }
   .rd-step { --ha-list-item-headline-line-clamp: none; }
   .rd-num { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--secondary-background-color); color: var(--secondary-text-color); border: 1px solid var(--divider-color); font-size: 12px; box-sizing: border-box; --mdc-icon-size: 16px; }
+  .rd-tabs { position: sticky; top: 56px; z-index: 1; display: flex; margin: 0 -16px; padding: 0 16px; background: var(--primary-background-color); border-bottom: 1px solid var(--divider-color); }
+  .rd-tabs .tabwrap { flex: 1; max-width: none; }
+  .rd-progress { padding: 0 16px 12px; display: grid; gap: 8px; }
+  .rd-ptext { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--secondary-text-color); --mdc-icon-size: 20px; }
+  .rd-progress.finished .rd-ptext { color: var(--success-color, #43a047); font-weight: 500; }
+  .rd-pbar { height: 6px; border-radius: 3px; background: var(--divider-color); overflow: hidden; }
+  .rd-pbar > div { height: 100%; border-radius: 3px; background: var(--primary-color); transition: width .35s ease; }
+  .rd-progress.finished .rd-pbar > div { background: var(--success-color, #43a047); }
+  .rd-step { transition: background .25s, opacity .25s; border-inline-start: 4px solid transparent; }
+  .rd-step.current { border-inline-start-color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 9%, transparent); }
+  .rd-step.current .rd-text { font-size: 1.12em; font-weight: 500; }
+  .rd-step.current .rd-num { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
   .rd-step.done .rd-num { background: var(--success-color, #43a047); border-color: var(--success-color, #43a047); color: #fff; }
   .rd-text { display: block; line-height: 1.9; white-space: pre-line; }
   .rd-step.done .rd-text { opacity: .55; text-decoration: line-through; }
@@ -1473,6 +1496,11 @@ class HassRecipesPanel extends HTMLElement {
         this._returnTo({ name: "detail", id: this._view.id });
         break;
       }
+      case "rd-tab-ings":
+      case "rd-tab-steps":
+        this._rdTab = act === "rd-tab-steps" ? "steps" : "ings";
+        this._render();
+        break;
       case "cook-exit":
         this._returnTo({ name: "detail", id: this._view.id });
         break;
