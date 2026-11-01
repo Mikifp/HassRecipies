@@ -575,6 +575,17 @@ export default function (h) {
       on("#rd-nutpanel", "expanded-changed", (e) => {
         if (e.target.id === "rd-nutpanel") this._nuOpen = e.detail.expanded;
       });
+      // the round Cook button only shows once the cover's own button has scrolled away
+      if (this._rdIO) this._rdIO.disconnect();
+      const go = root.querySelector(".rd-go");
+      const fab = root.querySelector(".fab");
+      if (go && fab && typeof IntersectionObserver === "function") {
+        fab.style.display = "none";
+        this._rdIO = new IntersectionObserver(([e]) => {
+          fab.style.display = e.isIntersecting ? "none" : "";
+        });
+        this._rdIO.observe(go);
+      }
       this._bindScale(root);
       this._bindIngChecks(on);
       on("[data-chip][data-value]", "click", (e) => {
