@@ -870,7 +870,7 @@ export default function (h) {
         let srcTicket = 0;
         let srcTimer = null;
         const srcItem = (f, n) =>
-          `<ha-list-item-button data-s="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`;
+          `<ha-list-item-button data-s="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"><ha-icon slot="start" icon="mdi:plus"></ha-icon></ha-list-item-button>`;
         const searchSources = () => {
           if (!onPickSource) return;
           clearTimeout(srcTimer);
