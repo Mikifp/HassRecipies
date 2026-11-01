@@ -979,7 +979,8 @@ class HassRecipesPanel extends HTMLElement {
       } catch (_) { /* history unavailable: navigation still works without it */ }
     }
     this._render();
-    this.scrollTo(0, 0);
+    // choosing another food beside the foods list leaves the list where it is
+    if (!(view.name === "foods" && prev && prev.name === "foods" && !this._brCompact())) this.scrollTo(0, 0);
   }
 
   /** In-app "back": same as the browser's back button when there is history. */
@@ -1114,7 +1115,7 @@ class HassRecipesPanel extends HTMLElement {
     const chrome = this._chrome(v);
     this._bottomBar = chrome.bottom;
     // rebuilding the page must not throw the reader back to the top: keep the scroll while the same page is shown
-    const viewKey = `${v.name}/${v.id || ""}`;
+    const viewKey = v.name === "foods" && !this._brCompact() ? "foods" : `${v.name}/${v.id || ""}`; // beside the foods list, opening a food keeps the list where it is
     const keep = this._scrollKey === viewKey && !this._scrollToCurrent ? { top: this.scrollTop, page: window.scrollY } : null;
     this._scrollKey = viewKey;
     this.shadowRoot.innerHTML = `
@@ -1137,6 +1138,8 @@ class HassRecipesPanel extends HTMLElement {
         restore();
         requestAnimationFrame(restore);
       });
+      // the foods table grows to its full height a little later: ask again until it is tall enough
+      if (v.name === "foods") [120, 300, 600, 1000].forEach((ms) => setTimeout(restore, ms));
     }
     this._bind();
     this._autosizeAll();
