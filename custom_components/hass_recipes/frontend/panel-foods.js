@@ -169,6 +169,7 @@ export default function (h) {
           flex: 3,
           template: (row) => {
             const el = document.createElement("div");
+            el.dataset.fid = row.id;
             el.innerHTML = `<div>${esc(row.name)}</div>${row.sub ? `<div style="font-size:12px;color:var(--secondary-text-color)">${esc(row.sub)}</div>` : ""}`;
             return el;
           },
@@ -189,6 +190,7 @@ export default function (h) {
       });
       this._fdTable = t;
       host.appendChild(t);
+      this._fdHighlight();
       this._fdSyncTable();
       this._fdPaintSel();
       if (t.narrow)
@@ -196,6 +198,38 @@ export default function (h) {
           const row = t.shadowRoot && t.shadowRoot.querySelector(".mdc-data-table__header-row");
           if (row) row.style.display = "none";
         });
+    },
+
+    /** Choosing another food beside the list: change the pane and the tint only, the page stays as it is. */
+    _fdSwapPane() {
+      const aside = this.shadowRoot.querySelector(".fd-pane");
+      if (!aside) return false;
+      this._error = "";
+      aside.innerHTML = this._fdDetailHtml();
+      aside.scrollTop = 0;
+      const on = (sel, ev, fn) => aside.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, fn));
+      this._bindFoods({ getElementById: (id) => aside.querySelector(`#${id}`), querySelectorAll: (sel) => aside.querySelectorAll(sel) }, on);
+      this._fdHighlight();
+      return true;
+    },
+
+    /** Tint the row of the food that is open beside the list (the table has no such thing itself). */
+    _fdHighlight() {
+      const t = this._fdTable;
+      if (!t) return;
+      const id = this._view && this._view.name === "foods" ? this._view.id : "";
+      t.updateComplete.then(() => {
+        if (!t.shadowRoot) return;
+        let style = t.shadowRoot.getElementById("fd-hl");
+        if (!style) {
+          style = document.createElement("style");
+          style.id = "fd-hl";
+          t.shadowRoot.appendChild(style);
+        }
+        style.textContent = id
+          ? `.mdc-data-table__row:has([data-fid="${String(id).replace(/["\\]/g, "\\$&")}"]) { background-color: color-mix(in srgb, var(--primary-color) 14%, transparent); box-shadow: inset 4px 0 0 var(--primary-color); }`
+          : "";
+      });
     },
 
     /** Tick, in the table, the ticked rows that it shows. */
