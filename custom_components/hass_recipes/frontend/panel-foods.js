@@ -851,7 +851,7 @@ export default function (h) {
     },
 
     /** A list of foods to choose from: the alike ones and the recent ones first, a search, and "show more". */
-    _fdFoodDialog({ title, foods, names, createRow, onPick, onCreate }) {
+    _fdFoodDialog({ title, foods, names, createRow, onPick, onCreate, onPickSource }) {
       const html = `<ha-input-search id="fm-q" appearance="outlined" placeholder="${esc(T("Search foods"))}"></ha-input-search><div id="fm-res" class="fm-res"></div>`;
       this._planDialog(title, html, (dlg, close) => {
         const res = dlg.querySelector("#fm-res");
@@ -865,6 +865,24 @@ export default function (h) {
           return `<ha-list-item-button data-n="${shown.length - 1}" headline="${esc(f.name)}" supporting-text="${esc(f.aliases.join(", "))}"></ha-list-item-button>`;
         };
         const heading = (text) => `<div class="fm-head">${esc(T(text))}</div>`;
+        // foods of Frida and USDA, searched for what is typed (else for the name): chosen when none of yours fits
+        let srcHits = [];
+        let srcTicket = 0;
+        let srcTimer = null;
+        const srcItem = (f, n) =>
+          `<ha-list-item-button data-s="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`;
+        const searchSources = () => {
+          if (!onPickSource) return;
+          clearTimeout(srcTimer);
+          srcTimer = setTimeout(async () => {
+            const mine = ++srcTicket;
+            const text = q.trim() || (names[0] || "");
+            const hits = text ? await this._ws({ type: "hass_recipes/nutrition_search", query: text, limit: 20 }).catch(() => []) : [];
+            if (mine !== srcTicket) return;
+            srcHits = hits.filter((x) => x.source === "frida" || x.source === "usda").slice(0, 12);
+            draw();
+          }, 200);
+        };
         const draw = () => {
           shown = [];
           const ranked = fl.rankFoods(foods, names, q, recent);
@@ -882,15 +900,18 @@ export default function (h) {
             body += ranked.slice(0, limit).map(item).join("");
             var more = ranked.length - limit;
           }
-          res.innerHTML = `<ha-list-base>${createRow ? createRow : ""}${body}</ha-list-base>${
-            body ? "" : `<p class="muted">${esc(T("No foods match."))}</p>`
+          const fromSources = srcHits.length ? heading("From Frida and USDA") + srcHits.map(srcItem).join("") : "";
+          res.innerHTML = `<ha-list-base>${createRow ? createRow : ""}${body}${fromSources}</ha-list-base>${
+            body || fromSources ? "" : `<p class="muted">${esc(T("No foods match."))}</p>`
           }${more > 0 ? `<ha-button appearance="plain" size="s" data-more>${esc(`${T("Show")} ${Math.min(step, more)} ${T("more")} (${more})`)}</ha-button>` : ""}`;
         };
         draw();
+        searchSources();
         dlg.querySelector("#fm-q").addEventListener("input", (e) => {
           q = e.target.value;
           limit = step;
           draw();
+          searchSources();
         });
         res.addEventListener("click", (e) => {
           if (e.target.closest("[data-more]")) {
@@ -900,6 +921,11 @@ export default function (h) {
           if (e.target.closest("[data-new]")) {
             close();
             return onCreate();
+          }
+          const src = e.target.closest("[data-s]");
+          if (src && onPickSource) {
+            close();
+            return onPickSource(srcHits[+src.dataset.s]);
           }
           const row = e.target.closest("[data-n]");
           if (!row) return;
@@ -921,6 +947,15 @@ export default function (h) {
         names,
         createRow,
         onCreate: () => this._fdStartNew(names),
+        onPickSource: async (hit) => {
+          const { ok } = await this._fdCall({ type: "hass_recipes/foods_assign", groups: [{ keys: names, source: hit.source, source_id: hit.id }] });
+          if (!ok) return;
+          if (names.length > 1) this._flash(`${names.length} ${T("names linked to")} ${hit.name}.`);
+          await this._fdRefresh();
+          const key = String(names[0]).toLowerCase();
+          const food = st.data.foods.find((f) => f.aliases.some((a) => a.toLowerCase() === key) || f.name.toLowerCase() === key);
+          this._go({ name: "foods", id: food ? food.id : undefined }, false, "replace");
+        },
         onPick: async (target) => {
           const { ok } = await this._fdCall({ type: "hass_recipes/foods_link", keys: names, food_id: target.id });
           if (!ok) return;

@@ -230,6 +230,7 @@ const da = {
     "Create": "Opret",
     "from scratch": "fra bunden",
     "Enter the details myself": "Indtast oplysningerne selv",
+    "From Frida and USDA": "Fra Frida og USDA",
     "Saved under the name you typed; the match only gives the numbers.": "Gemmes under det navn, du skrev; træffet giver kun tallene.",
     "Start cooking": "Start madlavning",
     "All done, enjoy!": "Færdig, velbekomme!",
