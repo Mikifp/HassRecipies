@@ -112,7 +112,7 @@ export default function (h) {
     /** Read the recipe on a page and show it as a draft to review. */
     async _sitesOpen(url) {
       try {
-        this._draft = await this._ws({ type: "hass_recipes/import_url", url });
+        this._draft = await this._ws({ type: "hass_recipes/import_url", url, include_tags: !!this._importTags });
         this._go({ name: "edit" });
       } catch (err) {
         this._error = err.message || String(err);

@@ -230,6 +230,8 @@ const da = {
     "Create": "Opret",
     "from scratch": "fra bunden",
     "Enter the details myself": "Indtast oplysningerne selv",
+    "Include tags and categories": "Tag og kategorier med",
+    "Off: imported recipes come without the tags and categories of the page.": "Fra: importerede opskrifter kommer uden sidens tag og kategorier.",
     "Saved under the name you typed; the match only gives the numbers.": "Gemmes under det navn, du skrev; træffet giver kun tallene.",
     "Start cooking": "Start madlavning",
     "All done, enjoy!": "Færdig, velbekomme!",
