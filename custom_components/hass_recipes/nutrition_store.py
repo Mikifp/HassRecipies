@@ -161,8 +161,32 @@ class Nutrition:
                 groups[food_key(name)] = names
         return groups
 
+    def _used_by(self) -> dict[tuple[str, int], str]:
+        """(source, database id) -> the name of the food of the user's that is that database food."""
+        used: dict[tuple[str, int], str] = {}
+        for food in self.book.foods.values():
+            for source in (SOURCE_FRIDA, SOURCE_USDA):
+                if food.get("source") == source and food.get(f"{source}_id") is not None:
+                    used.setdefault((source, int(food[f"{source}_id"])), food["name"])
+        return used
+
+    def _mark_used(self, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Say on each Frida or USDA food which food of the user's it already is (``used``)."""
+        used = self._used_by()
+        for hit in hits:
+            name = used.get((hit["source"], hit["id"]))
+            if name:
+                hit["used"] = name
+        return hits
+
     def search(self, query: str, limit: int = 15) -> list[dict[str, Any]]:
-        return search(self.db, self._views()[0], query, limit)
+        return self._mark_used(search(self.db, self._views()[0], query, limit))
+
+    def groups(self) -> dict[str, list[dict[str, Any]]]:
+        return self.db.groups()
+
+    def in_group(self, source: str, group: str) -> list[dict[str, Any]]:
+        return self._mark_used(self.db.in_group(source, group))
 
     def custom_foods(self) -> list[dict[str, Any]]:
         return sorted(self._views()[0].values(), key=lambda f: f["name"].casefold())

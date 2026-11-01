@@ -1027,16 +1027,37 @@ export default function (h) {
           dlg.querySelector("#fb-cancel").addEventListener("click", close);
           dlg.querySelector("#fb-add").addEventListener("click", add);
         };
+        let groups = null; // { frida: [{name, count}], usda: [...] }, loaded when first needed
+        let grp = null; // the group being browsed: { source, name }
+        let list = []; // the foods of that group
+        const row = (f, n) => {
+          const sub = [f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · ");
+          return `<label class="fd-brow ${f.used ? "used" : ""}"><ha-checkbox data-n="${n}" ${f.used ? "disabled" : picked.has(keyOf(f)) ? "checked" : ""}></ha-checkbox><span class="fd-bname">${esc(f.name)}<small>${esc(sub)}</small>${f.used ? `<small class="fd-bused"><ha-icon icon="mdi:check-circle-outline"></ha-icon>${esc(`${T("Already the food")} ${f.used}`)}</small>` : ""}</span></label>`;
+        };
         const draw = () => {
-          const rows = found.filter((f) => src === "all" || f.source === src);
-          res.innerHTML = rows.length
-            ? rows
-                .map(
-                  (f, n) =>
-                    `<label class="fd-brow"><ha-checkbox data-n="${n}" ${picked.has(keyOf(f)) ? "checked" : ""}></ha-checkbox><span class="fd-bname">${esc(f.name)}<small>${esc([f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}</small></span></label>`
-                )
-                .join("")
-            : `<p class="muted">${esc(q.value.trim() ? T("No foods found. Try another word.") : T("Search for a food, tick the ones you want and add them all."))}</p>`;
+          const text = (q.value || "").trim();
+          let rows = [];
+          let html = "";
+          if (text) {
+            rows = found.filter((f) => src === "all" || f.source === src);
+            html = rows.length ? rows.map(row).join("") : `<p class="muted">${esc(T("No foods found. Try another word."))}</p>`;
+          } else if (grp) {
+            rows = list;
+            html = `<button type="button" class="fd-bback" data-back><ha-icon icon="mdi:arrow-left"></ha-icon>${esc(grp.name)}</button>${rows.map(row).join("")}`;
+          } else if (!groups) {
+            html = `<p class="muted">${esc(T("Loading…"))}</p>`;
+          } else {
+            html = ["frida", "usda"]
+              .filter((k) => src === "all" || src === k)
+              .map(
+                (k) =>
+                  `<h4 class="fd-bhead">${k === "frida" ? "Frida" : "USDA"}</h4>${(groups[k] || [])
+                    .map((g, i) => `<ha-list-item-button data-g="${k}:${i}" headline="${esc(g.name)}" supporting-text="${g.count} ${esc(T("foods"))}"><ha-icon slot="start" icon="mdi:folder-outline"></ha-icon></ha-list-item-button>`)
+                    .join("")}`
+              )
+              .join("");
+          }
+          res.innerHTML = html;
           res._rows = rows;
         };
         const search = async (text) => {
@@ -1046,6 +1067,33 @@ export default function (h) {
           found = hits.filter((x) => x.source === "frida" || x.source === "usda");
           draw();
         };
+        this._ws({ type: "hass_recipes/food_groups" })
+          .then((g) => {
+            groups = g;
+            draw();
+          })
+          .catch(() => {
+            groups = { frida: [], usda: [] };
+            draw();
+          });
+        res.addEventListener("click", async (e) => {
+          if (e.target.closest("[data-back]")) {
+            grp = null;
+            draw();
+            return;
+          }
+          const item = e.target.closest("[data-g]");
+          if (!item) return;
+          const [source, i] = item.dataset.g.split(":");
+          grp = { source, name: groups[source][+i].name };
+          list = [];
+          res.innerHTML = `<p class="muted">${esc(T("Loading…"))}</p>`;
+          const mine = grp;
+          const foods = await this._ws({ type: "hass_recipes/food_group", source, group: grp.name }).catch(() => []);
+          if (grp !== mine) return;
+          list = foods;
+          draw();
+        });
         res.addEventListener("change", (e) => {
           const box = e.target.closest("ha-checkbox");
           const f = box && res._rows[+box.dataset.n];
