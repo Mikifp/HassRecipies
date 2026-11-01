@@ -441,6 +441,7 @@ const STYLE = `
   .fd-tlast { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 4px 4px 4px 12px; border-radius: 12px; background: var(--secondary-background-color); }
   .fd-tdone { display: grid; justify-items: center; gap: 8px; padding: 32px 0; text-align: center; --mdc-icon-size: 56px; color: var(--success-color, #43a047); }
   .fd-tdone h2 { margin: 0; color: var(--primary-text-color); }
+  .fd-bres { height: min(55vh, 480px); overflow-y: auto; scrollbar-width: thin; } /* a fixed height keeps the search, filters and back button where they are */
   .fd-bchips { display: flex; gap: 8px; margin: 8px 0; }
   .fd-bchips ha-assist-chip { cursor: pointer; }
   .fd-brow { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }

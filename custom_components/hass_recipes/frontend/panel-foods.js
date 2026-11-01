@@ -1080,6 +1080,7 @@ export default function (h) {
           if (e.target.closest("[data-back]")) {
             grp = null;
             draw();
+            res.scrollTop = 0;
             return;
           }
           const item = e.target.closest("[data-g]");
@@ -1093,6 +1094,7 @@ export default function (h) {
           if (grp !== mine) return;
           list = foods;
           draw();
+          res.scrollTop = 0;
         });
         res.addEventListener("change", (e) => {
           const box = e.target.closest("ha-checkbox");
