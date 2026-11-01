@@ -367,6 +367,8 @@ def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, m
         vol.Required("url"): str,
         # When true the parsed recipe is saved; otherwise returned as a preview.
         vol.Optional("save", default=False): bool,
+        # tags and categories of the page are only kept when asked for
+        vol.Optional("include_tags", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -381,6 +383,7 @@ async def ws_import_url(
     except RecipeImportError as err:
         connection.send_error(msg["id"], "import_failed", str(err))
         return
+    data = _labelled(data, msg["include_tags"])
     result = _store(hass).create(data) if msg["save"] else data
     connection.send_result(msg["id"], result)
 
@@ -390,6 +393,8 @@ async def ws_import_url(
         vol.Required("type"): f"{DOMAIN}/import_html",
         vol.Required("html"): vol.All(str, vol.Length(min=1)),
         vol.Optional("url", default=""): str,
+        # tags and categories of the page are only kept when asked for
+        vol.Optional("include_tags", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -402,7 +407,7 @@ async def ws_import_html(
     except RecipeImportError as err:
         connection.send_error(msg["id"], "import_failed", str(err))
         return
-    connection.send_result(msg["id"], data)
+    connection.send_result(msg["id"], _labelled(data, msg["include_tags"]))
 
 
 @websocket_api.websocket_command(
@@ -412,6 +417,8 @@ async def ws_import_html(
         vol.Optional("url", default=""): str,
         # tidy the text with the AI set up in Home Assistant (AI Task); the plain reading is the fallback
         vol.Optional("ai", default=False): bool,
+        # tags and categories of the page are only kept when asked for
+        vol.Optional("include_tags", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -438,16 +445,23 @@ async def ws_import_text(
             return
         if ai_error:
             data["ai_error"] = ai_error
-    connection.send_result(msg["id"], data)
+    connection.send_result(msg["id"], _labelled(data, msg["include_tags"]))
 
 
 _MAX_BULK = 25
+
+
+def _labelled(data: dict[str, Any], include_tags: bool) -> dict[str, Any]:
+    """An imported recipe with or without the tags and categories of the page."""
+    return data if include_tags else {**data, "tags": [], "categories": []}
 
 
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/import_urls",
         vol.Required("urls"): vol.All([str], vol.Length(min=1, max=_MAX_BULK)),
+        # tags and categories of the page are only kept when asked for
+        vol.Optional("include_tags", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -466,7 +480,7 @@ async def ws_import_urls(
                 data = await async_import_url(session, url)
             except RecipeImportError as err:
                 return {"url": url, "ok": False, "error": str(err)}
-        recipe = store.create(data)
+        recipe = store.create(_labelled(data, msg["include_tags"]))
         return {"url": url, "ok": True, "id": recipe["id"], "name": recipe["name"]}
 
     urls = list(dict.fromkeys(u.strip() for u in msg["urls"] if u.strip()))
