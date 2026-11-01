@@ -136,6 +136,17 @@ const STYLE = `
   .rd-bottom { grid-column: 1 / -1; }
   .rd-nut { --expansion-panel-summary-padding: 0 8px; --expansion-panel-content-padding: 0; }
   .rd ha-card { display: block; overflow: hidden; }
+  .rd-cover { position: relative; grid-column: 1 / -1; min-height: clamp(240px, 38vh, 400px); border-radius: 20px; overflow: hidden; display: flex; align-items: flex-end; color: #fff; background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 55%, #000)); box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,.25)); isolation: isolate; }
+  .rd-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+  .rd-cover::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,.45) 38%, rgba(0,0,0,0) 72%); }
+  .rd-coverbg { position: absolute; right: 24px; top: 16px; --mdc-icon-size: 160px; opacity: .18; z-index: -1; }
+  .rd-covertext { padding: 28px 28px 24px; display: grid; gap: 12px; justify-items: start; max-width: 100%; }
+  .rd-kicker { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+  .rd-covertext h1 { margin: 0; font-size: clamp(28px, 5vw, 46px); font-weight: 600; line-height: 1.1; text-shadow: 0 2px 12px rgba(0,0,0,.45); overflow-wrap: anywhere; }
+  .rd-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .rd-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 14px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.28); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); --mdc-icon-size: 18px; }
+  .rd-go { margin-top: 4px; }
+  @media (max-width: 600px) { .rd-cover { min-height: 260px; border-radius: 16px; } .rd-covertext { padding: 18px 16px 16px; } }
   .rd-hero { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
   .rd-nohero { display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--primary-color) 10%, var(--secondary-background-color)); color: var(--secondary-text-color); --mdc-icon-size: 48px; }
   .rd-desc { margin: 0 0 12px; color: var(--secondary-text-color); line-height: 1.5; }

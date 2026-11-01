@@ -461,14 +461,6 @@ export default function (h) {
       const row = (icon, headline, value) =>
         value ? `<ha-list-item-base headline="${esc(headline)}" supporting-text="${esc(value)}"><ha-icon slot="start" icon="mdi:${icon}"></ha-icon></ha-list-item-base>` : "";
       const unit = r.yield_unit || "";
-      const fact = (icon, label, value) => (value ? chip(icon, `${label} ${value}`, "") : "");
-      const facts = [
-        fact("timer-sand", T("Prep"), r.prep_time ? T(minutes(r.prep_time)) : ""),
-        fact("pot-steam-outline", T("Cook"), r.cook_time ? T(minutes(r.cook_time)) : ""),
-        fact("clock-outline", T("Total"), r.total_time ? T(minutes(r.total_time)) : ""),
-        r.yield_amount ? fact("cupcake", T("Makes"), `${fmtYield(r.yield_amount * k)}${unit ? ` ${unit}` : ""}`) : "",
-        r.servings ? fact("account-multiple-outline", T("Serves"), base !== null && k !== 1 ? formatNumber(base * k) : String(r.servings)) : "",
-      ].join("");
       // the cookbooks this recipe belongs to
       const cookbooks = (this._cookbooks || [])
         .filter((c) => this._matches(r, { categories: new Set(c.categories), tools: new Set(c.tools), tags: new Set(c.tags) }, (c.query || "").toLowerCase()))
@@ -481,12 +473,26 @@ export default function (h) {
       ].join("");
       const subtitle = [...(r.categories || []).slice(0, 2), cookbooks].filter(Boolean).join(" · ");
       this._rdSubtitle = subtitle;
-      const hero = r.image
-        ? `<img class="rd-hero" src="${esc(r.image)}" alt="">`
-        : `<div class="rd-hero rd-nohero"><ha-icon icon="mdi:silverware-fork-knife"></ha-icon></div>`;
+      // the cover: the dish across the top of the page, with its name and the numbers that matter over it
+      const pill = (icon, text) => (text ? `<span class="rd-pill"><ha-icon icon="mdi:${icon}"></ha-icon>${esc(text)}</span>` : "");
+      const pills = [
+        pill("timer-sand", r.prep_time ? `${T("Prep")} ${T(minutes(r.prep_time))}` : ""),
+        pill("pot-steam-outline", r.cook_time ? `${T("Cook")} ${T(minutes(r.cook_time))}` : ""),
+        pill("clock-outline", !r.prep_time && !r.cook_time && r.total_time ? `${T("Total")} ${T(minutes(r.total_time))}` : ""),
+        pill("account-multiple-outline", r.servings ? `${T("Serves")} ${base !== null && k !== 1 ? formatNumber(base * k) : r.servings}` : ""),
+        pill("cupcake", r.yield_amount ? `${T("Makes")} ${fmtYield(r.yield_amount * k)}${unit ? ` ${unit}` : ""}` : ""),
+      ].join("");
+      const cover = `<div class="rd-cover ${r.image ? "" : "rd-nocover"}">
+          ${r.image ? `<img src="${esc(r.image)}" alt="">` : `<ha-icon class="rd-coverbg" icon="mdi:silverware-fork-knife"></ha-icon>`}
+          <div class="rd-covertext">
+            ${subtitle ? `<div class="rd-kicker">${esc(subtitle)}</div>` : ""}
+            <h1>${esc(r.name)}</h1>
+            <div class="rd-pills">${pills}</div>
+            <ha-button class="rd-go" size="l" appearance="filled" data-act="cook" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>${esc(T("Start cooking"))}</ha-button>
+          </div>
+        </div>`;
       const info = `<ha-card class="rd-info">
-          ${hero}
-          <div class="card-content">${r.description ? `<p class="rd-desc">${esc(r.description)}</p>` : ""}${facts ? `<div class="rd-chips rd-facts">${facts}</div>` : ""}${chips ? `<div class="rd-chips">${chips}</div>` : ""}</div>
+          <div class="card-content">${r.description ? `<p class="rd-desc">${esc(r.description)}</p>` : ""}${chips ? `<div class="rd-chips">${chips}</div>` : ""}</div>
           <ha-list-base>${row("book-open-page-variant-outline", T("Cookbooks"), cookbooks)}${
             r.source_url
               ? `<a class="rd-src" href="${esc(r.source_url)}" target="_blank" rel="noopener noreferrer"><ha-list-item-base interactive headline="${esc(T("Source"))}" supporting-text="${esc(r.source_url)}"><ha-icon slot="start" icon="mdi:link-variant"></ha-icon><ha-icon slot="end" icon="mdi:open-in-new"></ha-icon></ha-list-item-base></a>`
@@ -529,7 +535,7 @@ export default function (h) {
         ? `<ha-card class="rd-notes" header="${esc(T("Notes"))}"><div class="card-content" style="white-space:pre-wrap">${esc(r.notes)}</div></ha-card>`
         : "";
       this._fab = `<ha-button class="fab" size="l" data-act="cook" data-id="${esc(r.id)}"><ha-icon slot="start" icon="mdi:chef-hat"></ha-icon>Cook</ha-button>`;
-      return `<div class="rd"><div class="rd-left">${info}${ingredients}${narrow ? "" : nutrition}${notes}</div><div class="rd-right">${steps}</div>${narrow ? `<div class="rd-bottom">${nutrition}</div>` : ""}</div>`;
+      return `<div class="rd">${cover}<div class="rd-left">${info}${ingredients}${narrow ? "" : nutrition}${notes}</div><div class="rd-right">${steps}</div>${narrow ? `<div class="rd-bottom">${nutrition}</div>` : ""}</div>`;
     },
 
     /** Wire up the HA elements of the recipe page. */
