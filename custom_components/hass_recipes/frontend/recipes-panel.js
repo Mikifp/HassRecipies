@@ -409,6 +409,8 @@ const STYLE = `
   .tk-water .tk-kbar { margin-top: 8px; }
   .tk-water .tk-kbar.done { --control-slider-color: var(--success-color, #43a047); --control-slider-background: var(--success-color, #43a047); }
   .tk-wbtns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .fd-fsearch { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+  .fd-fsearch ha-input-search { flex: 1; min-width: 0; }
   .tk-lookbtns { display: flex; flex-wrap: wrap; gap: 8px; }
   .tk-scanner { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: #000; color: #fff; overflow: hidden; }
   .tk-scanvid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }

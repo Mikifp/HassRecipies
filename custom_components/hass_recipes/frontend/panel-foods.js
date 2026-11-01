@@ -251,11 +251,86 @@ export default function (h) {
         this._error = "";
         await this._fdRefresh(food.id);
       } catch (err) {
-        st.draft = { ...blank(), barcode: String(code).replace(/\D/g, "") };
+        st.draft = { ...blank(), barcode: String(code).replace(/\D/g, ""), manual: true };
         st.draftFor = "new";
         this._error = (err && err.message) || String(err);
         this._go({ name: "foods", id: "new" }, false, this._brCompact() ? undefined : "replace");
       }
+    },
+
+    // ---- a new food starts with a search: Frida and USDA in one list, a barcode, or "from scratch" ----
+    _fdFinderHtml(close, compact) {
+      return `<div class="fd-detail">
+          ${compact ? "" : `<div class="fd-dhead"><h2>${esc(T("New food"))}</h2>${close}</div>`}
+          <div class="fd-fsearch">
+            <ha-input-search id="fn-q" appearance="outlined" placeholder="${esc(T("Search foods"))}"></ha-input-search>
+            <ha-icon-button data-fscan label="${esc(T("Scan barcode"))}"><ha-icon icon="mdi:barcode-scan"></ha-icon></ha-icon-button>
+          </div>
+          <div id="fn-res"></div>
+        </div>`;
+    },
+
+    _fdBindFinder(root) {
+      const q = root.getElementById("fn-q");
+      const res = root.getElementById("fn-res");
+      if (!q || !res) return;
+      const st = this._fdState();
+      const d = this._fdDraft();
+      let ticket = 0;
+      const draw = () => {
+        const text = (st.fnQ || "").trim();
+        const hits = st.fnHits || [];
+        const rows = hits
+          .map((f, n) => `<ha-list-item-button data-n="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`)
+          .join("");
+        const scratch = `<ha-list-item-button data-scratch headline="${esc(text ? `${T("Create")} “${text}” ${T("from scratch")}` : T("Enter the details myself"))}"><ha-icon slot="start" icon="mdi:plus"></ha-icon></ha-list-item-button>`;
+        res.innerHTML = `${text ? (hits.length || st.fnBusy ? "" : `<p class="muted">${esc(T("No foods found. Try another word."))}</p>`) : `<p class="muted">${esc(T("Search Frida and USDA, or scan a barcode with the icon."))}</p>`}<ha-list-base>${rows}${scratch}</ha-list-base>`;
+      };
+      const search = async (text) => {
+        const mine = ++ticket;
+        if (!text.trim()) {
+          st.fnHits = [];
+          st.fnBusy = false;
+          return draw();
+        }
+        st.fnBusy = true;
+        const hits = await this._ws({ type: "hass_recipes/nutrition_search", query: text, limit: 30 }).catch(() => []);
+        if (mine !== ticket) return;
+        st.fnBusy = false;
+        st.fnHits = hits.filter((x) => x.source === "frida" || x.source === "usda").slice(0, 25);
+        draw();
+      };
+      res.addEventListener("click", async (e) => {
+        if (e.target.closest("[data-scratch]")) {
+          d.manual = true;
+          d.name = (st.fnQ || "").trim();
+          d.source = "custom";
+          st.fnQ = "";
+          st.fnHits = [];
+          this._render();
+          return;
+        }
+        const item = e.target.closest("[data-n]");
+        if (!item) return;
+        const f = st.fnHits[+item.dataset.n];
+        const body = { type: "hass_recipes/foods_save", name: f.name, aliases: [], source: f.source, section: "", barcode: "", unit_grams: {} };
+        body[`${f.source}_id`] = f.id;
+        const { ok, res: saved } = await this._fdCall(body);
+        if (ok) {
+          st.fnQ = "";
+          st.fnHits = [];
+          await this._fdRefresh(saved.id);
+        }
+      });
+      let timer = null;
+      q.addEventListener("input", () => {
+        st.fnQ = q.value || "";
+        clearTimeout(timer);
+        timer = setTimeout(() => search(st.fnQ), 200);
+      });
+      q.value = st.fnQ || "";
+      draw();
+      if (!st.fnQ) setTimeout(() => q.focus && q.focus(), 300);
     },
 
     // ---- the page ----
@@ -525,6 +600,8 @@ export default function (h) {
       if (id.startsWith("r~")) return this._fdReviewHtml(close, canEdit);
       const d = this._fdDraft();
       if (!d) return `<div class="fd-detail"><p class="muted">${esc(T(this._fdState().data ? "This food no longer exists." : "Loading…"))}</p></div>`;
+      // a new food starts with a search; the long form is for typing it out
+      if (id === "new" && !d.manual && canEdit) return this._fdFinderHtml(close, compact);
       const src = (key, label) => `<ha-assist-chip data-fsrc="${key}" label="${esc(T(label))}" ${d.source === key ? "active" : ""}></ha-assist-chip>`;
       let nutrition = "";
       if (d.source === "frida" || d.source === "usda") {
@@ -556,7 +633,7 @@ export default function (h) {
         .join("");
       return `<div class="fd-detail">
           ${compact ? "" : `<div class="fd-dhead"><h2>${esc(d.name || T("New food"))}</h2>${close}</div>`}
-          ${canEdit && id === "new" ? `<ha-button size="s" appearance="plain" data-fscan><ha-icon slot="start" icon="mdi:barcode-scan"></ha-icon>${esc(T("Scan barcode"))}</ha-button><div class="muted">${esc(T("Fills in the food from the package."))}</div>` : ""}
+          ${canEdit && id === "new" ? `<ha-button size="s" appearance="plain" data-fscan><ha-icon slot="start" icon="mdi:barcode-scan"></ha-icon>${esc(T("Scan barcode"))}</ha-button>` : ""}
           <ha-form id="fd-form"></ha-form>
           <h3>${esc(T("Nutrition per 100 g"))}</h3>
           <div class="fd-srcs">${src("frida", "Frida")}${src("usda", "USDA")}${src("custom", "My values")}${src("none", "None")}</div>
@@ -881,6 +958,7 @@ export default function (h) {
           }
         });
       }
+      this._fdBindFinder(root);
       on("[data-fscan]", "click", () => this._fdScan());
       on("[data-ffilter]", "click", (e) => {
         const key = e.currentTarget.dataset.ffilter;
