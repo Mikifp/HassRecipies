@@ -159,6 +159,9 @@ export default function (h) {
           </div>`;
       }
       return `
+        <ha-card class="data-card"><div class="card-content">
+          <ha-formfield label="${esc(T("Include tags and categories"))}"><ha-switch id="import-tags" ${this._importTags ? "checked" : ""}></ha-switch></ha-formfield>
+          <p class="muted">${esc(T("Off: imported recipes come without the tags and categories of the page."))}</p></div></ha-card>
         ${this._sitesHtml()}
         <ha-card class="data-card" header="${esc(T("Import from URL"))}">
           <div class="card-content"><p class="muted">${esc(T("Paste one URL to review it before saving, or several (one per line, up to 25) to import them all at once."))}</p>
@@ -182,6 +185,8 @@ export default function (h) {
     /** The two import forms are Home Assistant's own form fields (the text boxes are the multi-line text selector). */
     _bindImport(root) {
       this._imp = this._imp || { urls: "", text: "", url: "" };
+      const tagsSwitch = root.getElementById("import-tags");
+      if (tagsSwitch) tagsSwitch.addEventListener("change", () => (this._importTags = !!tagsSwitch.checked));
       const make = (id, schema, labels) => {
         const form = root.getElementById(id);
         if (!form) return;
@@ -218,7 +223,7 @@ export default function (h) {
         const ai = !!(sw && sw.checked);
         if (sw) this._importAi = ai;
         if (ai) btn.textContent = T("Reading with AI…");
-        this._draft = await this._ws({ type: "hass_recipes/import_text", text, url: textUrl, ai });
+        this._draft = await this._ws({ type: "hass_recipes/import_text", text, url: textUrl, ai, include_tags: !!this._importTags });
         const aiError = this._draft.ai_error;
         this._go({ name: "edit" });
         if (aiError) {
@@ -240,10 +245,10 @@ export default function (h) {
       try {
         if (urls.length === 1) {
           // Preview first so the user can review/tweak before saving.
-          this._draft = await this._ws({ type: "hass_recipes/import_url", url: urls[0] });
+          this._draft = await this._ws({ type: "hass_recipes/import_url", url: urls[0], include_tags: !!this._importTags });
           this._go({ name: "edit" });
         } else {
-          const res = await this._ws({ type: "hass_recipes/import_urls", urls });
+          const res = await this._ws({ type: "hass_recipes/import_urls", urls, include_tags: !!this._importTags });
           this._bulk = res.results;
           await this._load();
           this._render();
