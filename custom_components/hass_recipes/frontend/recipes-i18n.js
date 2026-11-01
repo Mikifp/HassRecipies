@@ -229,6 +229,7 @@ const da = {
     "Create": "Opret",
     "from scratch": "fra bunden",
     "Enter the details myself": "Indtast oplysningerne selv",
+    "Saved under the name you typed; the match only gives the numbers.": "Gemmes under det navn, du skrev; træffet giver kun tallene.",
     "Fills in the food from the package.": "Udfylder fødevaren fra emballagen.",
     "Scan with the camera": "Scan med kameraet",
     "Create a new food": "Opret en ny fødevare",

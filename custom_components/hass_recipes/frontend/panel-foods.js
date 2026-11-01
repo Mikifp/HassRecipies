@@ -284,7 +284,7 @@ export default function (h) {
           .map((f, n) => `<ha-list-item-button data-n="${n}" headline="${esc(f.name)}" supporting-text="${esc([f.source === "frida" ? "Frida" : "USDA", f.group, f.kcal != null ? `${num(f.kcal)} kcal / 100 g` : ""].filter(Boolean).join(" · "))}"></ha-list-item-button>`)
           .join("");
         const scratch = `<ha-list-item-button data-scratch headline="${esc(text ? `${T("Create")} “${text}” ${T("from scratch")}` : T("Enter the details myself"))}"><ha-icon slot="start" icon="mdi:plus"></ha-icon></ha-list-item-button>`;
-        res.innerHTML = `${text ? (hits.length || st.fnBusy ? "" : `<p class="muted">${esc(T("No foods found. Try another word."))}</p>`) : `<p class="muted">${esc(T("Search Frida and USDA, or scan a barcode with the icon."))}</p>`}<ha-list-base>${rows}${scratch}</ha-list-base>`;
+        res.innerHTML = `${text ? (hits.length || st.fnBusy ? "" : `<p class="muted">${esc(T("No foods found. Try another word."))}</p>`) : `<p class="muted">${esc(T("Search Frida and USDA, or scan a barcode with the icon."))}</p>`}${hits.length ? `<p class="muted">${esc(T("Saved under the name you typed; the match only gives the numbers."))}</p>` : ""}<ha-list-base>${rows}${scratch}</ha-list-base>`;
       };
       const search = async (text) => {
         const mine = ++ticket;
@@ -313,7 +313,10 @@ export default function (h) {
         const item = e.target.closest("[data-n]");
         if (!item) return;
         const f = st.fnHits[+item.dataset.n];
-        const body = { type: "hass_recipes/foods_save", name: f.name, aliases: [], source: f.source, section: "", barcode: "", unit_grams: {} };
+        // the food is called what you typed; the Frida or USDA food only supplies the numbers
+        const typed = (st.fnQ || "").trim();
+        const name = typed ? typed.charAt(0).toLocaleUpperCase() + typed.slice(1) : f.name;
+        const body = { type: "hass_recipes/foods_save", name, aliases: [], source: f.source, section: "", barcode: "", unit_grams: {} };
         body[`${f.source}_id`] = f.id;
         const { ok, res: saved } = await this._fdCall(body);
         if (ok) {
