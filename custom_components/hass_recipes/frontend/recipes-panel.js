@@ -750,6 +750,10 @@ class HassRecipesPanel extends HTMLElement {
     try {
       this._chipAlt = localStorage.getItem("hass_recipes_chipalt") === "1";
     } catch (_) { /* ignore */ }
+    this._cookDetails = true; // notes and alternatives of the ingredients in cook mode
+    try {
+      this._cookDetails = localStorage.getItem("hass_recipes_cookdetails") !== "0";
+    } catch (_) { /* ignore */ }
     this._cookFocus = false; // false: whole recipe at once (Mealie style); true: one step at a time
     try {
       this._cookFocus = localStorage.getItem("hass_recipes_cookfocus") === "1";
@@ -1263,6 +1267,13 @@ class HassRecipesPanel extends HTMLElement {
       this._chipAlt = e.currentTarget.checked;
       try {
         localStorage.setItem("hass_recipes_chipalt", this._chipAlt ? "1" : "0");
+      } catch (_) { /* ignore */ }
+      this._render();
+    });
+    on("ha-switch[data-cookdetails]", "change", (e) => {
+      this._cookDetails = e.currentTarget.checked;
+      try {
+        localStorage.setItem("hass_recipes_cookdetails", this._cookDetails ? "1" : "0");
       } catch (_) { /* ignore */ }
       this._render();
     });

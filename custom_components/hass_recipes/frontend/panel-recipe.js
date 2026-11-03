@@ -111,7 +111,7 @@ export default function (h) {
       return this._rdIngredientGroups(r)
         .map((g) => {
           const items = g.items
-            .map((n) => `<ha-check-list-item left data-ing="${n}" ${this._checked.has(n) ? "selected" : ""}><span class="ing-text">${ingredientHtml(r, n, k, this._units)}</span></ha-check-list-item>`)
+            .map((n) => `<ha-check-list-item left data-ing="${n}" ${this._checked.has(n) ? "selected" : ""}><span class="ing-text">${ingredientHtml(r, n, k, this._units, this._cookDetails)}</span></ha-check-list-item>`)
             .join("");
           return `${g.title ? `<div class="rd-sh cook-sec">${esc(g.title)}</div>` : ""}<ha-list multi>${items}</ha-list>`;
         })
@@ -267,6 +267,7 @@ export default function (h) {
             <div slot="header">${esc(T("All ingredients"))}</div>
             ${this._ingredientsListHtml(r, k)}
           </ha-expansion-panel>
+          ${this._cookDetailsHtml()}
           <div class="cook-actions">
             <ha-button appearance="plain" data-act="cook-focus">${esc(T("Show all steps"))}</ha-button>
             <ha-button appearance="plain" data-act="cook-exit">${esc(T("Exit cook mode"))}</ha-button>
@@ -303,6 +304,7 @@ export default function (h) {
           <div class="cook-top">
             <h2>${esc(r.name)}<span class="muted" style="font-weight:400">${makes}</span></h2>
             ${this._rdScaleHtml(r, k)}
+            ${this._cookDetailsHtml()}
             ${(() => {
               const jumps = all.map((x, n) => ({ x, n })).filter((o) => o.x.section);
               return this._cookSections(r).length
@@ -410,6 +412,11 @@ export default function (h) {
     /** The switch that adds the other unit to the ingredient chips in the steps. */
     _chipAltHtml() {
       return `<ha-formfield class="chip-alt" label="${esc(T("Show the other unit in the chips"))}"><ha-switch data-chipalt ${this._chipAlt ? "checked" : ""}></ha-switch></ha-formfield>`;
+    },
+
+    /** The switch that shows or hides the notes and alternatives of the ingredients in cook mode. */
+    _cookDetailsHtml() {
+      return `<ha-formfield class="chip-alt" label="${esc(T("Show notes and alternatives"))}"><ha-switch data-cookdetails ${this._cookDetails ? "checked" : ""}></ha-switch></ha-formfield>`;
     },
 
     _rdScaleHtml(r, k) {
