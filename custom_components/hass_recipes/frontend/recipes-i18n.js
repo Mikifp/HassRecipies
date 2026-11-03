@@ -230,6 +230,7 @@ const da = {
     "Create": "Opret",
     "from scratch": "fra bunden",
     "Enter the details myself": "Indtast oplysningerne selv",
+    "Usual for": "Typisk til",
     food: "fødevare",
     foods: "fødevarer",
     "Add from databases": "Tilføj fra databaser",

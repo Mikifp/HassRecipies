@@ -485,6 +485,10 @@ const STYLE = `
   .tk-planned { border: 1px dashed var(--divider-color); box-shadow: none; }
   .tk-prow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .tk-mhead { display: flex; justify-content: space-between; align-items: center; padding-bottom: 0; }
+  .tk-swipe { position: relative; overflow: hidden; }
+  .tk-swipe-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 24px; background: var(--error-color, #db4437); color: #fff; opacity: 0; transition: opacity .1s; }
+  .tk-swipe-bg.armed { filter: brightness(.85); }
+  .tk-swipe-row { position: relative; background: var(--card-background-color, var(--primary-background-color)); touch-action: pan-y; }
   .tk-ekcal { white-space: nowrap; color: var(--secondary-text-color); }
   .tk-avg { display: flex; gap: 24px; margin: 12px 0; }
   .tk-chart { min-height: 220px; }

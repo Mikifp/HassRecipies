@@ -41,6 +41,18 @@ export default function (h) {
     const kcal = f.values && f.values.kcal != null ? (f.values.kcal * grams) / 100 : null;
     return { unit: unit || "g", amount: unit ? 1 : 100, grams, kcal };
   };
+  // the portion a food starts with: what it was last eaten in, else its usual one
+  const portionOf = (f, last) => {
+    const u = usualOf(f);
+    if (!last || !(Number(last.amount) > 0)) return u;
+    const unit = last.unit || "g";
+    const grams = unit === "g" ? 1 : (f.unit_grams || {})[unit];
+    if (!grams) return u;
+    const total = grams * Number(last.amount);
+    return { unit, amount: Number(last.amount), grams: total, kcal: f.values && f.values.kcal != null ? (f.values.kcal * total) / 100 : null };
+  };
+  // what an entry is, not how much of it
+  const whatKey = (t) => [t.kind, t.recipe_id || "", t.food_id || "", t.kind === "quick" ? t.name : ""].join("|");
   const MACRO_KEY = "hass_recipes_tracker_macros";
   // how the macros are shown, if at all: kcal only is the start
   const MACRO_STYLES = [
@@ -271,7 +283,9 @@ export default function (h) {
             .map((e) => {
               const how = howText(e);
               const macro = MACROS.map(([k, l]) => (e[k] != null ? `${num(e[k])} g ${T(l).toLowerCase()}` : "")).filter(Boolean).join(" · ");
-              return `<ha-list-item-button data-tkentry="${esc(e.id)}" headline="${esc(e.name)}" supporting-text="${esc([how, macro].filter(Boolean).join(" · "))}"><span slot="end" class="tk-ekcal">${num(e.kcal)} kcal</span></ha-list-item-button>`;
+              const row = `<ha-list-item-button data-tkentry="${esc(e.id)}" headline="${esc(e.name)}" supporting-text="${esc([how, macro].filter(Boolean).join(" · "))}"><span slot="end" class="tk-ekcal">${num(e.kcal)} kcal</span></ha-list-item-button>`;
+              // swipe it left to remove it (with an undo)
+              return edit ? `<div class="tk-swipe"><div class="tk-swipe-bg"><ha-icon icon="mdi:delete-outline"></ha-icon></div><div class="tk-swipe-row">${row}</div></div>` : row;
             })
             .join("");
           // a meal with nothing in it says what it could be: a share of the goal
@@ -1170,14 +1184,17 @@ export default function (h) {
         const startWith = (item) => {
           const draft = { meal, ...item };
           if (draft.kind === "food") {
-            draft.amount = draft.amount ?? 100;
-            draft.unit = draft.unit || "g";
+            const f = foods.find((x) => x.id === draft.food_id);
+            const start = draft.amount == null && f ? portionOf(f, (d.last || {})[`food:${draft.food_id}`]) : null;
+            draft.amount = draft.amount ?? (start ? start.amount : 100);
+            draft.unit = draft.unit || (start ? start.unit : "g");
           }
           if (draft.kind === "recipe") {
             // an older item has servings; a newer one says how it was measured
             if (draft.by == null) {
-              draft.by = "servings";
-              draft.amount = draft.amount ?? draft.servings ?? 1;
+              const last = (d.last || {})[`recipe:${draft.recipe_id}`];
+              draft.by = (last && last.by) || "servings";
+              draft.amount = draft.amount ?? (last && last.amount) ?? draft.servings ?? 1;
             }
             delete draft.servings;
           }
@@ -1469,17 +1486,26 @@ export default function (h) {
             const needle = q.trim().toLowerCase();
             let out = "";
             const show = (kind) => filter === "all" || filter === kind || (filter === "mine" && kind === "foods") || (filter === "db" && kind === "db");
+            let started = false; // something of yours is listed already
             if (!needle && (filter === "all" || filter === "mine")) {
-              const fav = d.favourites || [];
-              const rec = (d.recent || []).filter((t) => !fav.some((f) => JSON.stringify(f) === JSON.stringify(t)));
+              // what you eat in this meal first, then the starred, then the newest; each thing once, in the amount you last had
+              const seen = new Set();
+              const fresh = (list) => list.filter((t) => !seen.has(whatKey(t)) && seen.add(whatKey(t)));
+              const usual = fresh((d.usual || {})[meal] || []);
+              const fav = fresh(d.favourites || []);
+              const rec = fresh(d.recent || []);
+              if (usual.length) out += head(`${T("Usual for")} ${this._planLabel(meal).toLowerCase()}`) + usual.map((t) => row(t, how(t))).join("");
               if (fav.length) out += head("Favourites") + fav.map((t) => row(t, how(t))).join("");
               if (rec.length) out += head("Recent") + rec.map((t) => row(t, how(t))).join("");
+              started = !!(usual.length || fav.length || rec.length);
             }
-            const recipes = !show("recipes") ? [] : this._recipes.filter((r) => !needle || r.name.toLowerCase().includes(needle)).slice(0, needle ? 15 : 5);
-            const found = !show("foods") ? [] : fl.rankFoods(foods, [], needle, []).slice(0, needle ? 20 : 8);
+            // with nothing typed and your own things listed, recipes and foods wait for a search or a filter
+            const browse = !needle && filter === "all" && started;
+            const recipes = !show("recipes") || browse ? [] : this._recipes.filter((r) => !needle || r.name.toLowerCase().includes(needle)).slice(0, needle ? 15 : 5);
+            const found = !show("foods") || browse ? [] : fl.rankFoods(foods, [], needle, []).slice(0, needle ? 20 : 8);
             if (recipes.length) out += head("Recipes") + recipes.map((r) => row({ kind: "recipe", recipe_id: r.id, name: r.name }, r.servings ? `${r.servings} ${T("servings")}` : r.yield_amount ? `${r.yield_amount} ${r.yield_unit || ""}`.trim() : "")).join("");
             if (found.length) out += head("Foods") + found.map((f) => {
-              const u = usualOf(f);
+              const u = portionOf(f, (d.last || {})[`food:${f.id}`]);
               return row({ kind: "food", food_id: f.id, name: f.name }, u.kcal != null ? `${num(u.amount, 1)} ${u.unit}${u.unit === "g" ? "" : ` · ${num(u.grams)} g`} · ${num(u.kcal)} kcal` : T("No nutrition yet"));
             }).join("");
             const mine = (h) => foods.some((f) => (h.source === "frida" ? f.frida_id === h.id : f.usda_id === h.id) || f.name.toLowerCase() === h.name.toLowerCase());
@@ -1532,9 +1558,12 @@ export default function (h) {
             }
             if (item.kind === "food") {
               const f = foods.find((x) => x.id === item.food_id);
-              const u = f ? usualOf(f) : { unit: item.unit || "g", amount: item.amount ?? 100 };
+              const u = f ? portionOf(f, (d.last || {})[`food:${item.food_id}`]) : { unit: item.unit || "g", amount: item.amount ?? 100 };
               item = { ...item, amount: item.amount ?? u.amount, unit: item.unit || u.unit };
-            } else if (item.kind === "recipe") item = { ...item, by: item.by || "servings", amount: item.amount ?? 1 };
+            } else if (item.kind === "recipe") {
+              const last = (d.last || {})[`recipe:${item.recipe_id}`] || {};
+              item = { ...item, by: item.by || last.by || "servings", amount: item.amount ?? last.amount ?? 1 };
+            }
             close();
             const { ok } = await this._tkCall({ type: "hass_recipes/tracker_add", person_id: d.person.id, date: d.date, ...this._tkPayload({ ...item, meal }) });
             if (ok) await this._tkLoad();
@@ -1753,11 +1782,7 @@ export default function (h) {
           },
           onDelete: async () => {
             close();
-            const { ok } = await this._tkCall({ type: "hass_recipes/tracker_delete", entry_id: entry.id });
-            if (ok) {
-              await this._tkLoad();
-              this._flash(`${T("Removed")} ${entry.name}.`);
-            }
+            await this._tkRemove(entry);
           },
         });
       }, { subtitle: `${this._planLabel(entry.meal)} · ${dayLabel(d.date, d.today)}` });
@@ -1797,7 +1822,93 @@ export default function (h) {
       on("[data-tkadd]", "click", (e) => this._tkAct("add", e.currentTarget));
       on("[data-tkplan]", "click", (e) => this._tkAct("plan", e.currentTarget));
       on("[data-tkusual]", "click", (e) => this._tkAct("usual", e.currentTarget));
-      on("[data-tkentry]", "click", (e) => this._tkAct("entry", e.currentTarget));
+      on("[data-tkentry]", "click", (e) => {
+        if (this._tkSwiped) return; // the end of a swipe is not a tap
+        this._tkAct("entry", e.currentTarget);
+      });
+      this._tkBindSwipe(root);
+    },
+
+    /** Swipe a logged item left to remove it; the message that follows has an Undo. */
+    _tkBindSwipe(root) {
+      const LIMIT = 96;
+      root.querySelectorAll(".tk-swipe").forEach((wrap) => {
+        const row = wrap.querySelector(".tk-swipe-row");
+        const bg = wrap.querySelector(".tk-swipe-bg");
+        let x0 = null;
+        let y0 = 0;
+        let dx = 0;
+        let moving = false;
+        const reset = () => {
+          row.style.transition = "transform .18s";
+          row.style.transform = "";
+          bg.style.opacity = "0";
+        };
+        row.addEventListener("pointerdown", (e) => {
+          if (e.pointerType === "mouse" && e.button !== 0) return;
+          x0 = e.clientX;
+          y0 = e.clientY;
+          dx = 0;
+          moving = false;
+          row.style.transition = "none";
+        });
+        row.addEventListener("pointermove", (e) => {
+          if (x0 == null) return;
+          const mx = e.clientX - x0;
+          const my = e.clientY - y0;
+          if (!moving) {
+            if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) {
+              x0 = null; // scrolling, not swiping
+              return;
+            }
+            if (mx > -10) return;
+            moving = true;
+            try {
+              row.setPointerCapture(e.pointerId);
+            } catch (_) {
+              /* the pointer is gone */
+            }
+          }
+          dx = Math.min(0, mx);
+          row.style.transform = `translateX(${dx}px)`;
+          bg.style.opacity = String(Math.min(1, -dx / LIMIT));
+          bg.classList.toggle("armed", -dx >= LIMIT);
+        });
+        const end = async () => {
+          if (x0 == null) return;
+          x0 = null;
+          if (!moving) return;
+          this._tkSwiped = true; // the click that follows a swipe must not open the entry
+          setTimeout(() => (this._tkSwiped = false), 350);
+          if (-dx < LIMIT) return reset();
+          const id = wrap.querySelector("[data-tkentry]").dataset.tkentry;
+          const entry = (this._tkState().data.entries || []).find((x) => x.id === id);
+          if (!entry) return reset();
+          row.style.transition = "transform .15s";
+          row.style.transform = "translateX(-110%)";
+          await this._tkRemove(entry);
+        };
+        row.addEventListener("pointerup", end);
+        row.addEventListener("pointercancel", () => {
+          x0 = null;
+          if (moving) reset();
+        });
+      });
+    },
+
+    /** Remove an entry and say so, with an Undo that logs it again. */
+    async _tkRemove(entry) {
+      const d = this._tkState().data;
+      const { ok } = await this._tkCall({ type: "hass_recipes/tracker_delete", entry_id: entry.id });
+      if (!ok) return this._tkLoad();
+      await this._tkLoad();
+      this._flash(`${T("Removed")} ${entry.name}.`, {
+        label: T("Undo"),
+        run: async () => {
+          const back = await this._tkCall({ type: "hass_recipes/tracker_add", person_id: d.person.id, date: d.date, ...this._tkPayload(entry) });
+          if (back.ok) await this._tkLoad();
+        },
+      });
     },
   };
 }

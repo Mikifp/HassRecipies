@@ -386,6 +386,7 @@ class Tracker:
             "maintenance": (self.needs(person, day) or {}).get("maintenance"),
             "planned": self.planned(person_id, day),
             "recent": self.recent(person_id),
+            "last": self.last_amounts(person_id),
             "favourites": list(person.get("favourites", [])),
             "usual": self.usual(person_id, entries),
             "previous": self.previous(person_id, day),
@@ -451,21 +452,46 @@ class Tracker:
         keys = ("kind", "recipe_id", "food_id", "by", "amount", "unit", "name")
         return all(a.get(k) == b.get(k) for k in keys)
 
-    def recent(self, person_id: str, limit: int = 8) -> list[dict[str, Any]]:
-        mine = sorted((e for e in self._entries.values() if e["person_id"] == person_id), key=lambda e: e["created"], reverse=True)
+    def _newest(self, person_id: str) -> list[dict[str, Any]]:
+        """The person's entries, the newest first (those made in the same second: the one made last first)."""
+        mine = [e for e in self._entries.values() if e["person_id"] == person_id]
+        return sorted(reversed(mine), key=lambda e: e["created"], reverse=True)
+
+    @staticmethod
+    def _what(entry: dict[str, Any]) -> tuple[Any, ...]:
+        """What an entry is, not how much: the same food at another amount is the same thing."""
+        return (entry.get("kind"), entry.get("recipe_id"), entry.get("food_id"), entry.get("name") if entry.get("kind") == "quick" else None)
+
+    def recent(self, person_id: str, limit: int = 12) -> list[dict[str, Any]]:
+        """The newest things eaten, each once, with the amount it was last eaten in."""
+        mine = self._newest(person_id)
         out: list[dict[str, Any]] = []
+        seen: set[tuple[Any, ...]] = set()
         for e in mine:
-            t = self._template(e)
-            if not any(self._same(t, o) for o in out):
-                out.append(t)
+            what = self._what(e)
+            if what in seen:
+                continue
+            seen.add(what)
+            out.append(self._template(e))
             if len(out) >= limit:
                 break
+        return out
+
+    def last_amounts(self, person_id: str) -> dict[str, dict[str, Any]]:
+        """The amount each food and recipe was last eaten in (``food:ID`` / ``recipe:ID``), so it is the start next time."""
+        mine = self._newest(person_id)
+        out: dict[str, dict[str, Any]] = {}
+        for e in mine:
+            if e.get("kind") == "food" and e.get("food_id"):
+                out.setdefault(f"food:{e['food_id']}", {"amount": e.get("amount"), "unit": e.get("unit")})
+            elif e.get("kind") == "recipe" and e.get("recipe_id"):
+                out.setdefault(f"recipe:{e['recipe_id']}", {"amount": e.get("amount"), "by": e.get("by")})
         return out
 
     def usual(self, person_id: str, today: list[dict[str, Any]], limit: int = 3) -> dict[str, list[dict[str, Any]]]:
         """What the person eats most in each meal (not what is already logged there today): one tap adds it."""
         counts: dict[str, list[list[Any]]] = {}
-        mine = sorted((e for e in self._entries.values() if e["person_id"] == person_id), key=lambda e: e["created"], reverse=True)
+        mine = self._newest(person_id)
         for e in mine:
             template = self._template(e)
             slot = counts.setdefault(e["meal"], [])
