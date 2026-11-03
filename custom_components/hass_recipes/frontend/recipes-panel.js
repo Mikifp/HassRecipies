@@ -183,6 +183,7 @@ const STYLE = `
   .rd-text { display: block; line-height: 1.9; white-space: pre-line; }
   .rd-step.done .rd-text { opacity: .55; text-decoration: line-through; }
   .rd-extra { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-top: 4px; }
+  .rd-extra .step-notes { flex: 1 0 100%; margin: 0; }
   header .main-title { flex: 1; min-width: 0; margin-inline-start: var(--ha-space-6, 24px); line-height: 1.2; }
   header .main-title b { display: block; font-weight: 400; font-size: var(--ha-font-size-xl, 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header .main-title span { display: block; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
@@ -261,6 +262,9 @@ const STYLE = `
   ul.ingredients input:checked + span { text-decoration: line-through; opacity: .6; }
   ol.steps { padding-left: 20px; margin: 0; }
   ol.steps li { margin-bottom: 12px; line-height: 1.5; }
+  .step-notes { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 2px; }
+  .step-note { color: var(--secondary-text-color); font-size: .85em; }
+  .step-note strong { font-weight: 500; }
   .step-ings { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 10px 0 2px; }
   ha-assist-chip.ing-chip { margin: 0 1px; max-width: 100%; vertical-align: middle; --md-assist-chip-container-height: 28px; --md-assist-chip-label-text-size: 13px; }
   ha-assist-chip.ing-chip.tick { cursor: pointer; }

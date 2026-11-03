@@ -72,6 +72,22 @@ const ingredientHtml = (r, i, k, mode, details = true) => {
   return html;
 };
 
+/** What the ingredient `i` adds to a step: its note, comment and alternatives ("" when it has none). */
+const ingredientNotesHtml = (r, i, k, mode) => {
+  const { main, alts, comment } = ingredientParts(r, i);
+  const p = (r.parsed_ingredients || [])[i];
+  const subs = (p && (p.substitutes || (p.substitute ? [p.substitute] : []))) || [];
+  const a = ingParts(p, main, k, mode);
+  const bits = [];
+  if (a.note) bits.push(esc(a.note));
+  if (comment) bits.push(esc(comment));
+  alts.forEach((altText, n) => {
+    const b = ingParts(subs[n], altText, k, mode);
+    bits.push(`or ${b.qty ? `${esc(b.qty)} ` : ""}<strong>${esc(b.food)}</strong>${b.note ? `, ${esc(b.note)}` : ""}`);
+  });
+  return bits.length ? `<small class="step-note"><strong>${esc(a.food)}</strong>: ${bits.join("; ")}</small>` : "";
+};
+
 /** Compact "amount food" pill for the ingredients a step uses. */
 const ingredientChipHtml = (r, i, k, mode, tick = null, alt = false) => {
   const { main } = ingredientParts(r, i);
@@ -133,6 +149,7 @@ export default {
   detectChips,
   stepTextHtml,
   ingredientChipHtml,
+  ingredientNotesHtml,
   PROGRESS_KEY,
   HANDLED_KEY,
 };

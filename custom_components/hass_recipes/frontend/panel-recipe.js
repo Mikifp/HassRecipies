@@ -1,6 +1,6 @@
 /* Recipes panel: recipe methods. Mixed into the panel class by recipes-panel.js. */
 export default function (h) {
-  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml, splitSubs, ingredientParts, stepTextHtml } = h;
+  const { esc, minutes, formatNumber, baseServings, normStep, isHeader, headerText, timerSpecs, duration, ingredientText, fmtYield, SCALES, scaleBasis, T, state, TODO_KEY, ingredientHtml, ingredientChipHtml, ingredientNotesHtml, splitSubs, ingredientParts, stepTextHtml } = h;
   return {
     // ---- shopping list (HA to-do entities) ----
     _todoEntities() {
@@ -131,6 +131,14 @@ export default function (h) {
       return { html, links };
     },
 
+    /** The notes and alternatives of the ingredients a step uses, one line each. */
+    _stepNotesHtml(r, s, k) {
+      const notes = this._stepChipIngredients(r, s)
+        .map((i) => ingredientNotesHtml(r, i, k, this._units))
+        .join("");
+      return notes ? `<div class="step-notes">${notes}</div>` : "";
+    },
+
     /** The ingredients a step names, which can be ticked off one by one. */
     _stepChipIngredients(r, s) {
       return s.ingredients.filter((i) => r.ingredients[i] !== undefined && !isHeader(r.ingredients[i]));
@@ -255,6 +263,7 @@ export default function (h) {
           ${section ? `<div class="cook-section">${esc(section)}</div>` : ""}
           <div class="cook-text" data-step-toggle="${st.i}" style="${done ? "opacity:.55;text-decoration:line-through" : ""}" title="${esc(T("Tap to mark as done"))}">${textHtml}</div>
           ${links ? `<div class="step-ings">${links}</div>` : ""}
+          ${this._cookDetails ? this._stepNotesHtml(r, st, k) : ""}
           ${this._chipAltHtml()}
           ${this._timerButtonsHtml(r, st, st.i, n + 1)}
           <ha-formfield class="cook-done" label="${esc(T("Mark this step as done"))}"><ha-checkbox data-step-done="${st.i}" ${done ? "checked" : ""}></ha-checkbox></ha-formfield>
@@ -293,6 +302,7 @@ export default function (h) {
               <div class="cstep-head"><span>${esc(T("Step"))} ${num}</span>${done ? `<ha-icon icon="mdi:check-circle" class="cstep-tick"></ha-icon>` : `<ha-icon icon="mdi:circle-outline" class="cstep-tick off"></ha-icon>`}</div>
               <div class="cstep-text">${textHtml}</div>
               ${links ? `<div class="step-ings">${links}</div>` : ""}
+              ${this._cookDetails ? this._stepNotesHtml(r, st, k) : ""}
               ${this._timerButtonsHtml(r, st, n, num)}
             </div>
           </ha-card>`;
@@ -444,6 +454,7 @@ export default function (h) {
     _rdStepHtml(r, k, { s, n, num }, current = false) {
       const done = this._doneSteps.has(n);
       const { html: textHtml, links } = this._stepTextParts(r, s, k, n);
+      const notes = this._stepNotesHtml(r, s, k);
       const timers = timerSpecs(r, n, num, s.timers || [], state.language)
         .map((sp) => {
           const running = this._timerRunning(sp.key);
@@ -456,7 +467,7 @@ export default function (h) {
       return `<ha-list-item-base interactive class="rd-step ${done ? "done" : ""} ${current ? "current" : ""}" data-step-toggle="${n}" role="checkbox" aria-checked="${done}">
           <span slot="start" class="rd-num">${done ? `<ha-icon icon="mdi:check"></ha-icon>` : num}</span>
           <span slot="headline" class="rd-text">${textHtml}</span>
-          ${links || timers ? `<span slot="supporting-text" class="rd-extra">${links}${timers}</span>` : ""}
+          ${links || timers || notes ? `<span slot="supporting-text" class="rd-extra">${links}${timers}${notes}</span>` : ""}
         </ha-list-item-base>`;
     },
 
