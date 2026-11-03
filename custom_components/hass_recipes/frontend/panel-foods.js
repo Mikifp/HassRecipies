@@ -270,6 +270,12 @@ export default function (h) {
           e.stopPropagation();
           code = e.detail.value || code;
         });
+        form.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          close();
+          this._fdBarcode(String(code.code || ""));
+        });
         dlg.querySelector("#fd-ccancel").addEventListener("click", close);
         dlg.querySelector("#fd-lookup").addEventListener("click", () => {
           close();
