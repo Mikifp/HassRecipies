@@ -106,6 +106,21 @@ export default function (h) {
       return this._fnames || {};
     },
 
+    /** { name key: weights } of the foods that have weights, loaded once and again after the foods change. */
+    _foodWeightsMap() {
+      if (!this._fweights && !this._fweightsLoading) {
+        this._fweightsLoading = true;
+        this._ws({ type: "hass_recipes/foods_weights" })
+          .then((m) => (this._fweights = m))
+          .catch(() => (this._fweights = {}))
+          .then(() => {
+            this._fweightsLoading = false;
+            if (this._neRefreshStatus) this._neRefreshStatus();
+          });
+      }
+      return this._fweights || {};
+    },
+
     _foodNamesForText(text) {
       return fl.namesForLine(this._foodNamesMap(), [...h.foodWords(text), text]);
     },
@@ -905,6 +920,7 @@ export default function (h) {
     // ---- actions ----
     async _fdRefresh(select) {
       this._fnames = null;
+      this._fweights = null;
       const st = this._fdState();
       st.draft = null;
       st.draftFor = null;

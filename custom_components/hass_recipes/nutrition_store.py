@@ -161,6 +161,15 @@ class Nutrition:
                 groups[food_key(name)] = names
         return groups
 
+    def weights(self) -> dict[str, dict[str, float]]:
+        """Every name of every food that has weights (a dl, a slice...), with those weights: what an amount in the recipe editor can be shown in grams from."""
+        out: dict[str, dict[str, float]] = {}
+        for food in self.book.foods.values():
+            if food["unit_grams"]:
+                for name in [food["name"], *food["aliases"]]:
+                    out[food_key(name)] = dict(food["unit_grams"])
+        return out
+
     def _used_by(self) -> dict[tuple[str, int], str]:
         """(source, database id) -> the name of the food of the user's that is that database food."""
         used: dict[tuple[str, int], str] = {}

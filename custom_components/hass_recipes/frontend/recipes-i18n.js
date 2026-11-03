@@ -611,6 +611,8 @@ const da = {
     "Home Assistant's calendar could not be loaded.": "Home Assistants kalender kunne ikke indlæses.",
     "Show the other unit in the chips": "Vis den anden enhed i chips",
     "Show notes and alternatives": "Vis noter og alternativer",
+    "Write this in metric": "Skriv det med metriske enheder",
+    "Write all in metric": "Skriv alle med metriske enheder",
     "Tidy with AI": "Ryd op med AI",
     "Reading with AI…": "Læser med AI…",
     "Uses the AI set up in Home Assistant (AI Task) to read the text. If it fails, the basic reading is used.": "Bruger den AI, der er sat op i Home Assistant (AI Task), til at læse teksten. Hvis det fejler, bruges den simple læsning.",

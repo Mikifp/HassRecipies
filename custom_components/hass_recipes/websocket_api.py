@@ -172,6 +172,7 @@ def async_register_websocket_api(hass: HomeAssistant) -> None:
         ws_foods_link,
         ws_foods_assign,
         ws_foods_names,
+        ws_foods_weights,
         ws_tracker_day,
         ws_tracker_range,
         ws_tracker_add,
@@ -1122,6 +1123,13 @@ def ws_foods_merge(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
 def ws_foods_names(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Every name of the foods, with all the names of the same food (so a step can call an ingredient by any of them)."""
     connection.send_result(msg["id"], _nutrition(hass).name_groups())
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/foods_weights"})
+@callback
+def ws_foods_weights(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The weights of the foods that have them, by every name of the food."""
+    connection.send_result(msg["id"], _nutrition(hass).weights())
 
 
 @websocket_api.websocket_command(

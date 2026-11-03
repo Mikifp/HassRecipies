@@ -146,3 +146,20 @@ test("a chip also covers the describing word before the noun, so it is not said 
   ]);
   assert.deepEqual(chips.map((c) => text.slice(c.start, c.start + c.len)), ["hakket oksekød", "flåede tomater"]);
 });
+
+test("toMetric converts cups, spoons, ounces and pounds", () => {
+  assert.deepEqual(s.toMetric("2", "cups"), { amount: "4,8", unit: "dl" });
+  assert.deepEqual(s.toMetric("1", "tbsp"), { amount: "1", unit: "spsk" });
+  assert.deepEqual(s.toMetric("1,5", "tsp"), { amount: "1,5", unit: "tsk" });
+  assert.deepEqual(s.toMetric("8", "oz"), { amount: "225", unit: "g" });
+  assert.deepEqual(s.toMetric("2", "lb"), { amount: "905", unit: "g" });
+  assert.deepEqual(s.toMetric("1-2", "cups"), { amount: "2,4–4,8", unit: "dl" });
+  assert.deepEqual(s.toMetric("¼", "cup"), { amount: "60", unit: "ml" });
+  assert.equal(s.toMetric("2", "dl"), null);
+  assert.equal(s.toMetric("", "cup"), null);
+});
+
+test("toMetric gives grams for a volume of a food with a known weight", () => {
+  assert.deepEqual(s.toMetric("2", "cups", { dl: 55 }), { amount: "4,8", unit: "dl", grams: { amount: "265", unit: "g" } });
+  assert.equal(s.toMetric("1", "lb", { dl: 55 }).grams, undefined);
+});

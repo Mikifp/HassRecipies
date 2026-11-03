@@ -9,7 +9,7 @@
  *  - Both lists can have sections, and both are reordered by dragging.
  */
 export default function (h) {
-  const { esc, T, foodWords, detectChips, splitSubs, splitAmount, joinAmount, fl } = h;
+  const { esc, T, foodWords, detectChips, splitSubs, splitAmount, joinAmount, toMetric, fl } = h;
   const icon = (n, slot = "") => `<ha-icon ${slot ? `slot="${slot}" ` : ""}icon="mdi:${n}"></ha-icon>`;
   const move = (list, from, to) => {
     if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return;
@@ -76,6 +76,32 @@ export default function (h) {
       return known ? ["ok", T("a food of yours")] : ["", ""];
     },
 
+    /** A line in metric: { text, hint } for an amount in cups, spoons, ounces or pounds ("" when it is not), grams when the food's weight is known. */
+    _neMetric(text) {
+      const p = splitAmount(text);
+      if (!p.amount || !p.unit) return null;
+      const weights = this._foodWeightsMap();
+      const found = [p.food, ...foodWords(text)].map((c) => weights[fl.nameKey(c)]).find(Boolean);
+      const m = toMetric(p.amount, p.unit, found);
+      if (!m) return null;
+      const main = m.grams || m;
+      return { text: joinAmount({ amount: main.amount, unit: main.unit, food: p.food }), hint: `${main.amount} ${main.unit}${m.grams ? ` (${m.amount} ${m.unit})` : ""}` };
+    },
+
+    /** The first line of an ingredient (or its alternatives) that is not metric yet, with what it would be. */
+    _neConvHtml(row) {
+      if (row.header) return "";
+      const c = [row.text, ...row.subs].map((t) => this._neMetric(t)).find(Boolean);
+      if (!c) return "";
+      return `<ha-button class="ne-convbtn" appearance="plain" size="s" data-ne-act="convert" data-uid="${esc(row.uid)}" title="${esc(T("Write this in metric"))}">${icon("swap-horizontal", "start")}${esc(c.hint)}</ha-button>`;
+    },
+
+    _neConvertRow(row) {
+      if (row.header) return;
+      row.text = (this._neMetric(row.text) || { text: row.text }).text;
+      row.subs = row.subs.map((t) => (this._neMetric(t) || { text: t }).text);
+    },
+
     _neAmountFields(text, attrs) {
       const p = splitAmount(text);
       const f = (name, value, ph, cls) =>
@@ -113,7 +139,7 @@ export default function (h) {
               <ha-dropdown-item value="down-ing">${icon("arrow-down", "icon")}${esc(T("Move down"))}</ha-dropdown-item>
               <ha-dropdown-item value="del-ing" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
             </ha-dropdown>
-          </div>${alts}</div>`;
+          </div><div class="ne-conv" id="ne-cv-${uid}">${this._neConvHtml(row)}</div>${alts}</div>`;
     },
 
     _neIngredientsHtml() {
@@ -132,6 +158,10 @@ export default function (h) {
           <div class="ne-adds">
             <ha-button appearance="plain" size="s" data-ne-act="add-ing">${icon("plus", "start")}${esc(T("Add ingredient"))}</ha-button>
             <ha-button appearance="plain" size="s" data-ne-act="add-ing-section">${icon("format-title", "start")}${esc(T("Add section"))}</ha-button>
+            ${(() => {
+              const n = real.filter((r) => this._neConvHtml(r)).length;
+              return n ? `<ha-button appearance="outlined" size="s" data-ne-act="convert-all">${icon("swap-horizontal", "start")}${esc(T("Write all in metric"))} (${n})</ha-button>` : "";
+            })()}
             <span class="ne-count">${real.length} ${esc(T("ingredients"))}</span>
           </div>`;
       }
@@ -283,6 +313,8 @@ export default function (h) {
         const [tone, text] = this._neStatus(r);
         el.className = `ne-status ${tone}`;
         el.textContent = text;
+        const cv = this.shadowRoot.getElementById(`ne-cv-${r.uid}`);
+        if (cv) cv.innerHTML = this._neConvHtml(r);
       });
     },
 
@@ -302,6 +334,10 @@ export default function (h) {
           const row = this._rowFromString("");
           return this._neChange(() => rows.push(row), { uid: row.uid, f: "amount" });
         }
+        case "convert":
+          return this._neChange(() => this._neConvertRow(this._neRowByUid(d.uid)));
+        case "convert-all":
+          return this._neChange(() => rows.forEach((r) => this._neConvertRow(r)));
         case "add-ing-section": {
           const row = { uid: this._nextUid(), header: true, text: "", subs: [], comment: "" };
           return this._neChange(() => rows.push(row), { uid: row.uid, f: "title" });

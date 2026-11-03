@@ -281,6 +281,14 @@ def test_every_name_of_a_food_is_found_by_any_of_its_names():
     assert n.shopping_food({"food": "kartoffel"}) is None
 
 
+def test_weights_are_given_by_every_name_of_a_food():
+    recipes, n = _make()
+    n.save_food({"name": "Hvedemel", "aliases": ["mel"], "unit_grams": {"dl": 55}})
+    n.save_food({"name": "Vand"})
+    w = n.weights()
+    assert w["mel"] == {"dl": 55} and w["hvedemel"] == {"dl": 55} and "vand" not in w
+
+
 # ---- suggested groups ----------------------------------------------------------
 
 def _groups(n):

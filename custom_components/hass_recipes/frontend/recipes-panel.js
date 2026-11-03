@@ -298,6 +298,8 @@ const STYLE = `
   .ne-food { flex: 2 1 150px; }
   .ne-note { flex: 1 1 110px; }
   .ne-title { flex: 1; }
+  .ne-conv { padding-inline-start: 28px; min-height: 0; }
+  .ne-conv:empty { display: none; }
   .ne-status { flex: none; min-width: 64px; text-align: center; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .ne-status.ok { color: var(--success-color, #43a047); }
   .ne-status.warn { color: var(--warning-color, #ffa600); }
