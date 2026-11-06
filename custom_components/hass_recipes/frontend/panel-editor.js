@@ -184,7 +184,7 @@ export default function (h) {
             })()}</div>
           </ha-sortable>
           <div class="ne-adds">
-            <ha-button appearance="plain" size="s" data-ne-act="add-ing">${icon("plus", "start")}${esc(T("Add ingredient"))}</ha-button>
+            <ha-button appearance="filled" data-ne-act="add-ing">${icon("plus", "start")}${esc(T("Add ingredient"))}</ha-button>
             <ha-button appearance="plain" size="s" data-ne-act="add-ing-section">${icon("format-title", "start")}${esc(T("Add section"))}</ha-button>
             ${(() => {
               const n = real.filter((r) => this._neConvHtml(r)).length;
@@ -193,8 +193,9 @@ export default function (h) {
             <span class="ne-count">${real.length} ${esc(T("ingredients"))}</span>
           </div>`;
       }
-      return `<ha-card class="ne-card"><div class="ne-cardhead"><h3>${esc(T("Ingredients"))}</h3><div class="ne-tabs">${tab("fields", "Fields")}${tab("text", "Text")}</div></div>
-          <div class="ne-body">${body}</div></ha-card>`;
+      return `<section class="ne-sec"><div class="ne-sechead"><h2>${esc(T("Ingredients"))}</h2><div class="ne-tabs">${tab("fields", "Fields")}${tab("text", "Text")}</div></div>
+          <p class="ne-desc">${esc(T("The ingredients of the recipe, one line each. Use Text to paste or type a whole list."))}</p>
+          <div class="ne-body">${body}</div></section>`;
     },
 
     // ---- steps ----
@@ -279,24 +280,38 @@ export default function (h) {
       let num = 0;
       const nest = this._neNest(steps, (s) => s.section);
       const cards = steps.map((s, i) => this._neStepHtml(s, s.section ? 0 : ++num, cur, nest[i])).join("");
-      return `<ha-card class="ne-card"><div class="ne-cardhead"><h3>${esc(T("Steps"))}</h3><span class="ne-hint">${esc(T("Pick a step, then tick the ingredients it uses."))}</span></div>
-          <div class="ne-body ne-cols">
-            <div class="ne-ingcol">${
-              this._brCompact() && real.length
-                ? `<ha-expansion-panel id="ne-ingpanel" left-chevron outlined ${this._neListOpen ? "expanded" : ""}><div slot="header">${esc(T("Ingredients"))} · ${cur ? cur.ingredients.length : 0} ${esc(T("of"))} ${real.length} ${esc(T("in this step"))}</div>${list}</ha-expansion-panel>`
-                : `<div class="ne-sub">${esc(T("Ingredients"))}</div>${list || `<div class="ne-hint">${esc(T("Add ingredients above first."))}</div>`}`
-            }
-              ${unused && real.length ? `<div class="ne-hint">${unused} ${esc(T("not used in any step"))}</div>` : ""}</div>
-            <div class="ne-stepcol">
-              <ha-sortable id="ne-stepsort" handle-selector=".ne-handle"><div class="ne-steplist">${cards}</div></ha-sortable>
-              <div class="ne-adds"><ha-button appearance="plain" size="s" data-ne-act="add-step">${icon("plus", "start")}${esc(T("Add step"))}</ha-button>
-                <ha-button appearance="plain" size="s" data-ne-act="add-step-section">${icon("format-title", "start")}${esc(T("Add section"))}</ha-button></div>
-            </div>
-          </div></ha-card>`;
+      const compact = this._brCompact();
+      const ticks = `${list || `<div class="ne-hint">${esc(T("Add ingredients above first."))}</div>`}${unused && real.length ? `<div class="ne-hint">${unused} ${esc(T("not used in any step"))}</div>` : ""}`;
+      const folded = compact && real.length
+        ? `<ha-expansion-panel id="ne-ingpanel" left-chevron outlined ${this._neListOpen ? "expanded" : ""}><div slot="header">${esc(T("Ingredients"))} · ${cur ? cur.ingredients.length : 0} ${esc(T("of"))} ${real.length} ${esc(T("in this step"))}</div>${ticks}</ha-expansion-panel>`
+        : "";
+      const main = `<section class="ne-sec"><div class="ne-sechead"><h2>${esc(T("Steps"))}</h2></div>
+          <p class="ne-desc">${esc(T("Pick a step, then tick the ingredients it uses."))}</p>
+          ${folded}
+          <div class="ne-body">
+            <ha-sortable id="ne-stepsort" handle-selector=".ne-handle"><div class="ne-steplist">${cards}</div></ha-sortable>
+            <div class="ne-adds"><ha-button appearance="filled" data-ne-act="add-step">${icon("plus", "start")}${esc(T("Add step"))}</ha-button>
+              <ha-button appearance="plain" size="s" data-ne-act="add-step-section">${icon("format-title", "start")}${esc(T("Add section"))}</ha-button></div>
+          </div></section>`;
+      // wide: what the picked step uses goes in a pane beside the lists, like the options of a block in the automation editor
+      const pane = compact
+        ? ""
+        : `<aside class="ne-pane"><div class="ne-panehead"><div class="ne-panetitle" id="ne-panetitle">${esc(this._nePaneTitle(cur))}</div>
+              <div class="ne-panesub">${esc(T("Ingredients used in this step"))}</div></div>
+            <div class="ne-panebody">${cur ? ticks : `<div class="ne-hint">${esc(T("Add a step first."))}</div>`}</div></aside>`;
+      return { main, pane };
+    },
+
+    /** "Step 3" for the picked step. */
+    _nePaneTitle(cur) {
+      if (!cur) return T("Steps");
+      return `${T("Step")} ${this._neSteps().filter((s) => !s.section).indexOf(cur) + 1}`;
     },
 
     _newEditorHtml() {
-      return `<div class="ne" id="ne">${this._neIngredientsHtml()}${this._neStepsHtml()}</div>`;
+      const { main, pane } = this._neStepsHtml();
+      const wide = !this._brCompact();
+      return `<div class="ne ${wide ? "ne-wide" : ""}" id="ne"><div class="ne-main">${this._neIngredientsHtml()}${main}</div>${pane}</div>`;
     },
 
     // ---- reading the page back into this._form ----
@@ -566,6 +581,8 @@ export default function (h) {
     /** Another step was picked: show which ingredients it has ticked. */
     _neRefreshTicks() {
       const cur = this._neCurrent();
+      const title = this.shadowRoot.getElementById("ne-panetitle");
+      if (title) title.textContent = this._nePaneTitle(cur);
       this.shadowRoot.querySelectorAll(".ne-li").forEach((li) => {
         const box = li.querySelector("ha-checkbox");
         if (box) box.checked = !!cur && cur.ingredients.includes(li.dataset.ing);

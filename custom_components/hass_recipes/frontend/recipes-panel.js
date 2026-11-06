@@ -276,17 +276,27 @@ const STYLE = `
   .step-text .ing-chip, .cook .cook-text .ing-chip, .cstep .cstep-text .ing-chip { --md-assist-chip-container-height: 26px; --md-assist-chip-label-text-size: .85em; }
   .timer-btn { margin-top: 10px; }
   .ne-page { max-width: 900px; margin: 0 auto; padding: var(--ha-space-4, 16px); padding-bottom: 96px; display: flex; flex-direction: column; gap: var(--ha-space-4, 16px); }
+  :host(.fdwide) .ne-page { max-width: 1320px; }
   .ne-meta-in { padding: var(--ha-space-4, 16px); display: flex; flex-direction: column; gap: var(--ha-space-2, 8px); }
   .ne-meta-card ha-expansion-panel { --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0; }
   .ne-photo { display: flex; align-items: center; gap: var(--ha-space-3, 12px); flex-wrap: wrap; padding: var(--ha-space-2, 8px) 0; }
   .ne-photo .btns { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
   .ne { display: flex; flex-direction: column; gap: var(--ha-space-4, 16px); }
-  .ne-card { display: block; }
+  .ne-main { display: flex; flex-direction: column; gap: var(--ha-space-8, 32px); min-width: 0; }
+  .ne.ne-wide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: var(--ha-space-6, 24px); align-items: start; }
+  .ne-sechead { display: flex; align-items: center; gap: var(--ha-space-3, 12px); flex-wrap: wrap; }
+  .ne-sechead h2 { margin: 0; flex: 1; font-size: 1.5em; font-weight: 400; }
+  .ne-desc { margin: var(--ha-space-2, 8px) 0 var(--ha-space-3, 12px); color: var(--primary-text-color); font-size: var(--ha-font-size-m, 14px); }
+  .ne-pane { position: sticky; top: var(--ha-space-4, 16px); max-height: calc(100vh - 32px); overflow-y: auto; box-sizing: border-box; border: 2px solid var(--primary-color); border-radius: var(--ha-card-border-radius, 24px); background: var(--card-background-color); }
+  .ne-panehead { padding: var(--ha-space-4, 16px) var(--ha-space-5, 20px) var(--ha-space-2, 8px); }
+  .ne-panetitle { font-size: 1.25em; font-weight: 500; }
+  .ne-panesub { color: var(--secondary-text-color); font-size: var(--ha-font-size-m, 14px); }
+  .ne-panebody { padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) var(--ha-space-4, 16px); }
   .ne-cardhead { display: flex; align-items: center; gap: var(--ha-space-3, 12px); flex-wrap: wrap; padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px) 0; }
   .ne-cardhead h3 { margin: 0; flex: 1; font-size: 1.05em; font-weight: 500; }
   .ne-tabs { display: flex; gap: var(--ha-space-2, 8px); }
   .ne-tab { cursor: pointer; }
-  .ne-body { padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) var(--ha-space-4, 16px); }
+  .ne-body { padding: 0; }
   .ne-hint { font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); margin: 4px 0; }
   .ne-sub { font-size: var(--ha-font-size-s, 12px); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--secondary-text-color); margin-bottom: var(--ha-space-2, 8px); }
   .ne-handle { cursor: grab; color: var(--secondary-text-color); flex: none; }
@@ -356,7 +366,6 @@ const STYLE = `
     .ne-alt > .ne-food { grid-column: 3; }
     .ne-alt > .ne-del { grid-column: 4; justify-self: end; }
     .ne-ing { padding: 2px 0; }
-    .ne-body { padding-inline: var(--ha-space-2, 8px); }
     .ne-cardhead { padding-inline: var(--ha-space-3, 12px); }
     .ne-timer { gap: 2px; }
     .ne-tlabel { flex: 1 0 100%; width: auto; }
@@ -1130,7 +1139,7 @@ class HassRecipesPanel extends HTMLElement {
     // on a phone Home Assistant scrolls the page, not this panel: stay out of the way so the top bar can stick to it
     const compactNow = this._brCompact();
     this.classList.toggle("compact", compactNow);
-    this.classList.toggle("fdwide", v.name === "foods" && !compactNow); // the foods pane is sticky, which needs the page itself to scroll
+    this.classList.toggle("fdwide", (v.name === "foods" || v.name === "edit") && !compactNow); // the foods pane and the editor's pane are sticky, which needs the page itself to scroll
     // on a cold load the page has no width yet: look again once it has one
     this._compactSeen = compactNow;
     if (!this._compactCheck) {
