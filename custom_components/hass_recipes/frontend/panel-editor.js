@@ -18,6 +18,34 @@ export default function (h) {
   };
   const secs = (t) => (parseFloat(t.h) || 0) * 3600 + (parseFloat(t.m) || 0) * 60 + (parseFloat(t.s) || 0);
   const label = (row) => String(row.text).trim();
+  /**
+   * `ids` in the order of a list after item `from` was dragged to `to`. A section (a heading) takes the items under it
+   * along, like a choose block in the automation editor: it lands before the heading it was dropped on, else after the
+   * section it was dropped in. null ids (the "Add ingredient" buttons) follow their section.
+   */
+  const reorder = (ids, isHeader, from, to) => {
+    const moved = [...ids];
+    move(moved, from, to);
+    const item = ids[from];
+    if (!isHeader(item)) return moved.filter(Boolean);
+    let end = from + 1;
+    while (end < ids.length && (ids[end] === null || !isHeader(ids[end]))) end += 1;
+    const block = ids.slice(from, end).filter(Boolean);
+    const rest = ids.filter((x, i) => x !== null && (i < from || i >= end));
+    const prev = moved[to - 1];
+    let at;
+    if (prev !== undefined && prev !== null && isHeader(prev) && prev !== item) at = rest.indexOf(prev);
+    else {
+      // after the section it was dropped in: before the next heading
+      let k = to + 1;
+      while (k < moved.length && (moved[k] === null || !(isHeader(moved[k]) && moved[k] !== item))) k += 1;
+      const next = moved.slice(k).find((x) => x && x !== item);
+      at = next === undefined ? rest.length : rest.indexOf(next);
+    }
+    // dropped before a heading that was the first thing in the list: it simply goes first
+    rest.splice(at, 0, ...block);
+    return rest;
+  };
 
   return {
     // ---- the lists as text ----
@@ -625,14 +653,37 @@ export default function (h) {
         ings.addEventListener("item-moved", (e) =>
           this._neChange(() => {
             // the list also holds the "Add ingredient" button of each section: put the rows in the order the items are in
-            const ids = [...(this._neIds || [])];
-            move(ids, e.detail.oldIndex, e.detail.newIndex);
             const byUid = new Map(this._form.rows.map((r) => [r.uid, r]));
-            this._form.rows = ids.filter(Boolean).map((u) => byUid.get(u)).filter(Boolean);
+            const ids = reorder(this._neIds || [], (u) => !!(byUid.get(u) || {}).header, e.detail.oldIndex, e.detail.newIndex);
+            this._form.rows = ids.map((u) => byUid.get(u)).filter(Boolean);
           })
         );
       const steps = form.querySelector("#ne-stepsort");
-      if (steps) steps.addEventListener("item-moved", (e) => this._neChange(() => move(this._neSteps(), e.detail.oldIndex, e.detail.newIndex)));
+      if (steps)
+        steps.addEventListener("item-moved", (e) =>
+          this._neChange(() => {
+            const list = this._neSteps();
+            const byUid = new Map(list.map((s) => [s.uid, s]));
+            const ids = reorder(list.map((s) => s.uid), (u) => !!(byUid.get(u) || {}).section, e.detail.oldIndex, e.detail.newIndex);
+            this._form.steps = ids.map((u) => byUid.get(u));
+          })
+        );
+      // while a section is dragged its items fold away, so that it is dragged as one block
+      form.addEventListener("pointerdown", (e) => {
+        const grip = e.target.closest && e.target.closest(".ne-isect > .ne-sline > .ne-handle, .ne-sect > .ne-handle");
+        if (!grip) return;
+        const card = grip.closest(".ne-isect, .ne-sect");
+        const hidden = [];
+        for (let n = card.nextElementSibling; n && !n.matches(".ne-isect, .ne-sect"); n = n.nextElementSibling) {
+          if (!n.classList.contains("ne-hide")) {
+            n.classList.add("ne-hide");
+            hidden.push(n);
+          }
+        }
+        const restore = () => hidden.forEach((n) => n.isConnected && n.classList.remove("ne-hide"));
+        document.addEventListener("pointerup", () => setTimeout(restore, 0), { once: true });
+        document.addEventListener("dragend", () => setTimeout(restore, 0), { once: true });
+      });
     },
 
     /** Another step was picked: show which ingredients it has ticked. */
