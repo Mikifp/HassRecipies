@@ -342,6 +342,12 @@ const STYLE = `
   .ne-sname { flex: 1; min-width: 0; padding: 12px 4px; cursor: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ne-sline > .ne-handle, .ne-sect > .ne-handle { margin-inline: 4px; }
   .ne-hide { display: none; }
+  .ne-rsum { padding-inline-start: 28px; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .ne-rsum:empty { display: none; }
+  .ne-wrow.sel { outline: 2px solid var(--primary-color); outline-offset: -2px; border-radius: 8px; }
+  .ne-pane .ne-pnote { display: block; width: 100%; margin-bottom: var(--ha-space-2, 8px); }
+  .ne-pane .ne-alt { flex-wrap: wrap; padding-inline-start: 0; }
+  .ne-pane .ne-conv { padding-inline-start: 0; margin-top: var(--ha-space-2, 8px); }
   .ne-stephead { display: flex; align-items: center; gap: var(--ha-space-2, 8px); margin-bottom: var(--ha-space-1, 4px); }
   .ne-stext { display: block; width: 100%; }
   .ne-chips { display: flex; flex-wrap: wrap; gap: var(--ha-space-2, 8px); margin-top: var(--ha-space-2, 8px); }

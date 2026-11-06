@@ -193,6 +193,22 @@ export default function (h) {
         )
         .join("");
       const noted = !!(row.comment || row._note);
+      if (!this._brCompact()) {
+        // wide: the row is the amount, unit and food; the note, alternatives and the metric amount are in the pane
+        const sum = [row.comment, ...row.subs.filter(Boolean).map((a) => `${T("or")} ${a}`)].filter(Boolean).join(" · ");
+        return `<div class="ne-ing ne-wrow ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""} ${this._neSelIng === row.uid ? "sel" : ""}" data-uid="${uid}">
+          <div class="ne-line"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>
+            ${this._neAmountFields(row.text, `data-uid="${uid}"`)}
+            <span class="ne-status ${tone}" id="ne-st-${uid}">${esc(status)}</span>
+            <ha-dropdown data-ne-menu="ing" data-uid="${uid}"><ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
+              <ha-dropdown-item value="add-alt">${icon("plus", "icon")}${esc(T("Add an alternative"))}</ha-dropdown-item>
+              <ha-dropdown-item value="add-note">${icon("note-plus-outline", "icon")}${esc(T("Add a note"))}</ha-dropdown-item>
+              <ha-dropdown-item value="up-ing">${icon("arrow-up", "icon")}${esc(T("Move up"))}</ha-dropdown-item>
+              <ha-dropdown-item value="down-ing">${icon("arrow-down", "icon")}${esc(T("Move down"))}</ha-dropdown-item>
+              <ha-dropdown-item value="del-ing" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
+            </ha-dropdown>
+          </div><div class="ne-rsum">${esc(sum)}</div></div>`;
+      }
       return `<div class="ne-ing ${noted ? "has-note" : ""} ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""}" data-uid="${uid}">
           <div class="ne-line"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>
             ${this._neAmountFields(row.text, `data-uid="${uid}"`)}
@@ -321,7 +337,8 @@ export default function (h) {
         </ha-card>`;
     },
 
-    _neStepsHtml() {
+    /** The ingredient ticks of the picked step (and which steps use each), ready for a pane or a folded panel. */
+    _neTicksHtml() {
       const steps = this._neSteps();
       const cur = this._neCurrent();
       const real = this._form.rows.filter((r) => !r.header && r.text.trim());
@@ -336,11 +353,71 @@ export default function (h) {
         })
         .join("");
       const unused = real.filter((r) => !used(r).length).length;
+      return `${list ? `<ha-list multi>${list}</ha-list>` : `<div class="ne-hint">${esc(T("Add ingredients above first."))}</div>`}${unused && real.length ? `<div class="ne-hint">${unused} ${esc(T("not used in any step"))}</div>` : ""}`;
+    },
+
+    /** The pane: the ingredient that is picked, else the picked step. */
+    _nePaneHtml() {
+      const row = this._neSelIng && this._neRowByUid(this._neSelIng);
+      if (row && !row.header) return this._nePaneIngredient(row);
+      const cur = this._neCurrent();
+      return `<ha-card class="ne-pane"><div class="ne-panehead"><div class="ne-panetitle" id="ne-panetitle">${esc(this._nePaneTitle(cur))}</div>
+          <div class="ne-panesub">${esc(T("Ingredients used in this step"))}</div></div>
+        <div class="ne-panebody">${cur ? this._neTicksHtml() : `<div class="ne-hint">${esc(T("Add a step first."))}</div>`}</div></ha-card>`;
+    },
+
+    /** The extras of one ingredient: its note, alternatives, metric amount and the steps that use it. */
+    _nePaneIngredient(row) {
+      const uid = esc(row.uid);
+      const steps = this._neSteps().filter((s) => !s.section);
+      const where = steps.map((s, i) => (s.ingredients.includes(row.uid) ? i + 1 : 0)).filter(Boolean);
+      const alts = row.subs
+        .map(
+          (a, n) => `<div class="ne-alt"><span class="ne-or">${esc(T("or"))}</span>${this._neAmountFields(a, `data-uid="${uid}" data-alt="${n}"`)}
+            <ha-icon-button class="ne-del" data-ne-act="del-alt" data-uid="${uid}" data-alt="${n}" label="${esc(T("Delete"))}">${icon("close")}</ha-icon-button></div>`
+        )
+        .join("");
+      return `<ha-card class="ne-pane"><div class="ne-panehead"><div class="ne-panetitle" id="ne-panetitle">${esc(label(row) || T("Ingredient"))}</div>
+          <div class="ne-panesub">${esc(T("Ingredient"))}</div></div>
+        <div class="ne-panebody">
+          <div class="ne-sub">${esc(T("Note"))}</div>
+          <ha-input class="ne-f ne-pnote" data-f="note" data-uid="${uid}" value="${esc(row.comment)}" placeholder="${esc(T("Note"))}" aria-label="${esc(T("Note"))}"></ha-input>
+          <div class="ne-sub">${esc(T("Alternatives"))}</div>
+          ${alts}
+          <ha-button appearance="plain" size="s" data-ne-act="add-alt" data-uid="${uid}">${icon("plus", "start")}${esc(T("Add an alternative"))}</ha-button>
+          <div class="ne-conv" id="ne-cv-${uid}">${this._neConvHtml(row)}</div>
+          <div class="ne-sub">${esc(T("Used in"))}</div>
+          <div class="ne-hint">${where.length ? `${esc(T("step"))} ${where.join(", ")}` : esc(T("not used"))}</div>
+        </div></ha-card>`;
+    },
+
+    /** Another ingredient or step was picked: the pane shows it. */
+    _neSelect(kind, uid) {
+      const form = this.shadowRoot.getElementById("form");
+      if (!form) return;
+      if (kind === "ing") {
+        if (this._neSelIng === uid) return;
+        this._neSelIng = uid;
+      } else {
+        if (!this._neSelIng && this._neCur === uid) return;
+        this._neSelIng = null;
+        this._neCur = uid;
+        form.querySelectorAll(".ne-step").forEach((s) => s.classList.toggle("cur", s.dataset.uid === uid));
+      }
+      form.querySelectorAll(".ne-ing:not(.ne-isect)").forEach((r) => r.classList.toggle("sel", r.dataset.uid === this._neSelIng));
+      const pane = form.querySelector(".ne-pane");
+      if (pane) pane.outerHTML = this._nePaneHtml();
+    },
+
+    _neStepsHtml() {
+      const steps = this._neSteps();
+      const cur = this._neCurrent();
+      const real = this._form.rows.filter((r) => !r.header && r.text.trim());
       let num = 0;
       const nest = this._neNest(steps, (s) => s.section);
       const cards = steps.map((s, i) => this._neStepHtml(s, s.section ? 0 : ++num, cur, nest[i])).join("");
       const compact = this._brCompact();
-      const ticks = `${list ? `<ha-list multi>${list}</ha-list>` : `<div class="ne-hint">${esc(T("Add ingredients above first."))}</div>`}${unused && real.length ? `<div class="ne-hint">${unused} ${esc(T("not used in any step"))}</div>` : ""}`;
+      const ticks = this._neTicksHtml();
       const folded = compact && real.length
         ? `<ha-expansion-panel id="ne-ingpanel" left-chevron outlined ${this._neListOpen ? "expanded" : ""}><div slot="header">${esc(T("Ingredients"))} · ${cur ? cur.ingredients.length : 0} ${esc(T("of"))} ${real.length} ${esc(T("in this step"))}</div>${ticks}</ha-expansion-panel>`
         : "";
@@ -353,11 +430,7 @@ export default function (h) {
               <ha-button appearance="plain" size="s" data-ne-act="add-step-section">${icon("format-title", "start")}${esc(T("Add section"))}</ha-button></div>
           </div></section>`;
       // wide: what the picked step uses goes in a pane beside the lists, like the options of a block in the automation editor
-      const pane = compact
-        ? ""
-        : `<ha-card class="ne-pane"><div class="ne-panehead"><div class="ne-panetitle" id="ne-panetitle">${esc(this._nePaneTitle(cur))}</div>
-              <div class="ne-panesub">${esc(T("Ingredients used in this step"))}</div></div>
-            <div class="ne-panebody">${cur ? ticks : `<div class="ne-hint">${esc(T("Add a step first."))}</div>`}</div></ha-card>`;
+      const pane = compact ? "" : this._nePaneHtml();
       return { main, pane };
     },
 
@@ -411,6 +484,12 @@ export default function (h) {
       else row.text = text;
     },
 
+    /** The line under an ingredient row that sums up its note and alternatives (wide layout). */
+    _neRefreshSum(row) {
+      const el = this.shadowRoot.querySelector(`.ne-wrow[data-uid="${row.uid}"] .ne-rsum`);
+      if (el) el.textContent = [row.comment, ...row.subs.filter(Boolean).map((a) => `${T("or")} ${a}`)].filter(Boolean).join(" · ");
+    },
+
     _neRefreshStatus() {
       this._form.rows.forEach((r) => {
         const el = this.shadowRoot.getElementById(`ne-st-${r.uid}`);
@@ -449,11 +528,17 @@ export default function (h) {
         }
         case "add-alt": {
           const row = this._neRowByUid(d.uid);
-          return row && this._neChange(() => row.subs.push(""), { uid: d.uid, f: "amount", alt: row.subs.length });
+          return row && this._neChange(() => {
+            row.subs.push("");
+            this._neSelIng = d.uid;
+          }, { uid: d.uid, f: "amount", alt: row.subs.length });
         }
         case "add-note": {
           const row = this._neRowByUid(d.uid);
-          return row && this._neChange(() => (row._note = true), { uid: d.uid, f: "note" });
+          return row && this._neChange(() => {
+            row._note = true;
+            this._neSelIng = d.uid;
+          }, { uid: d.uid, f: "note" });
         }
         case "del-alt":
           return this._neChange(() => this._neRowByUid(d.uid).subs.splice(Number(d.alt), 1));
@@ -467,9 +552,7 @@ export default function (h) {
         case "down-ing":
           return this._neChange(() => move(rows, idx(rows, d.uid), idx(rows, d.uid) + 1));
         case "pick":
-          if (this._neCur === d.uid) return;
-          this._neCur = d.uid;
-          return this._render();
+          return this._neSelect("step", d.uid);
         case "tick": {
           const step = this._neCurrent();
           if (!step) return;
@@ -596,11 +679,13 @@ export default function (h) {
       // a step is picked by typing in it too
       form.addEventListener("focusin", (e) => {
         const step = e.target.closest && e.target.closest(".ne-step:not(.ne-sect)");
-        if (step && this._neCur !== step.dataset.uid) {
-          this._neCur = step.dataset.uid;
-          form.querySelectorAll(".ne-step").forEach((s) => s.classList.toggle("cur", s === step));
-          this._neRefreshTicks();
-        }
+        if (step) this._neSelect("step", step.dataset.uid);
+        const ing = e.target.closest && e.target.closest(".ne-ing:not(.ne-isect)");
+        if (ing) this._neSelect("ing", ing.dataset.uid);
+      });
+      form.addEventListener("click", (e) => {
+        const ing = e.target.closest && e.target.closest(".ne-ing:not(.ne-isect)");
+        if (ing) this._neSelect("ing", ing.dataset.uid);
       });
       form.addEventListener("input", (e) => {
         const el = e.target;
@@ -630,6 +715,7 @@ export default function (h) {
           this._neSetAmount(el, row);
           this._neRefreshStatus();
         }
+        if (f === "note" || el.dataset.alt !== undefined) this._neRefreshSum(row);
       });
       // pasting a list into an ingredient makes one ingredient per line
       form.addEventListener("paste", (e) => {
@@ -690,7 +776,7 @@ export default function (h) {
     _neRefreshTicks() {
       const cur = this._neCurrent();
       const title = this.shadowRoot.getElementById("ne-panetitle");
-      if (title) title.textContent = this._nePaneTitle(cur);
+      if (title && !this._neSelIng) title.textContent = this._nePaneTitle(cur);
       this.shadowRoot.querySelectorAll(".ne-li").forEach((li) => {
         li.selected = !!cur && cur.ingredients.includes(li.dataset.ing);
       });
