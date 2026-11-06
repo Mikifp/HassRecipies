@@ -196,10 +196,11 @@ export default function (h) {
       if (!this._brCompact()) {
         // wide: the row is the amount, unit and food; the note, alternatives and the metric amount are in the pane
         const sum = [row.comment, ...row.subs.filter(Boolean).map((a) => `${T("or")} ${a}`)].filter(Boolean).join(" · ");
-        return `<div class="ne-ing ne-wrow ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""} ${this._neSelIng === row.uid ? "sel" : ""}" data-uid="${uid}">
-          <div class="ne-line"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>
+        return `<div class="ne-ing ne-wrow ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""} ${this._neSelIng === row.uid ? "sel" : ""}" data-uid="${uid}"><div class="ne-card">
+          <div class="ne-line">
             ${this._neAmountFields(row.text, `data-uid="${uid}"`)}
             <span class="ne-status ${tone}" id="ne-st-${uid}">${esc(status)}</span>
+            <ha-icon class="ne-handle" icon="mdi:drag-horizontal-variant"></ha-icon>
             <ha-dropdown data-ne-menu="ing" data-uid="${uid}"><ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
               <ha-dropdown-item value="add-alt">${icon("plus", "icon")}${esc(T("Add an alternative"))}</ha-dropdown-item>
               <ha-dropdown-item value="add-note">${icon("note-plus-outline", "icon")}${esc(T("Add a note"))}</ha-dropdown-item>
@@ -207,7 +208,7 @@ export default function (h) {
               <ha-dropdown-item value="down-ing">${icon("arrow-down", "icon")}${esc(T("Move down"))}</ha-dropdown-item>
               <ha-dropdown-item value="del-ing" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
             </ha-dropdown>
-          </div><div class="ne-rsum">${esc(sum)}</div></div>`;
+          </div><div class="ne-rsum">${esc(sum)}</div></div></div>`;
       }
       return `<div class="ne-ing ${noted ? "has-note" : ""} ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""}" data-uid="${uid}">
           <div class="ne-line"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>

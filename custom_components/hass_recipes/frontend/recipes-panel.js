@@ -344,7 +344,12 @@ const STYLE = `
   .ne-hide { display: none; }
   .ne-rsum { padding-inline-start: 28px; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .ne-rsum:empty { display: none; }
-  .ne-wrow.sel { outline: 2px solid var(--primary-color); outline-offset: -2px; border-radius: 8px; }
+  .ne-wrow { padding: 4px 0; }
+  .ne-card { border: 1px solid var(--divider-color); border-radius: 12px; padding: 4px 8px 4px 12px; background: var(--card-background-color); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+  .ne-card .ne-f { --ha-color-form-background: transparent; --ha-color-form-background-hover: color-mix(in srgb, var(--primary-text-color) 5%, transparent); }
+  .ne-card .ne-rsum { padding-inline-start: 4px; padding-bottom: 4px; }
+  .ne-card .ne-handle { margin-inline: 4px; }
+  .ne-wrow.sel .ne-card { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
   .ne-pane .ne-pnote { display: block; width: 100%; margin-bottom: var(--ha-space-2, 8px); }
   .ne-pane .ne-alt { flex-wrap: wrap; padding-inline-start: 0; }
   .ne-pane .ne-conv { padding-inline-start: 0; margin-top: var(--ha-space-2, 8px); }
