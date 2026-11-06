@@ -130,10 +130,13 @@ export default function (h) {
       row.subs = row.subs.map((t) => (this._neMetric(t) || { text: t }).text);
     },
 
-    _neAmountFields(text, attrs) {
+    _neAmountFields(text, attrs, plain) {
       const p = splitAmount(text);
+      // plain: the row of the wide layout, which reads like an automation row, so the fields are bare inputs
       const f = (name, value, ph, cls) =>
-        `<ha-input class="ne-f ${cls}" data-f="${name}" ${attrs} value="${esc(value)}" placeholder="${esc(ph)}" aria-label="${esc(ph)}"></ha-input>`;
+        plain
+          ? `<input class="ne-f ne-pin ${cls}" data-f="${name}" ${attrs} value="${esc(value)}" placeholder="${esc(ph)}" aria-label="${esc(ph)}" autocomplete="off">`
+          : `<ha-input class="ne-f ${cls}" data-f="${name}" ${attrs} value="${esc(value)}" placeholder="${esc(ph)}" aria-label="${esc(ph)}"></ha-input>`;
       const alt = /data-alt=/.test(attrs);
       return f("amount", p.amount, T("Amount"), "ne-amount") + f("unit", p.unit, T("Unit"), "ne-unit") + f("food", p.food, alt ? T("Or this food") : T("Food"), "ne-food");
     },
@@ -198,7 +201,7 @@ export default function (h) {
         const sum = [row.comment, ...row.subs.filter(Boolean).map((a) => `${T("or")} ${a}`)].filter(Boolean).join(" · ");
         return `<div class="ne-ing ne-wrow ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""} ${this._neSelIng === row.uid ? "sel" : ""}" data-uid="${uid}"><div class="ne-card">
           <div class="ne-line"><ha-icon class="ne-lead" icon="mdi:circle-medium"></ha-icon>
-            ${this._neAmountFields(row.text, `data-uid="${uid}"`)}
+            ${this._neAmountFields(row.text, `data-uid="${uid}"`, true)}
             <span class="ne-status ${tone}" id="ne-st-${uid}">${esc(status)}</span>
             <ha-icon class="ne-handle" icon="mdi:drag-horizontal-variant"></ha-icon>
             <ha-dropdown data-ne-menu="ing" data-uid="${uid}"><ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>

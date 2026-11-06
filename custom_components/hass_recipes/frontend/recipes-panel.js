@@ -348,10 +348,11 @@ const STYLE = `
   .ne-wrow { padding: 4px 0; }
   .ne-card { border: 1px solid var(--divider-color); border-radius: 12px; min-height: 48px; padding: 0 4px 0 12px; background: var(--card-background-color); }
   .ne-card .ne-line { min-height: 46px; }
+  .ne-pin { box-sizing: border-box; height: 36px; min-width: 0; padding: 0 8px; border: 0; border-bottom: 1px solid transparent; border-radius: 0; background: transparent; color: var(--primary-text-color); font: inherit; outline: none; }
+  .ne-pin::placeholder { color: var(--secondary-text-color); opacity: .7; }
+  .ne-pin:hover { border-bottom-color: var(--divider-color); }
+  .ne-pin:focus { border-bottom: 2px solid var(--primary-color); }
   .ne-lead { flex: none; --mdc-icon-size: 20px; color: var(--secondary-text-color); margin-inline-end: 4px; }
-  .ne-card .ne-f { --ha-color-border-neutral-loud: transparent; --ha-input-height: 36px; }
-  .ne-card .ne-f:hover, .ne-card .ne-f:focus-within { --ha-color-border-neutral-loud: var(--secondary-text-color); }
-  .ne-card .ne-f { --ha-color-form-background: transparent; --ha-color-form-background-hover: color-mix(in srgb, var(--primary-text-color) 5%, transparent); }
   .ne-card .ne-rsum { padding-inline-start: 4px; padding-bottom: 4px; }
   .ne-card .ne-handle { margin-inline: 4px; }
   .ne-wrow.sel .ne-card { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
