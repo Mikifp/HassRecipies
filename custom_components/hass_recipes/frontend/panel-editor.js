@@ -113,7 +113,7 @@ export default function (h) {
     _neIngredientHtml(row) {
       const uid = esc(row.uid);
       if (row.header) {
-        return `<div class="ne-ing" data-uid="${uid}">
+        return `<div class="ne-ing ne-isect" data-uid="${uid}">
             <div class="ne-line">${icon("drag", "")}
               <ha-input class="ne-f ne-title" data-f="title" data-uid="${uid}" value="${esc(row.text)}" placeholder="${esc(T("Section title"))}" aria-label="${esc(T("Section title"))}"></ha-input>
               <ha-icon-button class="ne-del" data-ne-act="del-ing" data-uid="${uid}" label="${esc(T("Delete"))}">${icon("close")}</ha-icon-button>
