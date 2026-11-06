@@ -216,6 +216,7 @@ export default function (h) {
       const uid = esc(step.uid);
       const menu = `<ha-dropdown data-ne-menu="step" data-uid="${uid}"><ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
           ${step.section ? "" : `<ha-dropdown-item value="add-timer">${icon("timer-plus-outline", "icon")}${esc(T("Add a timer"))}</ha-dropdown-item>`}
+          <ha-dropdown-item value="add-section-above">${icon("format-title", "icon")}${esc(T("Add a section above"))}</ha-dropdown-item>
           <ha-dropdown-item value="up-step">${icon("arrow-up", "icon")}${esc(T("Move up"))}</ha-dropdown-item>
           <ha-dropdown-item value="down-step">${icon("arrow-down", "icon")}${esc(T("Move down"))}</ha-dropdown-item>
           <ha-dropdown-item value="del-step" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
@@ -390,6 +391,10 @@ export default function (h) {
         case "add-step-section": {
           const step = { uid: this._nextUid(), text: "", section: true, ingredients: [], timers: [] };
           return this._neChange(() => steps.push(step), { uid: step.uid, f: "stext" });
+        }
+        case "add-section-above": {
+          const step = { uid: this._nextUid(), text: "", section: true, ingredients: [], timers: [] };
+          return this._neChange(() => steps.splice(Math.max(idx(steps, d.uid), 0), 0, step), { uid: step.uid, f: "stext" });
         }
         case "del-step":
           return this._neChange(() => (this._form.steps = steps.filter((s) => s.uid !== d.uid)));

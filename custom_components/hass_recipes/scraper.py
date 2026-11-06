@@ -259,6 +259,9 @@ class _GroupExtractor(HTMLParser):
         self._buf: list[str] = []
         self._box = 0  # depth inside a Tasty / Create ingredients box
         self._wprm = 0  # depth inside a WP Recipe Maker ingredient group
+        self._uid: str | None = None  # data-uid of the ingredient being read
+        self.steps: list[set[str]] = []  # the ingredient ids each WP Recipe Maker step names
+        self._step: set[str] | None = None
 
     def _group(self) -> dict[str, Any]:
         if not self.groups:
@@ -270,6 +273,14 @@ class _GroupExtractor(HTMLParser):
             return
         classes = (dict(attrs).get("class") or "").lower().split()
         kind: str | None = None
+        if tag == "li" and "wprm-recipe-instruction" in classes:
+            self._step = set()
+            self.steps.append(self._step)
+            kind = "step"
+        for c in classes:
+            m = re.fullmatch(r"wprm-inline-ingredient-\d+-(\d+)", c)
+            if m and self._step is not None:
+                self._step.add(m.group(1))
         if "wprm-recipe-ingredient-group" in classes:
             self.groups.append({"name": "", "items": []})
             self._wprm += 1
@@ -278,6 +289,7 @@ class _GroupExtractor(HTMLParser):
             kind = "name"
         elif self._wprm and tag == "li" and "wprm-recipe-ingredient" in classes:
             kind = "item"
+            self._uid = dict(attrs).get("data-uid")
         elif any(c in ("tasty-recipes-ingredients", "mv-create-ingredients") for c in classes):
             self._box += 1
             kind = "box"
@@ -305,6 +317,8 @@ class _GroupExtractor(HTMLParser):
                 self._box -= 1
             elif kind == "wprm":
                 self._wprm -= 1
+            elif kind == "step":
+                self._step = None
             elif kind in ("name", "item"):
                 text = re.sub(r"\s+", " ", html.unescape("".join(self._buf))).strip()
                 self._buf = []
@@ -315,19 +329,56 @@ class _GroupExtractor(HTMLParser):
                     group["name"] = text.rstrip(":").strip()
                 else:
                     group["items"].append(text)
+                    group.setdefault("uids", []).append(self._uid)
+                    self._uid = None
 
     def handle_data(self, data: str) -> None:
         if any(kind in ("name", "item") for _, kind in self._stack):
             self._buf.append(data)
 
 
-def _ingredient_groups(page: str) -> list[dict[str, Any]]:
+def _parse_groups(page: str) -> _GroupExtractor | None:
     parser = _GroupExtractor()
     try:
         parser.feed(page)
     except Exception:  # noqa: BLE001 - malformed HTML must never break an import
-        return []
-    return [g for g in parser.groups if g["items"]]
+        return None
+    return parser
+
+
+def _ingredient_groups(page: str) -> list[dict[str, Any]]:
+    parser = _parse_groups(page)
+    return [g for g in parser.groups if g["items"]] if parser else []
+
+
+def _step_sections(recipe: dict[str, Any], page: str) -> None:
+    """Sections for the steps when the page only groups its ingredients (WP Recipe Maker).
+
+    A step belongs to the group of the first ingredient it names; a step that names none stays in
+    the group before it. A heading goes in wherever the group changes. Only when the page has no
+    step sections of its own and lists as many steps as we have.
+    """
+    parser = _parse_groups(page)
+    steps = recipe.get("instructions") or []
+    if not parser or any(isinstance(s, dict) and s.get("section") for s in steps):
+        return
+    groups = [g for g in parser.groups if g["items"] and g["name"]]
+    if len(groups) < 2 or len(parser.steps) != len(steps):
+        return
+    owner = {u: g["name"] for g in groups for u in g.get("uids", []) if u}
+    out: list[Any] = []
+    current = None
+    for step, uids in zip(steps, parser.steps):
+        # the page's own order of the ingredients decides which is first
+        order = [u for g in groups for u in g.get("uids", [])]
+        named = [u for u in order if u in uids and u in owner]
+        name = owner[named[0]] if named else None
+        if name and name != current:
+            out.append({"text": name, "section": True})
+            current = name
+        out.append(step)
+    if sum(1 for s in out if isinstance(s, dict) and s.get("section")) >= 2:
+        recipe["instructions"] = out
 
 
 def _apply_groups(recipe: dict[str, Any], groups: list[dict[str, Any]]) -> None:
@@ -471,6 +522,7 @@ def parse_page(page: str, url: str) -> dict[str, Any]:
     recipe = _merge(_scrapers_parse(page, url), own, url)
     if not any(str(i).startswith("## ") for i in recipe.get("ingredients") or []):
         _apply_groups(recipe, _ingredient_groups(page))
+    _step_sections(recipe, page)
     recipe["ingredients"] = tidy_ingredients(recipe.get("ingredients") or [])
     # a step that names an ingredient links to it, so the panel can show it as a chip in the text
     if link_ingredients is not None:

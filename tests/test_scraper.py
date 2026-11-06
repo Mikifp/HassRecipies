@@ -232,3 +232,34 @@ def test_an_imported_page_has_its_ingredients_tidied():
         "salt",
         "peber // friskkværnet",
     ]
+
+
+WPRM_PAGE = """
+<div class="wprm-recipe-ingredient-group"><div class="wprm-recipe-group-name wprm-recipe-ingredient-group-name">Fordej</div><ul>
+<li class="wprm-recipe-ingredient" data-uid="1">8 g gær</li><li class="wprm-recipe-ingredient" data-uid="2">1 dl vand</li></ul></div>
+<div class="wprm-recipe-ingredient-group"><div class="wprm-recipe-group-name wprm-recipe-ingredient-group-name">Hoveddej</div><ul>
+<li class="wprm-recipe-ingredient" data-uid="3">2 kg mel</li></ul></div>
+<div class="wprm-recipe-instruction-group"><ul>
+<li class="wprm-recipe-instruction"><span class="wprm-inline-ingredient wprm-inline-ingredient-9-1">gær</span></li>
+<li class="wprm-recipe-instruction"><span>Dæk til.</span></li>
+<li class="wprm-recipe-instruction"><span class="wprm-inline-ingredient wprm-inline-ingredient-9-3">mel</span></li>
+<li class="wprm-recipe-instruction"><span>Bag.</span></li></ul></div>
+"""
+
+
+def test_step_sections_follow_the_ingredient_groups():
+    recipe = {"instructions": ["Rør gær", "Dæk til.", "Tilsæt mel", "Bag."]}
+    scraper._step_sections(recipe, WPRM_PAGE)
+    assert recipe["instructions"] == [
+        {"text": "Fordej", "section": True}, "Rør gær", "Dæk til.",
+        {"text": "Hoveddej", "section": True}, "Tilsæt mel", "Bag.",
+    ]
+
+
+def test_step_sections_left_alone_when_the_page_has_its_own_or_counts_differ():
+    own = {"instructions": [{"text": "A", "section": True}, "x", "y", "z", "w"]}
+    scraper._step_sections(own, WPRM_PAGE)
+    assert own["instructions"][0] == {"text": "A", "section": True} and len(own["instructions"]) == 5
+    few = {"instructions": ["a", "b"]}
+    scraper._step_sections(few, WPRM_PAGE)
+    assert few["instructions"] == ["a", "b"]
