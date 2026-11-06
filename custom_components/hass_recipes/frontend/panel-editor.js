@@ -197,7 +197,7 @@ export default function (h) {
         // wide: the row is the amount, unit and food; the note, alternatives and the metric amount are in the pane
         const sum = [row.comment, ...row.subs.filter(Boolean).map((a) => `${T("or")} ${a}`)].filter(Boolean).join(" · ");
         return `<div class="ne-ing ne-wrow ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""} ${this._neSelIng === row.uid ? "sel" : ""}" data-uid="${uid}"><div class="ne-card">
-          <div class="ne-line">
+          <div class="ne-line"><ha-icon class="ne-lead" icon="mdi:circle-medium"></ha-icon>
             ${this._neAmountFields(row.text, `data-uid="${uid}"`)}
             <span class="ne-status ${tone}" id="ne-st-${uid}">${esc(status)}</span>
             <ha-icon class="ne-handle" icon="mdi:drag-horizontal-variant"></ha-icon>

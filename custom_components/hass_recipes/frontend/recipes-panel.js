@@ -333,8 +333,9 @@ const STYLE = `
   .ne-chev { --mdc-icon-button-size: 36px; flex: none; color: var(--secondary-text-color); }
   .ne-sect .ne-title, .ne-isect .ne-title { font-weight: 600; }
   .ne-list > .ne-isect:first-child { margin-top: 0; }
-  .ne-ing.ne-in, .ne-sfoot { margin-inline-start: 12px; padding-inline: 14px 10px; border-inline-start: 2px solid var(--divider-color); background: color-mix(in srgb, var(--secondary-background-color) 55%, transparent); }
-  .ne-sfoot { padding-block: 6px 12px; border-end-start-radius: 12px; border-bottom: 1px solid var(--divider-color); }
+  .ne-ing.ne-in, .ne-sfoot { margin-inline-start: 12px; padding-inline: 16px 0; border-inline-start: 2px solid var(--divider-color); }
+  .ne-isect + .ne-in { padding-top: 12px; }
+  .ne-sfoot { padding-block: 8px 16px; }
   .ne-step.ne-in { position: relative; margin-inline-start: 18px; }
   .ne-step.ne-in::before { content: ""; position: absolute; inset-block: -4px; inset-inline-start: -11px; border-inline-start: 2px solid var(--divider-color); }
   .ne-diamond { flex: none; display: grid; place-items: center; width: 28px; height: 28px; margin: 0 10px 0 6px; border: 1px solid var(--divider-color); border-radius: 8px; transform: rotate(45deg); color: var(--secondary-text-color); }
@@ -345,7 +346,11 @@ const STYLE = `
   .ne-rsum { padding-inline-start: 28px; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .ne-rsum:empty { display: none; }
   .ne-wrow { padding: 4px 0; }
-  .ne-card { border: 1px solid var(--divider-color); border-radius: 12px; padding: 4px 8px 4px 12px; background: var(--card-background-color); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+  .ne-card { border: 1px solid var(--divider-color); border-radius: 12px; min-height: 48px; padding: 0 4px 0 12px; background: var(--card-background-color); }
+  .ne-card .ne-line { min-height: 46px; }
+  .ne-lead { flex: none; --mdc-icon-size: 20px; color: var(--secondary-text-color); margin-inline-end: 4px; }
+  .ne-card .ne-f { --ha-color-border-neutral-loud: transparent; --ha-input-height: 36px; }
+  .ne-card .ne-f:hover, .ne-card .ne-f:focus-within { --ha-color-border-neutral-loud: var(--secondary-text-color); }
   .ne-card .ne-f { --ha-color-form-background: transparent; --ha-color-form-background-hover: color-mix(in srgb, var(--primary-text-color) 5%, transparent); }
   .ne-card .ne-rsum { padding-inline-start: 4px; padding-bottom: 4px; }
   .ne-card .ne-handle { margin-inline: 4px; }
