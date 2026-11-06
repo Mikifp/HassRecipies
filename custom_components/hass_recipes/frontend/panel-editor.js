@@ -110,14 +110,39 @@ export default function (h) {
       return f("amount", p.amount, T("Amount"), "ne-amount") + f("unit", p.unit, T("Unit"), "ne-unit") + f("food", p.food, alt ? T("Or this food") : T("Food"), "ne-food");
     },
 
-    _neIngredientHtml(row) {
+    /** For a list with sections: which items sit under a section, which are folded away, and how many each section holds. */
+    _neNest(items, isSect) {
+      this._neFolded = this._neFolded || new Set();
+      let sect = null;
+      return items.map((x) => {
+        if (isSect(x)) {
+          sect = { sect: true, folded: this._neFolded.has(x.uid), count: 0 };
+          return sect;
+        }
+        if (sect) sect.count += 1;
+        return { in: !!sect, hidden: !!sect && sect.folded };
+      });
+    },
+
+    /** The head of a section: fold button, icon, title (the field), how many it holds. */
+    _neSectHead(uid, title, f, field, extra) {
+      return `<ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>
+        <ha-icon-button class="ne-chev" data-ne-act="fold" data-uid="${uid}" label="${esc(T(f.folded ? "Show the section" : "Hide the section"))}">${icon(f.folded ? "chevron-down" : "chevron-up")}</ha-icon-button>
+        ${icon("format-title", "").replace("<ha-icon ", '<ha-icon class="ne-sicon" ')}
+        <ha-input class="ne-f ne-title" data-f="${field}" data-uid="${uid}" value="${esc(title)}" placeholder="${esc(T("Section title"))}" aria-label="${esc(T("Section title"))}"></ha-input>
+        <span class="ne-sectcount">${f.count}</span>${extra}`;
+    },
+
+    _neIngredientHtml(row, f = {}) {
       const uid = esc(row.uid);
       if (row.header) {
-        return `<div class="ne-ing ne-isect" data-uid="${uid}">
-            <div class="ne-line">${icon("drag", "")}
-              <ha-input class="ne-f ne-title" data-f="title" data-uid="${uid}" value="${esc(row.text)}" placeholder="${esc(T("Section title"))}" aria-label="${esc(T("Section title"))}"></ha-input>
-              <ha-icon-button class="ne-del" data-ne-act="del-ing" data-uid="${uid}" label="${esc(T("Delete"))}">${icon("close")}</ha-icon-button>
-            </div></div>`;
+        return `<div class="ne-ing ne-isect" data-uid="${uid}"><div class="ne-sline">${this._neSectHead(
+          uid,
+          row.text,
+          f,
+          "title",
+          `<ha-icon-button class="ne-del" data-ne-act="del-ing" data-uid="${uid}" label="${esc(T("Delete"))}">${icon("close")}</ha-icon-button>`
+        )}</div></div>`;
       }
       const [tone, status] = this._neStatus(row);
       const alts = row.subs
@@ -127,7 +152,7 @@ export default function (h) {
         )
         .join("");
       const noted = !!(row.comment || row._note);
-      return `<div class="ne-ing ${noted ? "has-note" : ""}" data-uid="${uid}">
+      return `<div class="ne-ing ${noted ? "has-note" : ""} ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""}" data-uid="${uid}">
           <div class="ne-line"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>
             ${this._neAmountFields(row.text, `data-uid="${uid}"`)}
             <ha-input class="ne-f ne-note" data-f="note" data-uid="${uid}" value="${esc(row.comment)}" placeholder="${esc(T("Note"))}" aria-label="${esc(T("Note"))}"></ha-input>
@@ -153,7 +178,10 @@ export default function (h) {
           <ha-textarea id="ne-text" class="ne-textarea" value="${esc(this._neToText())}" autogrow></ha-textarea>`;
       } else {
         body = `<ha-sortable id="ne-ings" handle-selector=".ne-handle">
-            <div class="ne-list">${rows.map((r) => this._neIngredientHtml(r)).join("")}</div>
+            <div class="ne-list">${(() => {
+              const nest = this._neNest(rows, (r) => r.header);
+              return rows.map((r, i) => this._neIngredientHtml(r, nest[i])).join("");
+            })()}</div>
           </ha-sortable>
           <div class="ne-adds">
             <ha-button appearance="plain" size="s" data-ne-act="add-ing">${icon("plus", "start")}${esc(T("Add ingredient"))}</ha-button>
@@ -212,7 +240,7 @@ export default function (h) {
         .join("");
     },
 
-    _neStepHtml(step, num, cur) {
+    _neStepHtml(step, num, cur, f = {}) {
       const uid = esc(step.uid);
       const menu = `<ha-dropdown data-ne-menu="step" data-uid="${uid}"><ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
           ${step.section ? "" : `<ha-dropdown-item value="add-timer">${icon("timer-plus-outline", "icon")}${esc(T("Add a timer"))}</ha-dropdown-item>`}
@@ -222,10 +250,9 @@ export default function (h) {
           <ha-dropdown-item value="del-step" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
         </ha-dropdown>`;
       if (step.section) {
-        return `<div class="ne-step ne-sect" data-uid="${uid}"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>
-            <ha-input class="ne-f ne-title" data-f="stext" data-uid="${uid}" value="${esc(step.text)}" placeholder="${esc(T("Section title"))}" aria-label="${esc(T("Section title"))}"></ha-input>${menu}</div>`;
+        return `<div class="ne-step ne-sect" data-uid="${uid}">${this._neSectHead(uid, step.text, f, "stext", menu)}</div>`;
       }
-      return `<div class="ne-step ${cur && cur.uid === step.uid ? "cur" : ""}" data-uid="${uid}" data-ne-act="pick">
+      return `<div class="ne-step ${cur && cur.uid === step.uid ? "cur" : ""} ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""}" data-uid="${uid}" data-ne-act="pick">
           <div class="ne-stephead"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon><b>${esc(T("Step"))} ${num}</b><span class="ne-grow"></span>
             <ha-button appearance="plain" size="s" data-ne-act="add-timer" data-uid="${uid}">${icon("timer-plus-outline", "start")}${esc(T("Timer"))}</ha-button>${menu}</div>
           <ha-textarea class="ne-stext" data-f="stext" data-uid="${uid}" value="${esc(step.text)}" placeholder="${esc(T("What to do"))}" aria-label="${esc(T("Step text"))}" autogrow></ha-textarea>
@@ -250,7 +277,8 @@ export default function (h) {
         .join("");
       const unused = real.filter((r) => !used(r).length).length;
       let num = 0;
-      const cards = steps.map((s) => this._neStepHtml(s, s.section ? 0 : ++num, cur)).join("");
+      const nest = this._neNest(steps, (s) => s.section);
+      const cards = steps.map((s, i) => this._neStepHtml(s, s.section ? 0 : ++num, cur, nest[i])).join("");
       return `<ha-card class="ne-card"><div class="ne-cardhead"><h3>${esc(T("Steps"))}</h3><span class="ne-hint">${esc(T("Pick a step, then tick the ingredients it uses."))}</span></div>
           <div class="ne-body ne-cols">
             <div class="ne-ingcol">${
@@ -387,6 +415,12 @@ export default function (h) {
             steps.push(step);
             this._neCur = step.uid;
           }, { uid: step.uid, f: "stext" });
+        }
+        case "fold": {
+          this._syncEditor();
+          this._neFolded = this._neFolded || new Set();
+          if (!this._neFolded.delete(d.uid)) this._neFolded.add(d.uid);
+          return this._render();
         }
         case "add-step-section": {
           const step = { uid: this._nextUid(), text: "", section: true, ingredients: [], timers: [] };

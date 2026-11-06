@@ -315,10 +315,17 @@ const STYLE = `
   .ne-where { flex: none; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .ne-step { border: 1px solid var(--divider-color); border-radius: 10px; padding: var(--ha-space-2, 8px) var(--ha-space-3, 12px); margin-bottom: var(--ha-space-2, 8px); background: var(--card-background-color); }
   .ne-step.cur { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
-  .ne-sect { display: flex; align-items: center; gap: var(--ha-space-2, 8px); border: 0; border-inline-start: 4px solid var(--primary-color); border-radius: 6px; margin-top: var(--ha-space-4, 16px); background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); }
-  .ne-isect { border-inline-start: 4px solid var(--primary-color); border-radius: 6px; margin-top: var(--ha-space-4, 16px); padding: 4px 0 4px var(--ha-space-2, 8px); background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); }
-  .ne-isect:first-child, .ne-steplist > :first-child.ne-sect { margin-top: 0; }
+  .ne-sect, .ne-isect { display: block; border: 1px solid var(--divider-color); border-radius: 12px; margin: var(--ha-space-4, 16px) 0 var(--ha-space-2, 8px); padding: 2px var(--ha-space-2, 8px); background: var(--card-background-color); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+  .ne-sect { display: flex; align-items: center; gap: var(--ha-space-1, 4px); }
+  .ne-sline { display: flex; align-items: center; gap: var(--ha-space-1, 4px); }
+  .ne-sicon { flex: none; color: var(--primary-color); }
+  .ne-sectcount { flex: none; min-width: 22px; padding: 0 6px; border-radius: 10px; text-align: center; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); background: var(--secondary-background-color); }
+  .ne-chev { --mdc-icon-button-size: 36px; flex: none; color: var(--secondary-text-color); }
   .ne-sect .ne-title, .ne-isect .ne-title { font-weight: 600; }
+  .ne-list > .ne-isect:first-child { margin-top: 0; }
+  .ne-in { position: relative; margin-inline-start: 18px; }
+  .ne-in::before { content: ""; position: absolute; inset-block: -4px; inset-inline-start: -11px; border-inline-start: 2px solid var(--divider-color); }
+  .ne-hide { display: none; }
   .ne-stephead { display: flex; align-items: center; gap: var(--ha-space-2, 8px); margin-bottom: var(--ha-space-1, 4px); }
   .ne-stext { display: block; width: 100%; }
   .ne-chips { display: flex; flex-wrap: wrap; gap: var(--ha-space-2, 8px); margin-top: var(--ha-space-2, 8px); }
