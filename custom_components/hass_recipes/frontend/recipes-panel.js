@@ -333,8 +333,14 @@ const STYLE = `
   .ne-chev { --mdc-icon-button-size: 36px; flex: none; color: var(--secondary-text-color); }
   .ne-sect .ne-title, .ne-isect .ne-title { font-weight: 600; }
   .ne-list > .ne-isect:first-child { margin-top: 0; }
-  .ne-in { position: relative; margin-inline-start: 18px; }
-  .ne-in::before { content: ""; position: absolute; inset-block: -4px; inset-inline-start: -11px; border-inline-start: 2px solid var(--divider-color); }
+  .ne-ing.ne-in, .ne-sfoot { margin-inline-start: 12px; padding-inline: 14px 10px; border-inline-start: 2px solid var(--divider-color); background: color-mix(in srgb, var(--secondary-background-color) 55%, transparent); }
+  .ne-sfoot { padding-block: 6px 12px; border-end-start-radius: 12px; border-bottom: 1px solid var(--divider-color); }
+  .ne-step.ne-in { position: relative; margin-inline-start: 18px; }
+  .ne-step.ne-in::before { content: ""; position: absolute; inset-block: -4px; inset-inline-start: -11px; border-inline-start: 2px solid var(--divider-color); }
+  .ne-diamond { flex: none; display: grid; place-items: center; width: 28px; height: 28px; margin: 0 10px 0 6px; border: 1px solid var(--divider-color); border-radius: 8px; transform: rotate(45deg); color: var(--secondary-text-color); }
+  .ne-diamond ha-icon { transform: rotate(-45deg); --mdc-icon-size: 18px; }
+  .ne-sname { flex: 1; min-width: 0; padding: 12px 4px; cursor: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ne-sline > .ne-handle, .ne-sect > .ne-handle { margin-inline: 4px; }
   .ne-hide { display: none; }
   .ne-stephead { display: flex; align-items: center; gap: var(--ha-space-2, 8px); margin-bottom: var(--ha-space-1, 4px); }
   .ne-stext { display: block; width: 100%; }

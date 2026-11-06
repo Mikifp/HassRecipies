@@ -114,35 +114,48 @@ export default function (h) {
     _neNest(items, isSect) {
       this._neFolded = this._neFolded || new Set();
       let sect = null;
-      return items.map((x) => {
+      let last = null;
+      const out = items.map((x) => {
         if (isSect(x)) {
+          if (last) last.last = true;
+          last = null;
           sect = { sect: true, folded: this._neFolded.has(x.uid), count: 0 };
           return sect;
         }
         if (sect) sect.count += 1;
-        return { in: !!sect, hidden: !!sect && sect.folded };
+        last = { in: !!sect, hidden: !!sect && sect.folded };
+        return last;
       });
+      if (last && last.in) last.last = true;
+      return out;
     },
 
     /** The head of a section: fold button, icon, title (the field), how many it holds. */
-    _neSectHead(uid, title, f, field, extra) {
-      return `<ha-icon class="ne-handle" icon="mdi:drag"></ha-icon>
-        <ha-icon-button class="ne-chev" data-ne-act="fold" data-uid="${uid}" label="${esc(T(f.folded ? "Show the section" : "Hide the section"))}">${icon(f.folded ? "chevron-down" : "chevron-up")}</ha-icon-button>
-        ${icon("format-title", "").replace("<ha-icon ", '<ha-icon class="ne-sicon" ')}
-        <ha-input class="ne-f ne-title" data-f="${field}" data-uid="${uid}" value="${esc(title)}" placeholder="${esc(T("Section title"))}" aria-label="${esc(T("Section title"))}"></ha-input>
-        <ha-assist-chip class="ne-sectcount" label="${f.count}"></ha-assist-chip>${extra}`;
+    _neSectHead(uid, title, f, field, menu, kind) {
+      // like the choose block of the automation editor: the name is text, renamed from the menu (or at once when it has none)
+      const editing = this._neRenamingNow === uid || !String(title).trim();
+      return `<ha-icon-button class="ne-chev" data-ne-act="fold" data-uid="${uid}" label="${esc(T(f.folded ? "Show the section" : "Hide the section"))}">${icon(f.folded ? "chevron-down" : "chevron-up")}</ha-icon-button>
+        <span class="ne-diamond">${icon(kind === "ing" ? "format-list-bulleted" : "format-list-numbered")}</span>
+        ${
+          editing
+            ? `<ha-input class="ne-f ne-title" data-f="${field}" data-uid="${uid}" value="${esc(title)}" placeholder="${esc(T("Section title"))}" aria-label="${esc(T("Section title"))}"></ha-input>`
+            : `<span class="ne-sname" data-ne-act="rename" data-uid="${uid}" title="${esc(T("Rename"))}">${esc(title)}</span>`
+        }
+        <ha-assist-chip class="ne-sectcount" label="${f.count}"></ha-assist-chip>
+        <ha-icon class="ne-handle" icon="mdi:drag-horizontal-variant"></ha-icon>${menu}`;
     },
 
     _neIngredientHtml(row, f = {}) {
       const uid = esc(row.uid);
       if (row.header) {
-        return `<ha-card class="ne-ing ne-isect" data-uid="${uid}"><div class="ne-sline">${this._neSectHead(
-          uid,
-          row.text,
-          f,
-          "title",
-          `<ha-icon-button class="ne-del" data-ne-act="del-ing" data-uid="${uid}" label="${esc(T("Delete"))}">${icon("close")}</ha-icon-button>`
-        )}</div></ha-card>`;
+        const menu = `<ha-dropdown data-ne-menu="ing" data-uid="${uid}"><ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
+              <ha-dropdown-item value="rename">${icon("pencil-outline", "icon")}${esc(T("Rename"))}</ha-dropdown-item>
+              <ha-dropdown-item value="add-ing-in">${icon("plus", "icon")}${esc(T("Add an ingredient"))}</ha-dropdown-item>
+              <ha-dropdown-item value="up-ing">${icon("arrow-up", "icon")}${esc(T("Move up"))}</ha-dropdown-item>
+              <ha-dropdown-item value="down-ing">${icon("arrow-down", "icon")}${esc(T("Move down"))}</ha-dropdown-item>
+              <ha-dropdown-item value="del-ing" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
+            </ha-dropdown>`;
+        return `<ha-card class="ne-ing ne-isect" data-uid="${uid}"><div class="ne-sline">${this._neSectHead(uid, row.text, f, "title", menu, "ing")}</div></ha-card>`;
       }
       const [tone, status] = this._neStatus(row);
       const alts = row.subs
@@ -180,7 +193,25 @@ export default function (h) {
         body = `<ha-sortable id="ne-ings" handle-selector=".ne-handle">
             <div class="ne-list">${(() => {
               const nest = this._neNest(rows, (r) => r.header);
-              return rows.map((r, i) => this._neIngredientHtml(r, nest[i])).join("");
+              const out = [];
+              this._neIds = [];
+              let open = null;
+              const close = () => {
+                if (!open) return;
+                out.push(`<div class="ne-sfoot ne-in ${open.folded ? "ne-hide" : ""}"><ha-button appearance="filled" size="s" data-ne-act="add-ing-in" data-uid="${esc(open.uid)}">${icon("plus", "start")}${esc(T("Add ingredient"))}</ha-button></div>`);
+                this._neIds.push(null);
+                open = null;
+              };
+              rows.forEach((r, i) => {
+                if (r.header) {
+                  close();
+                  open = { uid: r.uid, folded: nest[i].folded };
+                }
+                out.push(this._neIngredientHtml(r, { ...nest[i], last: false }));
+                this._neIds.push(r.uid);
+              });
+              close();
+              return out.join("");
             })()}</div>
           </ha-sortable>
           <div class="ne-adds">
@@ -244,16 +275,16 @@ export default function (h) {
     _neStepHtml(step, num, cur, f = {}) {
       const uid = esc(step.uid);
       const menu = `<ha-dropdown data-ne-menu="step" data-uid="${uid}"><ha-icon-button slot="trigger" label="${esc(T("More"))}">${icon("dots-vertical")}</ha-icon-button>
-          ${step.section ? "" : `<ha-dropdown-item value="add-timer">${icon("timer-plus-outline", "icon")}${esc(T("Add a timer"))}</ha-dropdown-item>`}
+          ${step.section ? `<ha-dropdown-item value="rename">${icon("pencil-outline", "icon")}${esc(T("Rename"))}</ha-dropdown-item>` : `<ha-dropdown-item value="add-timer">${icon("timer-plus-outline", "icon")}${esc(T("Add a timer"))}</ha-dropdown-item>`}
           <ha-dropdown-item value="add-section-above">${icon("format-title", "icon")}${esc(T("Add a section above"))}</ha-dropdown-item>
           <ha-dropdown-item value="up-step">${icon("arrow-up", "icon")}${esc(T("Move up"))}</ha-dropdown-item>
           <ha-dropdown-item value="down-step">${icon("arrow-down", "icon")}${esc(T("Move down"))}</ha-dropdown-item>
           <ha-dropdown-item value="del-step" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
         </ha-dropdown>`;
       if (step.section) {
-        return `<ha-card class="ne-step ne-sect" data-uid="${uid}">${this._neSectHead(uid, step.text, f, "stext", menu)}</ha-card>`;
+        return `<ha-card class="ne-step ne-sect" data-uid="${uid}">${this._neSectHead(uid, step.text, f, "stext", menu, "step")}</ha-card>`;
       }
-      return `<ha-card class="ne-step ${cur && cur.uid === step.uid ? "cur" : ""} ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""}" data-uid="${uid}" data-ne-act="pick">
+      return `<ha-card class="ne-step ${cur && cur.uid === step.uid ? "cur" : ""} ${f.in ? "ne-in" : ""} ${f.last ? "ne-last" : ""} ${f.hidden ? "ne-hide" : ""}" data-uid="${uid}" data-ne-act="pick">
           <div class="ne-stephead"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon><b>${esc(T("Step"))} ${num}</b><span class="ne-grow"></span>
             <ha-button appearance="plain" size="s" data-ne-act="add-timer" data-uid="${uid}">${icon("timer-plus-outline", "start")}${esc(T("Timer"))}</ha-button>${menu}</div>
           <ha-textarea class="ne-stext" data-f="stext" data-uid="${uid}" value="${esc(step.text)}" placeholder="${esc(T("What to do"))}" aria-label="${esc(T("Step text"))}" autogrow></ha-textarea>
@@ -309,6 +340,8 @@ export default function (h) {
     },
 
     _newEditorHtml() {
+      this._neRenamingNow = this._neRenaming;
+      this._neRenaming = null;
       const { main, pane } = this._neStepsHtml();
       const wide = !this._brCompact();
       return `<div class="ne ${wide ? "ne-wide" : ""}" id="ne"><div class="ne-main">${this._neIngredientsHtml()}${main}</div>${pane}</div>`;
@@ -431,6 +464,18 @@ export default function (h) {
             this._neCur = step.uid;
           }, { uid: step.uid, f: "stext" });
         }
+        case "rename": {
+          this._syncEditor();
+          this._neRenaming = d.uid;
+          return this._neChange(() => {}, { uid: d.uid, f: this._neRowByUid(d.uid) ? "title" : "stext" });
+        }
+        case "add-ing-in": {
+          const row = this._rowFromString("");
+          const at = idx(rows, d.uid);
+          let end = at + 1;
+          while (end < rows.length && !rows[end].header) end += 1;
+          return this._neChange(() => rows.splice(end, 0, row), { uid: row.uid, f: "amount" });
+        }
         case "fold": {
           this._syncEditor();
           this._neFolded = this._neFolded || new Set();
@@ -510,6 +555,9 @@ export default function (h) {
         const chip = e.target.closest && e.target.closest("ha-input-chip[data-unlink]");
         if (chip) this._neAction("unlink", { ...chip.dataset });
       });
+      form.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target.matches && e.target.matches(".ne-title")) this._neChange(() => {});
+      });
       form.addEventListener("wa-select", (e) => {
         const dd = e.target.closest && e.target.closest("ha-dropdown[data-ne-menu]");
         const value = e.detail && e.detail.item && e.detail.item.value;
@@ -573,7 +621,16 @@ export default function (h) {
       if (panel) panel.addEventListener("expanded-changed", (e) => (this._neListOpen = !!e.detail.expanded));
       // dragging: Home Assistant's sortable tells where an item went
       const ings = form.querySelector("#ne-ings");
-      if (ings) ings.addEventListener("item-moved", (e) => this._neChange(() => move(this._form.rows, e.detail.oldIndex, e.detail.newIndex)));
+      if (ings)
+        ings.addEventListener("item-moved", (e) =>
+          this._neChange(() => {
+            // the list also holds the "Add ingredient" button of each section: put the rows in the order the items are in
+            const ids = [...(this._neIds || [])];
+            move(ids, e.detail.oldIndex, e.detail.newIndex);
+            const byUid = new Map(this._form.rows.map((r) => [r.uid, r]));
+            this._form.rows = ids.filter(Boolean).map((u) => byUid.get(u)).filter(Boolean);
+          })
+        );
       const steps = form.querySelector("#ne-stepsort");
       if (steps) steps.addEventListener("item-moved", (e) => this._neChange(() => move(this._neSteps(), e.detail.oldIndex, e.detail.newIndex)));
     },
