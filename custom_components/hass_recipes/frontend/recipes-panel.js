@@ -287,7 +287,7 @@ const STYLE = `
   .ne-sechead { display: flex; align-items: center; gap: var(--ha-space-3, 12px); flex-wrap: wrap; }
   .ne-sechead h2 { margin: 0; flex: 1; font-size: 1.5em; font-weight: 400; }
   .ne-desc { margin: var(--ha-space-2, 8px) 0 var(--ha-space-3, 12px); color: var(--primary-text-color); font-size: var(--ha-font-size-m, 14px); }
-  .ne-pane { position: sticky; top: var(--ha-space-4, 16px); max-height: calc(100vh - 32px); overflow-y: auto; box-sizing: border-box; border: 2px solid var(--primary-color); border-radius: var(--ha-card-border-radius, 24px); background: var(--card-background-color); }
+  .ne-pane { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; box-sizing: border-box; border: 2px solid var(--primary-color); border-radius: var(--ha-card-border-radius, 24px); background: var(--card-background-color); }
   .ne-panehead { padding: var(--ha-space-4, 16px) var(--ha-space-5, 20px) var(--ha-space-2, 8px); }
   .ne-panetitle { font-size: 1.25em; font-weight: 500; }
   .ne-panesub { color: var(--secondary-text-color); font-size: var(--ha-font-size-m, 14px); }
