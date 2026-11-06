@@ -320,8 +320,8 @@ const STYLE = `
   .ne-count { margin-inline-start: auto; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .ne-textarea { display: block; width: 100%; }
   .ne-cols { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.4fr); gap: var(--ha-space-4, 16px); }
-  .ne-li { display: flex; align-items: center; gap: var(--ha-space-2, 8px); padding-inline-end: var(--ha-space-2, 8px); border: 1px solid var(--divider-color); border-radius: 8px; margin-bottom: 6px; cursor: pointer; background: var(--card-background-color); }
-  .ne-li.used { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 10%, transparent)); border-color: color-mix(in srgb, var(--primary-color) 40%, transparent); }
+  .ne-li { border-radius: 8px; --mdc-list-side-padding: 8px; }
+  .ne-li.used { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 10%, transparent)); }
   .ne-where { flex: none; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .ne-step { border: 1px solid var(--divider-color); border-radius: 10px; padding: var(--ha-space-2, 8px) var(--ha-space-3, 12px); margin-bottom: var(--ha-space-2, 8px); background: var(--card-background-color); }
   .ne-step.cur { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }

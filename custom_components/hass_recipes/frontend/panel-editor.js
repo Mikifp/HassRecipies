@@ -130,19 +130,19 @@ export default function (h) {
         <ha-icon-button class="ne-chev" data-ne-act="fold" data-uid="${uid}" label="${esc(T(f.folded ? "Show the section" : "Hide the section"))}">${icon(f.folded ? "chevron-down" : "chevron-up")}</ha-icon-button>
         ${icon("format-title", "").replace("<ha-icon ", '<ha-icon class="ne-sicon" ')}
         <ha-input class="ne-f ne-title" data-f="${field}" data-uid="${uid}" value="${esc(title)}" placeholder="${esc(T("Section title"))}" aria-label="${esc(T("Section title"))}"></ha-input>
-        <span class="ne-sectcount">${f.count}</span>${extra}`;
+        <ha-assist-chip class="ne-sectcount" label="${f.count}"></ha-assist-chip>${extra}`;
     },
 
     _neIngredientHtml(row, f = {}) {
       const uid = esc(row.uid);
       if (row.header) {
-        return `<div class="ne-ing ne-isect" data-uid="${uid}"><div class="ne-sline">${this._neSectHead(
+        return `<ha-card class="ne-ing ne-isect" data-uid="${uid}"><div class="ne-sline">${this._neSectHead(
           uid,
           row.text,
           f,
           "title",
           `<ha-icon-button class="ne-del" data-ne-act="del-ing" data-uid="${uid}" label="${esc(T("Delete"))}">${icon("close")}</ha-icon-button>`
-        )}</div></div>`;
+        )}</div></ha-card>`;
       }
       const [tone, status] = this._neStatus(row);
       const alts = row.subs
@@ -251,15 +251,15 @@ export default function (h) {
           <ha-dropdown-item value="del-step" variant="danger">${icon("delete-outline", "icon")}${esc(T("Delete"))}</ha-dropdown-item>
         </ha-dropdown>`;
       if (step.section) {
-        return `<div class="ne-step ne-sect" data-uid="${uid}">${this._neSectHead(uid, step.text, f, "stext", menu)}</div>`;
+        return `<ha-card class="ne-step ne-sect" data-uid="${uid}">${this._neSectHead(uid, step.text, f, "stext", menu)}</ha-card>`;
       }
-      return `<div class="ne-step ${cur && cur.uid === step.uid ? "cur" : ""} ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""}" data-uid="${uid}" data-ne-act="pick">
+      return `<ha-card class="ne-step ${cur && cur.uid === step.uid ? "cur" : ""} ${f.in ? "ne-in" : ""} ${f.hidden ? "ne-hide" : ""}" data-uid="${uid}" data-ne-act="pick">
           <div class="ne-stephead"><ha-icon class="ne-handle" icon="mdi:drag"></ha-icon><b>${esc(T("Step"))} ${num}</b><span class="ne-grow"></span>
             <ha-button appearance="plain" size="s" data-ne-act="add-timer" data-uid="${uid}">${icon("timer-plus-outline", "start")}${esc(T("Timer"))}</ha-button>${menu}</div>
           <ha-textarea class="ne-stext" data-f="stext" data-uid="${uid}" value="${esc(step.text)}" placeholder="${esc(T("What to do"))}" aria-label="${esc(T("Step text"))}" autogrow></ha-textarea>
           <div class="ne-chips" id="ne-ch-${uid}">${this._neChipsHtml(step)}</div>
           <div class="ne-timers" id="ne-tm-${uid}">${this._neTimersHtml(step)}</div>
-        </div>`;
+        </ha-card>`;
     },
 
     _neStepsHtml() {
@@ -272,8 +272,8 @@ export default function (h) {
         .map((r) => {
           const u = used(r);
           const on = cur && cur.ingredients.includes(r.uid);
-          return `<div class="ne-li ${u.length ? "used" : ""}" data-ne-act="tick" data-ing="${esc(r.uid)}"><ha-checkbox ${on ? "checked" : ""} aria-label="${esc(label(r))}"></ha-checkbox>
-            <span class="ne-grow">${esc(label(r))}</span><span class="ne-where">${u.length ? `${esc(T("step"))} ${u.map(number).join(", ")}` : esc(T("not used"))}</span></div>`;
+          return `<ha-check-list-item left class="ne-li ${u.length ? "used" : ""}" data-ne-act="tick" data-ing="${esc(r.uid)}" ${on ? "selected" : ""} aria-label="${esc(label(r))}">
+            <span class="ne-grow">${esc(label(r))}</span> <small class="ne-where">${u.length ? `${esc(T("step"))} ${u.map(number).join(", ")}` : esc(T("not used"))}</small></ha-check-list-item>`;
         })
         .join("");
       const unused = real.filter((r) => !used(r).length).length;
@@ -281,7 +281,7 @@ export default function (h) {
       const nest = this._neNest(steps, (s) => s.section);
       const cards = steps.map((s, i) => this._neStepHtml(s, s.section ? 0 : ++num, cur, nest[i])).join("");
       const compact = this._brCompact();
-      const ticks = `${list || `<div class="ne-hint">${esc(T("Add ingredients above first."))}</div>`}${unused && real.length ? `<div class="ne-hint">${unused} ${esc(T("not used in any step"))}</div>` : ""}`;
+      const ticks = `${list ? `<ha-list multi>${list}</ha-list>` : `<div class="ne-hint">${esc(T("Add ingredients above first."))}</div>`}${unused && real.length ? `<div class="ne-hint">${unused} ${esc(T("not used in any step"))}</div>` : ""}`;
       const folded = compact && real.length
         ? `<ha-expansion-panel id="ne-ingpanel" left-chevron outlined ${this._neListOpen ? "expanded" : ""}><div slot="header">${esc(T("Ingredients"))} · ${cur ? cur.ingredients.length : 0} ${esc(T("of"))} ${real.length} ${esc(T("in this step"))}</div>${ticks}</ha-expansion-panel>`
         : "";
@@ -296,9 +296,9 @@ export default function (h) {
       // wide: what the picked step uses goes in a pane beside the lists, like the options of a block in the automation editor
       const pane = compact
         ? ""
-        : `<aside class="ne-pane"><div class="ne-panehead"><div class="ne-panetitle" id="ne-panetitle">${esc(this._nePaneTitle(cur))}</div>
+        : `<ha-card class="ne-pane"><div class="ne-panehead"><div class="ne-panetitle" id="ne-panetitle">${esc(this._nePaneTitle(cur))}</div>
               <div class="ne-panesub">${esc(T("Ingredients used in this step"))}</div></div>
-            <div class="ne-panebody">${cur ? ticks : `<div class="ne-hint">${esc(T("Add a step first."))}</div>`}</div></aside>`;
+            <div class="ne-panebody">${cur ? ticks : `<div class="ne-hint">${esc(T("Add a step first."))}</div>`}</div></ha-card>`;
       return { main, pane };
     },
 
@@ -584,8 +584,7 @@ export default function (h) {
       const title = this.shadowRoot.getElementById("ne-panetitle");
       if (title) title.textContent = this._nePaneTitle(cur);
       this.shadowRoot.querySelectorAll(".ne-li").forEach((li) => {
-        const box = li.querySelector("ha-checkbox");
-        if (box) box.checked = !!cur && cur.ingredients.includes(li.dataset.ing);
+        li.selected = !!cur && cur.ingredients.includes(li.dataset.ing);
       });
     },
   };
