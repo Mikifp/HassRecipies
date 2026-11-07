@@ -19,6 +19,7 @@ const {
   ingredientParts,
   splitAmount,
   joinAmount,
+  toMetric,
   timerSpecs,
   clock,
   duration,
@@ -57,19 +58,35 @@ const toInt = (v) => (v === "" || v == null ? null : Math.max(0, parseInt(v, 10)
 const TODO_KEY = "hass_recipes_todo";
 
 /** HTML for ingredient `i`: amount + bold food, faded original amount, optional substitute. */
-const ingredientHtml = (r, i, k, mode) => {
+const ingredientHtml = (r, i, k, mode, details = true) => {
   const { main, alts, comment } = ingredientParts(r, i);
   const p = (r.parsed_ingredients || [])[i];
   const subs = (p && (p.substitutes || (p.substitute ? [p.substitute] : []))) || [];
   const a = ingParts(p, main, k, mode);
-  let html = `<span class="ing-main">${a.qty ? `<span class="ing-qty">${esc(a.qty)}</span> ` : ""}<strong>${esc(a.food)}</strong>${a.paren ? ` <span class="ing-paren">${esc(a.paren)}</span>` : ""}${a.note ? `<span class="ing-note">, ${esc(a.note)}</span>` : ""}</span>`;
+  let html = `<span class="ing-main">${a.qty ? `<span class="ing-qty">${esc(a.qty)}</span> ` : ""}<strong>${esc(a.food)}</strong>${a.paren ? ` <span class="ing-paren">${esc(a.paren)}</span>` : ""}${a.note && details ? `<span class="ing-note">, ${esc(a.note)}</span>` : ""}</span>`;
   if (a.sub) html += `<small class="ing-sub">${esc(a.sub)}</small>`;
-  alts.forEach((altText, n) => {
+  if (details) alts.forEach((altText, n) => {
     const b = ingParts(subs[n], altText, k, mode);
     html += `<small class="ing-alt">or ${b.qty ? `${esc(b.qty)} ` : ""}<strong>${esc(b.food)}</strong>${b.note ? `, ${esc(b.note)}` : ""}${b.sub ? ` <span class="ing-sub">(${esc(b.sub)})</span>` : ""}</small>`;
   });
-  if (comment) html += `<small class="ing-comment">${esc(comment)}</small>`;
+  if (comment && details) html += `<small class="ing-comment">${esc(comment)}</small>`;
   return html;
+};
+
+/** What the ingredient `i` adds to a step: its note, comment and alternatives ("" when it has none). */
+const ingredientNotesHtml = (r, i, k, mode) => {
+  const { main, alts, comment } = ingredientParts(r, i);
+  const p = (r.parsed_ingredients || [])[i];
+  const subs = (p && (p.substitutes || (p.substitute ? [p.substitute] : []))) || [];
+  const a = ingParts(p, main, k, mode);
+  const bits = [];
+  if (a.note) bits.push(esc(a.note));
+  if (comment) bits.push(esc(comment));
+  alts.forEach((altText, n) => {
+    const b = ingParts(subs[n], altText, k, mode);
+    bits.push(`or ${b.qty ? `${esc(b.qty)} ` : ""}<strong>${esc(b.food)}</strong>${b.note ? `, ${esc(b.note)}` : ""}`);
+  });
+  return bits.length ? `<small class="step-note"><strong>${esc(a.food)}</strong>: ${bits.join("; ")}</small>` : "";
 };
 
 /** Compact "amount food" pill for the ingredients a step uses. */
@@ -106,6 +123,7 @@ export default {
   ingredientParts,
   splitAmount,
   joinAmount,
+  toMetric,
   timerSpecs,
   clock,
   duration,
@@ -133,6 +151,7 @@ export default {
   detectChips,
   stepTextHtml,
   ingredientChipHtml,
+  ingredientNotesHtml,
   PROGRESS_KEY,
   HANDLED_KEY,
 };

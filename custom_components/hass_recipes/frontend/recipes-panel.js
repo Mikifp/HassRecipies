@@ -183,6 +183,7 @@ const STYLE = `
   .rd-text { display: block; line-height: 1.9; white-space: pre-line; }
   .rd-step.done .rd-text { opacity: .55; text-decoration: line-through; }
   .rd-extra { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-top: 4px; }
+  .rd-extra .step-notes { flex: 1 0 100%; margin: 0; }
   header .main-title { flex: 1; min-width: 0; margin-inline-start: var(--ha-space-6, 24px); line-height: 1.2; }
   header .main-title b { display: block; font-weight: 400; font-size: var(--ha-font-size-xl, 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header .main-title span { display: block; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
@@ -261,6 +262,9 @@ const STYLE = `
   ul.ingredients input:checked + span { text-decoration: line-through; opacity: .6; }
   ol.steps { padding-left: 20px; margin: 0; }
   ol.steps li { margin-bottom: 12px; line-height: 1.5; }
+  .step-notes { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 2px; }
+  .step-note { color: var(--secondary-text-color); font-size: .85em; }
+  .step-note strong { font-weight: 500; }
   .step-ings { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 10px 0 2px; }
   ha-assist-chip.ing-chip { margin: 0 1px; max-width: 100%; vertical-align: middle; --md-assist-chip-container-height: 28px; --md-assist-chip-label-text-size: 13px; }
   ha-assist-chip.ing-chip.tick { cursor: pointer; }
@@ -272,17 +276,27 @@ const STYLE = `
   .step-text .ing-chip, .cook .cook-text .ing-chip, .cstep .cstep-text .ing-chip { --md-assist-chip-container-height: 26px; --md-assist-chip-label-text-size: .85em; }
   .timer-btn { margin-top: 10px; }
   .ne-page { max-width: 900px; margin: 0 auto; padding: var(--ha-space-4, 16px); padding-bottom: 96px; display: flex; flex-direction: column; gap: var(--ha-space-4, 16px); }
+  :host(.fdwide) .ne-page { max-width: 1320px; }
   .ne-meta-in { padding: var(--ha-space-4, 16px); display: flex; flex-direction: column; gap: var(--ha-space-2, 8px); }
   .ne-meta-card ha-expansion-panel { --expansion-panel-content-padding: 0; --expansion-panel-summary-padding: 0; }
   .ne-photo { display: flex; align-items: center; gap: var(--ha-space-3, 12px); flex-wrap: wrap; padding: var(--ha-space-2, 8px) 0; }
   .ne-photo .btns { display: flex; gap: var(--ha-space-2, 8px); flex-wrap: wrap; }
   .ne { display: flex; flex-direction: column; gap: var(--ha-space-4, 16px); }
-  .ne-card { display: block; }
+  .ne-main { display: flex; flex-direction: column; gap: var(--ha-space-8, 32px); min-width: 0; }
+  .ne.ne-wide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: var(--ha-space-6, 24px); align-items: start; }
+  .ne-sechead { display: flex; align-items: center; gap: var(--ha-space-3, 12px); flex-wrap: wrap; }
+  .ne-sechead h2 { margin: 0; flex: 1; font-size: 1.5em; font-weight: 400; }
+  .ne-desc { margin: var(--ha-space-2, 8px) 0 var(--ha-space-3, 12px); color: var(--primary-text-color); font-size: var(--ha-font-size-m, 14px); }
+  .ne-pane { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; box-sizing: border-box; border: 2px solid var(--primary-color); border-radius: var(--ha-card-border-radius, 24px); background: var(--card-background-color); }
+  .ne-panehead { padding: var(--ha-space-4, 16px) var(--ha-space-5, 20px) var(--ha-space-2, 8px); }
+  .ne-panetitle { font-size: 1.25em; font-weight: 500; }
+  .ne-panesub { color: var(--secondary-text-color); font-size: var(--ha-font-size-m, 14px); }
+  .ne-panebody { padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) var(--ha-space-4, 16px); }
   .ne-cardhead { display: flex; align-items: center; gap: var(--ha-space-3, 12px); flex-wrap: wrap; padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px) 0; }
   .ne-cardhead h3 { margin: 0; flex: 1; font-size: 1.05em; font-weight: 500; }
   .ne-tabs { display: flex; gap: var(--ha-space-2, 8px); }
   .ne-tab { cursor: pointer; }
-  .ne-body { padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) var(--ha-space-4, 16px); }
+  .ne-body { padding: 0; }
   .ne-hint { font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); margin: 4px 0; }
   .ne-sub { font-size: var(--ha-font-size-s, 12px); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--secondary-text-color); margin-bottom: var(--ha-space-2, 8px); }
   .ne-handle { cursor: grab; color: var(--secondary-text-color); flex: none; }
@@ -294,6 +308,8 @@ const STYLE = `
   .ne-food { flex: 2 1 150px; }
   .ne-note { flex: 1 1 110px; }
   .ne-title { flex: 1; }
+  .ne-conv { padding-inline-start: 28px; min-height: 0; }
+  .ne-conv:empty { display: none; }
   .ne-status { flex: none; min-width: 64px; text-align: center; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .ne-status.ok { color: var(--success-color, #43a047); }
   .ne-status.warn { color: var(--warning-color, #ffa600); }
@@ -304,12 +320,45 @@ const STYLE = `
   .ne-count { margin-inline-start: auto; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .ne-textarea { display: block; width: 100%; }
   .ne-cols { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.4fr); gap: var(--ha-space-4, 16px); }
-  .ne-li { display: flex; align-items: center; gap: var(--ha-space-2, 8px); padding-inline-end: var(--ha-space-2, 8px); border: 1px solid var(--divider-color); border-radius: 8px; margin-bottom: 6px; cursor: pointer; background: var(--card-background-color); }
-  .ne-li.used { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 10%, transparent)); border-color: color-mix(in srgb, var(--primary-color) 40%, transparent); }
+  .ne-li { border-radius: 8px; --mdc-list-side-padding: 8px; }
+  .ne-li.used { background: var(--ha-color-fill-primary-quiet-resting, color-mix(in srgb, var(--primary-color) 10%, transparent)); }
   .ne-where { flex: none; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
   .ne-step { border: 1px solid var(--divider-color); border-radius: 10px; padding: var(--ha-space-2, 8px) var(--ha-space-3, 12px); margin-bottom: var(--ha-space-2, 8px); background: var(--card-background-color); }
   .ne-step.cur { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
-  .ne-sect { display: flex; align-items: center; gap: var(--ha-space-2, 8px); border-style: dashed; }
+  .ne-sect, .ne-isect { display: block; border: 1px solid var(--divider-color); border-radius: 12px; margin: var(--ha-space-4, 16px) 0 var(--ha-space-2, 8px); padding: 2px var(--ha-space-2, 8px); background: var(--card-background-color); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+  .ne-sect { display: flex; align-items: center; gap: var(--ha-space-1, 4px); }
+  .ne-sline { display: flex; align-items: center; gap: var(--ha-space-1, 4px); }
+  .ne-sicon { flex: none; color: var(--primary-color); }
+  .ne-sectcount { flex: none; min-width: 22px; padding: 0 6px; border-radius: 10px; text-align: center; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); background: var(--secondary-background-color); }
+  .ne-chev { --mdc-icon-button-size: 36px; flex: none; color: var(--secondary-text-color); }
+  .ne-sect .ne-title, .ne-isect .ne-title { font-weight: 600; }
+  .ne-list > .ne-isect:first-child { margin-top: 0; }
+  .ne-ing.ne-in, .ne-sfoot { margin-inline-start: 12px; padding-inline: 16px 0; border-inline-start: 2px solid var(--divider-color); }
+  .ne-isect + .ne-in { padding-top: 12px; }
+  .ne-sfoot { padding-block: 8px 16px; }
+  .ne-step.ne-in { position: relative; margin-inline-start: 18px; }
+  .ne-step.ne-in::before { content: ""; position: absolute; inset-block: -4px; inset-inline-start: -11px; border-inline-start: 2px solid var(--divider-color); }
+  .ne-diamond { flex: none; display: grid; place-items: center; width: 28px; height: 28px; margin: 0 10px 0 6px; border: 1px solid var(--divider-color); border-radius: 8px; transform: rotate(45deg); color: var(--secondary-text-color); }
+  .ne-diamond ha-icon { transform: rotate(-45deg); --mdc-icon-size: 18px; }
+  .ne-sname { flex: 1; min-width: 0; padding: 12px 4px; cursor: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ne-sline > .ne-handle, .ne-sect > .ne-handle { margin-inline: 4px; }
+  .ne-hide { display: none; }
+  .ne-rsum { padding-inline-start: 28px; font-size: var(--ha-font-size-s, 12px); color: var(--secondary-text-color); }
+  .ne-rsum:empty { display: none; }
+  .ne-wrow { padding: 4px 0; }
+  .ne-card { border: 1px solid var(--divider-color); border-radius: 12px; min-height: 48px; padding: 0 4px 0 12px; background: var(--card-background-color); }
+  .ne-card .ne-line { min-height: 46px; }
+  .ne-pin { box-sizing: border-box; height: 36px; min-width: 0; padding: 0 8px; border: 0; border-bottom: 1px solid transparent; border-radius: 0; background: transparent; color: var(--primary-text-color); font: inherit; outline: none; }
+  .ne-pin::placeholder { color: var(--secondary-text-color); opacity: .7; }
+  .ne-pin:hover { border-bottom-color: var(--divider-color); }
+  .ne-pin:focus { border-bottom: 2px solid var(--primary-color); }
+  .ne-lead { flex: none; --mdc-icon-size: 20px; color: var(--secondary-text-color); margin-inline-end: 4px; }
+  .ne-card .ne-rsum { padding-inline-start: 4px; padding-bottom: 4px; }
+  .ne-card .ne-handle { margin-inline: 4px; }
+  .ne-wrow.sel .ne-card { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color); }
+  .ne-pane .ne-pnote { display: block; width: 100%; margin-bottom: var(--ha-space-2, 8px); }
+  .ne-pane .ne-alt { flex-wrap: wrap; padding-inline-start: 0; }
+  .ne-pane .ne-conv { padding-inline-start: 0; margin-top: var(--ha-space-2, 8px); }
   .ne-stephead { display: flex; align-items: center; gap: var(--ha-space-2, 8px); margin-bottom: var(--ha-space-1, 4px); }
   .ne-stext { display: block; width: 100%; }
   .ne-chips { display: flex; flex-wrap: wrap; gap: var(--ha-space-2, 8px); margin-top: var(--ha-space-2, 8px); }
@@ -340,7 +389,6 @@ const STYLE = `
     .ne-alt > .ne-food { grid-column: 3; }
     .ne-alt > .ne-del { grid-column: 4; justify-self: end; }
     .ne-ing { padding: 2px 0; }
-    .ne-body { padding-inline: var(--ha-space-2, 8px); }
     .ne-cardhead { padding-inline: var(--ha-space-3, 12px); }
     .ne-timer { gap: 2px; }
     .ne-tlabel { flex: 1 0 100%; width: auto; }
@@ -485,6 +533,10 @@ const STYLE = `
   .tk-planned { border: 1px dashed var(--divider-color); box-shadow: none; }
   .tk-prow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .tk-mhead { display: flex; justify-content: space-between; align-items: center; padding-bottom: 0; }
+  .tk-swipe { position: relative; overflow: hidden; }
+  .tk-swipe-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 24px; background: var(--error-color, #db4437); color: #fff; opacity: 0; transition: opacity .1s; }
+  .tk-swipe-bg.armed { filter: brightness(.85); }
+  .tk-swipe-row { position: relative; background: var(--card-background-color, var(--primary-background-color)); touch-action: pan-y; }
   .tk-ekcal { white-space: nowrap; color: var(--secondary-text-color); }
   .tk-avg { display: flex; gap: 24px; margin: 12px 0; }
   .tk-chart { min-height: 220px; }
@@ -745,6 +797,10 @@ class HassRecipesPanel extends HTMLElement {
     this._chipAlt = false; // chips in the steps also show the amount in the other unit
     try {
       this._chipAlt = localStorage.getItem("hass_recipes_chipalt") === "1";
+    } catch (_) { /* ignore */ }
+    this._cookDetails = true; // notes and alternatives of the ingredients in cook mode
+    try {
+      this._cookDetails = localStorage.getItem("hass_recipes_cookdetails") !== "0";
     } catch (_) { /* ignore */ }
     this._cookFocus = false; // false: whole recipe at once (Mealie style); true: one step at a time
     try {
@@ -1106,7 +1162,7 @@ class HassRecipesPanel extends HTMLElement {
     // on a phone Home Assistant scrolls the page, not this panel: stay out of the way so the top bar can stick to it
     const compactNow = this._brCompact();
     this.classList.toggle("compact", compactNow);
-    this.classList.toggle("fdwide", v.name === "foods" && !compactNow); // the foods pane is sticky, which needs the page itself to scroll
+    this.classList.toggle("fdwide", (v.name === "foods" || v.name === "edit") && !compactNow); // the foods pane and the editor's pane are sticky, which needs the page itself to scroll
     // on a cold load the page has no width yet: look again once it has one
     this._compactSeen = compactNow;
     if (!this._compactCheck) {
@@ -1259,6 +1315,13 @@ class HassRecipesPanel extends HTMLElement {
       this._chipAlt = e.currentTarget.checked;
       try {
         localStorage.setItem("hass_recipes_chipalt", this._chipAlt ? "1" : "0");
+      } catch (_) { /* ignore */ }
+      this._render();
+    });
+    on("ha-switch[data-cookdetails]", "change", (e) => {
+      this._cookDetails = e.currentTarget.checked;
+      try {
+        localStorage.setItem("hass_recipes_cookdetails", this._cookDetails ? "1" : "0");
       } catch (_) { /* ignore */ }
       this._render();
     });

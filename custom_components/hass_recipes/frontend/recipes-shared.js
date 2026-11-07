@@ -324,6 +324,58 @@ export const shortUnits = (line) => {
 export const joinAmount = ({ amount = "", unit = "", food = "" }) => [amount, shortUnit(unit), food].map((x) => String(x).trim()).filter(Boolean).join(" ");
 
 
+/** Amounts in the units of the US kitchen: volumes in ml ("tsk"/"spsk" are what a Danish recipe calls them), weights in g. */
+const IMPERIAL = {
+  tsp: { ml: 5, as: "tsk" }, teaspoon: { ml: 5, as: "tsk" }, teaspoons: { ml: 5, as: "tsk" },
+  tbsp: { ml: 15, as: "spsk" }, tablespoon: { ml: 15, as: "spsk" }, tablespoons: { ml: 15, as: "spsk" },
+  cup: { ml: 240 }, cups: { ml: 240 }, pint: { ml: 473 }, pints: { ml: 473 }, quart: { ml: 946 }, quarts: { ml: 946 }, gallon: { ml: 3785 },
+  oz: { g: 28.35 }, ounce: { g: 28.35 }, ounces: { g: 28.35 }, lb: { g: 453.6 }, lbs: { g: 453.6 }, pound: { g: 453.6 }, pounds: { g: 453.6 },
+};
+
+const decimal = (n) => String(n).replace(".", ",");
+
+/** A volume in the unit a Danish recipe would use: ml, dl or l. */
+const volume = (ml) => {
+  if (ml >= 1000) return { amount: decimal(Math.round(ml / 10) / 100), unit: "l" };
+  if (ml >= 100) return { amount: decimal(Math.round(ml / 10) / 10), unit: "dl" };
+  return { amount: decimal(Math.round(ml)), unit: "ml" };
+};
+
+const weight = (g) => {
+  if (g >= 1000) return { amount: decimal(Math.round(g / 10) / 100), unit: "kg" };
+  return { amount: decimal(g >= 100 ? Math.round(g / 5) * 5 : Math.round(g)), unit: "g" };
+};
+
+/** Grams in one ml of a food that has weights per unit ({ dl: 55 } -> 0.55), or 0 when no volume unit has one. */
+export const gramsPerMl = (weights) => {
+  const w = weights || {};
+  const per = { ml: 1, cl: 10, dl: 100, l: 1000, tsk: 5, spsk: 15, cup: 240 };
+  for (const [u, ml] of Object.entries(per)) if (w[u] > 0) return w[u] / ml;
+  return 0;
+};
+
+/**
+ * What an amount in cups, spoons, ounces or pounds is in metric: { amount, unit } for the same thing
+ * (4 cups -> 9,6 dl), and `grams` when a volume is of a food whose weight is known (`weights`, grams per unit).
+ * null when the unit is not one of these or the amount is not a plain number (or a range of two).
+ */
+export const toMetric = (amount, unit, weights = null) => {
+  const spec = IMPERIAL[String(unit || "").replace(/\.$/, "").toLowerCase()];
+  if (!spec) return null;
+  const nums = String(amount || "").split(/\s*[-–]\s*/).map(parseNumber);
+  if (nums.length > 2 || nums.some((n) => !Number.isFinite(n) || n <= 0)) return null;
+  const metric = (n) => (spec.as ? { amount: decimal(Math.round(n * 100) / 100), unit: spec.as } : spec.ml ? volume(n * spec.ml) : weight(n * spec.g));
+  const out = nums.map(metric);
+  if (out.some((o) => o.unit !== out[0].unit)) return null;
+  const result = { amount: out.map((o) => o.amount).join("–"), unit: out[0].unit };
+  const gpm = spec.ml ? gramsPerMl(weights) : 0;
+  if (gpm) {
+    const g = nums.map((n) => weight(n * spec.ml * gpm));
+    if (g.every((x) => x.unit === g[0].unit)) result.grams = { amount: g.map((x) => x.amount).join("–"), unit: g[0].unit };
+  }
+  return result;
+};
+
 /**
  * The food words of an ingredient line, best first: units, amounts and trailing remarks are left
  * out, and the last word of "røde løg" comes first because that is the noun. A line that names

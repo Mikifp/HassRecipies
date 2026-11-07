@@ -147,8 +147,9 @@ def test_a_recipe_can_be_logged_by_what_it_makes_or_by_weight():
     assert _raises(lambda: t.add(anna["id"], DAY, "snack", "recipe", recipe_id=r["id"], by="nope", amount=1))
     basis = n.recipe_basis(r["id"])
     assert (basis["yield_amount"], basis["yield_unit"], basis["grams"], basis["servings"]) == (24, "boller", 600, 4)
-    # the same amount of the same recipe is one recent item, a different way to measure is another
-    assert len({(x["by"], x["amount"]) for x in t.recent(anna["id"]) if x.get("recipe_id")}) >= 3
+    # a recipe is one recent item whatever the amount, and the amount it was last eaten in is the next start
+    assert len([x for x in t.recent(anna["id"]) if x.get("recipe_id") == r["id"]]) == 1
+    assert t.last_amounts(anna["id"])[f"recipe:{r['id']}"]["by"] in ("servings", "grams", "yield")
 
 
 def test_a_day_has_totals_against_the_goal_and_entries_can_be_changed_and_removed():
@@ -345,3 +346,13 @@ def test_changes_are_announced_and_saved():
     t.add(anna["id"], DAY, "snack", "quick", name="A", kcal=100)
     assert seen == [1] and hass.bus.events[-1][0] == "hass_recipes_tracker_changed"
     assert _Store.data["hass_recipes.tracker"]["entries"][0]["name"] == "A"
+
+
+def test_the_last_amount_of_a_food_is_kept():
+    _h, _r, _p, n, t = _make()
+    anna = t.ensure_user("u1", "Anna")
+    food = n.save_food({"name": "Havregryn", "source": "custom", "values": {"kcal": 370}})
+    t.add(anna["id"], DAY, "breakfast", "food", food_id=food["id"], amount=50, unit="g")
+    t.add(anna["id"], DAY, "snack", "food", food_id=food["id"], amount=80, unit="g")
+    assert t.last_amounts(anna["id"])[f"food:{food['id']}"] == {"amount": 80, "unit": "g"}
+    assert len([x for x in t.recent(anna["id"]) if x.get("food_id") == food["id"]]) == 1
