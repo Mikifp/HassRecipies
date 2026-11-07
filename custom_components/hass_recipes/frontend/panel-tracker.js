@@ -1266,6 +1266,12 @@ export default function (h) {
             e.stopPropagation();
             code = e.detail.value || code;
           });
+          // Enter (or "Go" on a phone's keyboard) looks the number up too
+          form.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            lookup(code.code || "", msg);
+          });
           body.querySelector("#tk-lookup").addEventListener("click", () => lookup(code.code || "", msg));
           body.querySelector("#tk-new").addEventListener("click", () => createFood(String(code.code || "")));
           const cam = body.querySelector("#tk-cam");
